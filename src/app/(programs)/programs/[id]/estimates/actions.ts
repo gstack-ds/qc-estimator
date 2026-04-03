@@ -166,6 +166,56 @@ export async function deleteLineItem(id: string) {
   return { error: null };
 }
 
+// ─── Estimate Trips ───────────────────────────────────────
+
+export async function upsertTrip(data: {
+  estimate_id: string;
+  trip_number: number;
+  label: string;
+  travel_type: string;
+  drive_route_id: string | null;
+  train_route_id: string | null;
+  flight_type_id: string | null;
+  last_minute_buffer: boolean;
+  staff_count: number;
+  nights: number;
+  hotel_rate_id: string | null;
+  hotel_budget: string;
+  per_diem_rate_id: string | null;
+  vehicle_rate_id: string | null;
+  vehicle_type: string;
+  vehicle_service: string;
+  vehicle_hours: number;
+  custom_vehicle_cost: number;
+}) {
+  const supabase = await createClient();
+  const payload = {
+    estimate_id: data.estimate_id,
+    trip_number: data.trip_number,
+    label: data.label,
+    travel_type: data.travel_type,
+    drive_route_id: data.drive_route_id,
+    train_route_id: data.train_route_id,
+    flight_type_id: data.flight_type_id,
+    last_minute_buffer: data.last_minute_buffer,
+    staff_count: data.staff_count,
+    nights: data.nights,
+    hotel_rate_id: data.hotel_rate_id,
+    hotel_budget: data.hotel_budget,
+    per_diem_rate_id: data.per_diem_rate_id,
+    vehicle_rate_id: data.vehicle_rate_id,
+    vehicle_type: data.vehicle_type,
+    vehicle_service: data.vehicle_service,
+    vehicle_hours: data.vehicle_hours,
+    custom_vehicle_cost: data.custom_vehicle_cost,
+  };
+  const { error } = await supabase
+    .from('estimate_trips')
+    .upsert(payload, { onConflict: 'estimate_id,trip_number' });
+  if (error) return { error: error.message };
+  return { error: null };
+}
+
 export async function cacheEstimateTotal(estimateId: string, programId: string, total: number) {
   const supabase = await createClient();
   await supabase.from('estimates').update({ cached_total: total }).eq('id', estimateId);

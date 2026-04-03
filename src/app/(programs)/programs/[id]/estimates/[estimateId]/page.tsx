@@ -6,6 +6,8 @@ import {
   getLineItemsForEstimate,
   getMarkups,
   getTiers,
+  getTravelRefs,
+  getTripsForEstimate,
 } from '@/lib/supabase/queries';
 import EstimateBuilder from '@/components/estimates/EstimateBuilder';
 import AvEstimateBuilder from '@/components/estimates/AvEstimateBuilder';
@@ -20,17 +22,21 @@ interface Props {
 export default async function EstimatePage({ params }: Props) {
   const { id: programId, estimateId } = await params;
 
-  const [program, allEstimates, estimate, markups, tiers] = await Promise.all([
+  const [program, allEstimates, estimate, markups, tiers, travelRefs] = await Promise.all([
     getProgram(programId),
     getEstimatesForProgram(programId),
     getEstimate(estimateId),
     getMarkups(),
     getTiers(),
+    getTravelRefs(),
   ]);
 
   if (!program || !estimate) notFound();
 
-  const lineItems = await getLineItemsForEstimate(estimateId);
+  const [lineItems, initialTrips] = await Promise.all([
+    getLineItemsForEstimate(estimateId),
+    getTripsForEstimate(estimateId),
+  ]);
 
   const Builder = estimate.type === 'av'
     ? AvEstimateBuilder
@@ -48,6 +54,8 @@ export default async function EstimatePage({ params }: Props) {
         dbLineItems={lineItems}
         markups={markups}
         tiers={tiers}
+        travelRefs={travelRefs}
+        initialTrips={initialTrips}
       />
     </div>
   );

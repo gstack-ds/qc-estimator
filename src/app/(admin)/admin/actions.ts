@@ -134,3 +134,155 @@ export async function deleteTier(id: string) {
   revalidatePath('/admin');
   return { error: null };
 }
+
+// ─── Drive Routes ─────────────────────────────────────────
+
+export async function upsertDriveRoute(data: { id?: string; route_name: string; cost: number }) {
+  const supabase = await createClient();
+  if (data.id) {
+    const { error } = await supabase.from('drive_routes').update({ route_name: data.route_name, cost: data.cost }).eq('id', data.id);
+    if (error) return { error: error.message };
+  } else {
+    const { error } = await supabase.from('drive_routes').insert({ route_name: data.route_name, cost: data.cost });
+    if (error) return { error: error.message };
+  }
+  revalidatePath('/admin');
+  return { error: null };
+}
+
+export async function deleteDriveRoute(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from('drive_routes').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/admin');
+  return { error: null };
+}
+
+// ─── Train Routes ─────────────────────────────────────────
+
+export async function upsertTrainRoute(data: { id?: string; route_name: string; low_cost: number; high_cost: number }) {
+  const supabase = await createClient();
+  if (data.id) {
+    const { error } = await supabase.from('train_routes').update({ route_name: data.route_name, low_cost: data.low_cost, high_cost: data.high_cost }).eq('id', data.id);
+    if (error) return { error: error.message };
+  } else {
+    const { error } = await supabase.from('train_routes').insert({ route_name: data.route_name, low_cost: data.low_cost, high_cost: data.high_cost });
+    if (error) return { error: error.message };
+  }
+  revalidatePath('/admin');
+  return { error: null };
+}
+
+export async function deleteTrainRoute(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from('train_routes').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/admin');
+  return { error: null };
+}
+
+// ─── Flight Types ─────────────────────────────────────────
+
+export async function upsertFlightType(data: { id?: string; type_name: string; low_cost: number; high_cost: number }) {
+  const supabase = await createClient();
+  if (data.id) {
+    const { error } = await supabase.from('flight_types').update({ type_name: data.type_name, low_cost: data.low_cost, high_cost: data.high_cost }).eq('id', data.id);
+    if (error) return { error: error.message };
+  } else {
+    const { error } = await supabase.from('flight_types').insert({ type_name: data.type_name, low_cost: data.low_cost, high_cost: data.high_cost });
+    if (error) return { error: error.message };
+  }
+  revalidatePath('/admin');
+  return { error: null };
+}
+
+export async function deleteFlightType(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from('flight_types').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/admin');
+  return { error: null };
+}
+
+// ─── Hotel Rates ──────────────────────────────────────────
+
+export async function upsertHotelRate(data: { id?: string; market: string; low_rate: number; high_rate: number }) {
+  const supabase = await createClient();
+  if (data.id) {
+    const { error } = await supabase.from('hotel_rates').update({ market: data.market, low_rate: data.low_rate, high_rate: data.high_rate }).eq('id', data.id);
+    if (error) return { error: error.message };
+  } else {
+    const { error } = await supabase.from('hotel_rates').insert({ market: data.market, low_rate: data.low_rate, high_rate: data.high_rate });
+    if (error) return { error: error.message };
+  }
+  revalidatePath('/admin');
+  return { error: null };
+}
+
+export async function deleteHotelRate(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from('hotel_rates').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/admin');
+  return { error: null };
+}
+
+// ─── Per Diem Rates ───────────────────────────────────────
+
+export async function upsertPerDiemRate(data: { id?: string; market_type: string; full_day: number; half_day: number }) {
+  const supabase = await createClient();
+  if (data.id) {
+    const { error } = await supabase.from('per_diem_rates').update({ market_type: data.market_type, full_day: data.full_day, half_day: data.half_day }).eq('id', data.id);
+    if (error) return { error: error.message };
+  } else {
+    const { error } = await supabase.from('per_diem_rates').insert({ market_type: data.market_type, full_day: data.full_day, half_day: data.half_day });
+    if (error) return { error: error.message };
+  }
+  revalidatePath('/admin');
+  return { error: null };
+}
+
+export async function deletePerDiemRate(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from('per_diem_rates').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/admin');
+  return { error: null };
+}
+
+// ─── Vehicle Rates ────────────────────────────────────────
+
+export async function upsertVehicleRate(data: {
+  id?: string; market: string;
+  sedan_hourly: number; sedan_airport: number;
+  suv_hourly: number; suv_airport: number;
+  sprinter_hourly: number; sprinter_airport: number;
+}) {
+  const supabase = await createClient();
+  const payload = {
+    market: data.market,
+    sedan_hourly: data.sedan_hourly,
+    sedan_airport: data.sedan_airport,
+    suv_hourly: data.suv_hourly,
+    suv_airport: data.suv_airport,
+    sprinter_hourly: data.sprinter_hourly,
+    sprinter_airport: data.sprinter_airport,
+  };
+  if (data.id) {
+    const { error } = await supabase.from('vehicle_rates').update(payload).eq('id', data.id);
+    if (error) return { error: error.message };
+  } else {
+    const { error } = await supabase.from('vehicle_rates').insert(payload);
+    if (error) return { error: error.message };
+  }
+  revalidatePath('/admin');
+  return { error: null };
+}
+
+export async function deleteVehicleRate(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from('vehicle_rates').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/admin');
+  return { error: null };
+}

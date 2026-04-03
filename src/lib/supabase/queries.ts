@@ -260,3 +260,177 @@ export async function getProfile(userId: string): Promise<DbProfile | null> {
   if (error) return null;
   return data as DbProfile;
 }
+
+// ─── Travel Reference Data ────────────────────────────────
+
+export interface DbDriveRoute {
+  id: string;
+  route_name: string;
+  cost: number;
+  updated_at: string;
+}
+
+export async function getDriveRoutes(): Promise<DbDriveRoute[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('drive_routes')
+    .select('id, route_name, cost, updated_at')
+    .order('route_name');
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export interface DbTrainRoute {
+  id: string;
+  route_name: string;
+  low_cost: number;
+  high_cost: number;
+  updated_at: string;
+}
+
+export async function getTrainRoutes(): Promise<DbTrainRoute[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('train_routes')
+    .select('id, route_name, low_cost, high_cost, updated_at')
+    .order('route_name');
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export interface DbFlightType {
+  id: string;
+  type_name: string;
+  low_cost: number;
+  high_cost: number;
+  updated_at: string;
+}
+
+export async function getFlightTypes(): Promise<DbFlightType[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('flight_types')
+    .select('id, type_name, low_cost, high_cost, updated_at')
+    .order('type_name');
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export interface DbHotelRate {
+  id: string;
+  market: string;
+  low_rate: number;
+  high_rate: number;
+  updated_at: string;
+}
+
+export async function getHotelRates(): Promise<DbHotelRate[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('hotel_rates')
+    .select('id, market, low_rate, high_rate, updated_at')
+    .order('market');
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export interface DbPerDiemRate {
+  id: string;
+  market_type: string;
+  full_day: number;
+  half_day: number;
+  updated_at: string;
+}
+
+export async function getPerDiemRates(): Promise<DbPerDiemRate[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('per_diem_rates')
+    .select('id, market_type, full_day, half_day, updated_at')
+    .order('market_type');
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export interface DbVehicleRate {
+  id: string;
+  market: string;
+  sedan_hourly: number;
+  sedan_airport: number;
+  suv_hourly: number;
+  suv_airport: number;
+  sprinter_hourly: number;
+  sprinter_airport: number;
+  updated_at: string;
+}
+
+export async function getVehicleRates(): Promise<DbVehicleRate[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('vehicle_rates')
+    .select('id, market, sedan_hourly, sedan_airport, suv_hourly, suv_airport, sprinter_hourly, sprinter_airport, updated_at')
+    .order('market');
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+// ─── Estimate Trips ───────────────────────────────────────
+
+export interface DbTrip {
+  id: string;
+  estimate_id: string;
+  trip_number: number;
+  label: string;
+  travel_type: string;
+  drive_route_id: string | null;
+  train_route_id: string | null;
+  flight_type_id: string | null;
+  last_minute_buffer: boolean;
+  staff_count: number;
+  nights: number;
+  hotel_rate_id: string | null;
+  hotel_budget: string;
+  per_diem_rate_id: string | null;
+  vehicle_rate_id: string | null;
+  vehicle_type: string;
+  vehicle_service: string;
+  vehicle_hours: number;
+  custom_vehicle_cost: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getTripsForEstimate(estimateId: string): Promise<DbTrip[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('estimate_trips')
+    .select('*')
+    .eq('estimate_id', estimateId)
+    .order('trip_number');
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+// ─── All travel refs (for estimate page) ─────────────────
+
+export interface TravelRefData {
+  driveRoutes: DbDriveRoute[];
+  trainRoutes: DbTrainRoute[];
+  flightTypes: DbFlightType[];
+  hotelRates: DbHotelRate[];
+  perDiemRates: DbPerDiemRate[];
+  vehicleRates: DbVehicleRate[];
+}
+
+export async function getTravelRefs(): Promise<TravelRefData> {
+  const [driveRoutes, trainRoutes, flightTypes, hotelRates, perDiemRates, vehicleRates] =
+    await Promise.all([
+      getDriveRoutes(),
+      getTrainRoutes(),
+      getFlightTypes(),
+      getHotelRates(),
+      getPerDiemRates(),
+      getVehicleRates(),
+    ]);
+  return { driveRoutes, trainRoutes, flightTypes, hotelRates, perDiemRates, vehicleRates };
+}

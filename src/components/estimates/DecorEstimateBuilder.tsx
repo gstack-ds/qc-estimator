@@ -11,6 +11,8 @@ import DecorSummaryPanel from './DecorSummaryPanel';
 import MarginPanel from './MarginPanel';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { LocalLineItem, LocalSection } from './EstimateBuilder';
+import TravelPanel from './TravelPanel';
+import type { TravelRefData, DbTrip } from '@/lib/supabase/queries';
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -125,6 +127,8 @@ interface Props {
   dbLineItems: DbLineItem[];
   markups: DbMarkup[];
   tiers: DbTier[];
+  travelRefs: TravelRefData;
+  initialTrips: DbTrip[];
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -132,7 +136,7 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 type OpenMap = Partial<Record<LocalSection, boolean>>;
 
 export default function DecorEstimateBuilder({
-  program, location, allEstimates, estimate, dbLineItems, markups, tiers,
+  program, location, allEstimates, estimate, dbLineItems, markups, tiers, travelRefs, initialTrips,
 }: Props) {
   const programConfig = useMemo(() => toProgramConfig(program, location), [program, location]);
   const tiersList = useMemo(() => toTiers(tiers), [tiers]);
@@ -152,6 +156,7 @@ export default function DecorEstimateBuilder({
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
   const savingRef = useRef(0);
+  const [travelExpenses, setTravelExpenses] = useState(0);
 
   // ─── Engine ─────────────────────────────────────────────
 
@@ -172,8 +177,8 @@ export default function DecorEstimateBuilder({
   );
 
   const marginAnalysis = useMemo(
-    () => calculateMarginAnalysis(summary, programConfig, tiersList),
-    [summary, programConfig, tiersList]
+    () => calculateMarginAnalysis(summary, programConfig, tiersList, travelExpenses),
+    [summary, programConfig, tiersList, travelExpenses]
   );
 
   // Sub-section client totals for summary panel breakdown
@@ -434,6 +439,12 @@ export default function DecorEstimateBuilder({
             rentalsNonTaxableClient={rentalsNonTaxableClient}
           />
           <MarginPanel margin={marginAnalysis} />
+          <TravelPanel
+            estimateId={estimate.id}
+            initialTrips={initialTrips}
+            refs={travelRefs}
+            onTotalChange={setTravelExpenses}
+          />
         </div>
       </div>
     </div>
