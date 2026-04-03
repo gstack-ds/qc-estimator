@@ -69,24 +69,25 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
           const isLowest = lowestTotal !== null && card.total === lowestTotal && card.total > 0;
           const isBestMargin = bestMarginPct !== null && card.qcMarginPct === bestMarginPct && card.total > 0;
 
-          // Border classes: left accent + surrounding border
-          let borderClass: string;
-          if (isLowest && isBestMargin) {
-            borderClass = 'border border-brand-cream border-l-4 border-l-green-500 ring-1 ring-brand-copper/50';
-          } else if (isLowest) {
-            borderClass = 'border border-brand-cream border-l-4 border-l-green-500';
-          } else if (isBestMargin) {
-            borderClass = 'border border-brand-cream border-l-4 border-l-brand-copper';
-          } else {
-            borderClass = 'border border-brand-cream hover:border-brand-copper/50';
-          }
-
           return (
             <Link
               key={card.id}
               href={`/programs/${programId}/estimates/${card.id}`}
-              className={`block bg-white rounded-lg p-5 flex flex-col gap-3 transition-all hover:shadow-md cursor-pointer ${borderClass}`}
+              className="relative block bg-white rounded-lg border border-brand-cream p-5 flex flex-col gap-3 transition-all hover:shadow-md hover:border-brand-copper/50 cursor-pointer overflow-hidden"
             >
+              {/* Left accent bar */}
+              {isLowest && (
+                <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500" />
+              )}
+              {!isLowest && isBestMargin && (
+                <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: '#C19C81' }} />
+              )}
+              {isLowest && isBestMargin && (
+                <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500">
+                  <div className="absolute bottom-0 left-0 right-0 h-1/2" style={{ backgroundColor: '#C19C81' }} />
+                </div>
+              )}
+
               {/* Header: name + badges */}
               <div className="flex items-start justify-between gap-2">
                 <span className="font-medium text-brand-charcoal text-sm leading-snug">
@@ -95,12 +96,12 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
                 {(isLowest || isBestMargin) && (
                   <div className="flex flex-col items-end gap-1 flex-shrink-0">
                     {isLowest && (
-                      <span className="text-xs bg-green-100 text-green-800 font-medium px-1.5 py-0.5 rounded tracking-wide">
+                      <span className="text-xs bg-green-100 text-green-800 font-medium px-1.5 py-0.5 rounded">
                         Lowest
                       </span>
                     )}
                     {isBestMargin && (
-                      <span className="text-xs bg-brand-cream text-brand-brown font-medium px-1.5 py-0.5 rounded tracking-wide">
+                      <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: '#C19C81', color: 'white' }}>
                         Best Margin
                       </span>
                     )}
