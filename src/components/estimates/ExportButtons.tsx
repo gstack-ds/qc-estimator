@@ -9,6 +9,7 @@ interface Props {
   programName: string;
   summary: EstimateSummary;
   guestCount: number;
+  estimateType?: 'venue' | 'av' | 'decor';
 }
 
 function fmtAmt(n: number) {
@@ -20,22 +21,29 @@ function fmtPP(n: number, guests: number) {
   return '$' + Math.ceil(n / guests).toLocaleString('en-US') + '/pp';
 }
 
-function buildCopyText(summary: EstimateSummary, guestCount: number): string {
+function buildCopyText(summary: EstimateSummary, guestCount: number, type: 'venue' | 'av' | 'decor'): string {
   const g = guestCount;
   const tax = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax;
-  const svcCharge = summary.serviceChargeClient;
-  const gratuity = summary.gratuityClient;
-  const adminFee = summary.adminFeeClient;
 
   const rows: [string, number][] = [];
-  if (summary.fbFoodSubtotalClient > 0) rows.push(['Menu', summary.fbFoodSubtotalClient]);
-  if (summary.fbAlcoholSubtotalClient > 0) rows.push(['Bar', summary.fbAlcoholSubtotalClient]);
-  if (summary.qcStaffingSubtotalClient > 0) rows.push(['Staffing', summary.qcStaffingSubtotalClient]);
-  if (summary.equipmentSubtotalClient > 0) rows.push(['Equipment', summary.equipmentSubtotalClient]);
-  if (summary.venueSubtotalClient > 0) rows.push(['Venue Rental', summary.venueSubtotalClient]);
-  if (svcCharge > 0) rows.push(['Service Charge', svcCharge]);
-  if (gratuity > 0) rows.push(['Gratuity', gratuity]);
-  if (adminFee > 0) rows.push(['Admin Fee', adminFee]);
+
+  if (type === 'av') {
+    if (summary.equipmentSubtotalClient > 0) rows.push(['AV Equipment', summary.equipmentSubtotalClient]);
+    if (summary.qcStaffingSubtotalClient > 0) rows.push(['Labor & Fees', summary.qcStaffingSubtotalClient]);
+  } else if (type === 'decor') {
+    if (summary.equipmentSubtotalClient > 0) rows.push(['Florals & Rentals', summary.equipmentSubtotalClient]);
+    if (summary.qcStaffingSubtotalClient > 0) rows.push(['Non-Taxable Fees', summary.qcStaffingSubtotalClient]);
+  } else {
+    if (summary.fbFoodSubtotalClient > 0) rows.push(['Menu', summary.fbFoodSubtotalClient]);
+    if (summary.fbAlcoholSubtotalClient > 0) rows.push(['Bar', summary.fbAlcoholSubtotalClient]);
+    if (summary.qcStaffingSubtotalClient > 0) rows.push(['Staffing', summary.qcStaffingSubtotalClient]);
+    if (summary.equipmentSubtotalClient > 0) rows.push(['Equipment', summary.equipmentSubtotalClient]);
+    if (summary.venueSubtotalClient > 0) rows.push(['Venue Rental', summary.venueSubtotalClient]);
+    if (summary.serviceChargeClient > 0) rows.push(['Service Charge', summary.serviceChargeClient]);
+    if (summary.gratuityClient > 0) rows.push(['Gratuity', summary.gratuityClient]);
+    if (summary.adminFeeClient > 0) rows.push(['Admin Fee', summary.adminFeeClient]);
+  }
+
   if (tax > 0) rows.push(['Tax', tax]);
   if (summary.productionFee > 0) rows.push(['Production Fee', summary.productionFee]);
   rows.push(['Total', summary.totalClient]);
@@ -44,12 +52,12 @@ function buildCopyText(summary: EstimateSummary, guestCount: number): string {
   return lines.join('\n');
 }
 
-export default function ExportButtons({ programId, programName, summary, guestCount }: Props) {
+export default function ExportButtons({ programId, programName, summary, guestCount, estimateType = 'venue' }: Props) {
   const [copyLabel, setCopyLabel] = useState<'Copy Numbers' | 'Copied!'>('Copy Numbers');
   const [exporting, setExporting] = useState(false);
 
   async function handleCopy() {
-    const text = buildCopyText(summary, guestCount);
+    const text = buildCopyText(summary, guestCount, estimateType);
     await navigator.clipboard.writeText(text);
     setCopyLabel('Copied!');
     setTimeout(() => setCopyLabel('Copy Numbers'), 2000);

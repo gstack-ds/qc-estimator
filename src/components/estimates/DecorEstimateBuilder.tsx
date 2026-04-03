@@ -12,6 +12,7 @@ import MarginPanel from './MarginPanel';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { LocalLineItem, LocalSection } from './EstimateBuilder';
 import TravelPanel from './TravelPanel';
+import ExportButtons from './ExportButtons';
 import type { TravelRefData, DbTrip } from '@/lib/supabase/queries';
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -372,6 +373,7 @@ export default function DecorEstimateBuilder({
             <span className="font-medium text-brand-charcoal">Estimates</span>
           </div>
           <div className="flex items-center gap-3">
+            <ExportButtons programId={program.id} programName={program.name} summary={summary} guestCount={program.guest_count} estimateType="decor" />
             <div className="text-xs">
               {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
               {saveState === 'saved' && <span className="text-green-600">Saved</span>}

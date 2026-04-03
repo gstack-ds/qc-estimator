@@ -12,6 +12,7 @@ import ScenarioTabs from './ScenarioTabs';
 import LineItemSection from './LineItemSection';
 import AvSummaryPanel from './AvSummaryPanel';
 import MarginPanel from './MarginPanel';
+import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { LocalLineItem, LocalSection } from './EstimateBuilder';
 import TravelPanel from './TravelPanel';
@@ -266,6 +267,7 @@ export default function AvEstimateBuilder({
             <span className="font-medium text-brand-charcoal">Estimates</span>
           </div>
           <div className="flex items-center gap-3">
+            <ExportButtons programId={program.id} programName={program.name} summary={summary} guestCount={program.guest_count} estimateType="av" />
             <div className="text-xs">
               {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
               {saveState === 'saved' && <span className="text-green-600">Saved</span>}
