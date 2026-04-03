@@ -65,7 +65,7 @@ export async function updateProgram(id: string, data: Partial<{
 
 // ─── Estimates ────────────────────────────────────────────
 
-export async function createEstimate(programId: string) {
+export async function createEstimate(programId: string, type: 'venue' | 'av' | 'decor' = 'venue') {
   const supabase = await createClient();
 
   // Count existing estimates to set sort_order
@@ -74,14 +74,21 @@ export async function createEstimate(programId: string) {
     .select('*', { count: 'exact', head: true })
     .eq('program_id', programId);
 
+  const defaultName = type === 'av' ? 'New AV Estimate' : type === 'decor' ? 'New Decor Estimate' : 'New Estimate';
+
   const { data: estimate, error } = await supabase
     .from('estimates')
     .insert({
       program_id: programId,
-      type: 'venue',
-      name: 'New Estimate',
+      type,
+      name: defaultName,
       fb_minimum: 0,
-      is_venue_taxable: true,
+      is_venue_taxable: type === 'venue',
+      ...(type === 'av' ? {
+        service_charge_override: 'None',
+        gratuity_override: 'None',
+        admin_fee_override: 'None',
+      } : {}),
       sort_order: (count ?? 0),
     })
     .select('id')

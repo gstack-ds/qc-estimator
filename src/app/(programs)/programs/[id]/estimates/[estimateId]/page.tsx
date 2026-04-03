@@ -8,6 +8,7 @@ import {
   getTiers,
 } from '@/lib/supabase/queries';
 import EstimateBuilder from '@/components/estimates/EstimateBuilder';
+import AvEstimateBuilder from '@/components/estimates/AvEstimateBuilder';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,9 +31,11 @@ export default async function EstimatePage({ params }: Props) {
 
   const lineItems = await getLineItemsForEstimate(estimateId);
 
+  const Builder = estimate.type === 'av' ? AvEstimateBuilder : EstimateBuilder;
+
   return (
     <div className="h-[calc(100vh-49px)] flex flex-col">
-      <EstimateBuilder
+      <Builder
         program={program}
         location={program.location}
         allEstimates={allEstimates}

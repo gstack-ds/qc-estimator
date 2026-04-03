@@ -1,4 +1,4 @@
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import {
   getProgram,
@@ -16,7 +16,7 @@ import {
 import ProgramForm from '@/components/estimates/ProgramForm';
 import ComparisonView, { type EstimateCard } from '@/components/estimates/ComparisonView';
 import DeleteProgramButton from '@/components/estimates/DeleteProgramButton';
-import { createEstimate } from '@/app/(programs)/programs/actions';
+import AddEstimateButton from '@/components/estimates/AddEstimateButton';
 import { calculateVenueEstimate, calculateMarginAnalysis } from '@/lib/engine/pricing';
 import type { FeeOption, LineItem, TaxType, ProgramConfig, TeamHoursTier } from '@/types';
 
@@ -110,6 +110,7 @@ function buildEstimateCard(
   return {
     id: estimate.id,
     name: estimate.name,
+    type: estimate.type,
     total: summary.totalClient,
     pricePerPerson: summary.pricePerPerson,
     lineItemCount: items.length,
@@ -169,21 +170,8 @@ export default async function ProgramPage({ params }: Props) {
       {/* Comparison section */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-serif text-lg font-medium text-brand-charcoal">Venue Estimates</h2>
-          <form
-            action={async () => {
-              'use server';
-              const result = await createEstimate(id);
-              if (result.id) redirect(`/programs/${id}/estimates/${result.id}`);
-            }}
-          >
-            <button
-              type="submit"
-              className="bg-brand-brown text-white text-sm font-medium rounded px-4 py-2 hover:bg-brand-charcoal transition-colors"
-            >
-              Add Estimate
-            </button>
-          </form>
+          <h2 className="font-serif text-lg font-medium text-brand-charcoal">Estimates</h2>
+          <AddEstimateButton programId={id} />
         </div>
 
         <ComparisonView programId={id} cards={cards} />

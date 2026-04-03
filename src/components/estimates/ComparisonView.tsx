@@ -7,6 +7,7 @@ import { updateEstimate } from '@/app/(programs)/programs/[id]/estimates/actions
 export interface EstimateCard {
   id: string;
   name: string;
+  type: string;
   total: number;
   pricePerPerson: number;
   lineItemCount: number;
@@ -90,9 +91,16 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
 
               {/* Header: name + badges */}
               <div className="flex items-start justify-between gap-2">
-                <span className="font-medium text-brand-charcoal text-sm leading-snug">
-                  {card.name}
-                </span>
+                <div>
+                  <span className="font-medium text-brand-charcoal text-sm leading-snug">
+                    {card.name}
+                  </span>
+                  {card.type !== 'venue' && (
+                    <span className="ml-2 text-[10px] font-medium text-brand-silver bg-brand-offwhite border border-brand-cream rounded px-1 py-0.5 uppercase tracking-wide">
+                      {card.type}
+                    </span>
+                  )}
+                </div>
                 {(isLowest || isBestMargin) && (
                   <div className="flex flex-col items-end gap-1 flex-shrink-0">
                     {isLowest && (

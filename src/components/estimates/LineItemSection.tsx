@@ -7,6 +7,7 @@ import LineItemRow, { FbTaxToggle } from './LineItemRow';
 
 interface Props {
   section: LocalLineItem['section'];
+  label?: string;
   items: LocalLineItem[];
   markups: DbMarkup[];
   defaultTaxType: TaxType;
@@ -23,14 +24,14 @@ const SECTION_LABELS: Record<string, string> = {
   'Non-Taxable Staffing': 'Non-Taxable Staffing',
 };
 
-export default function LineItemSection({ section, items, markups, defaultTaxType, onChange, onBlur, onDelete, onAdd }: Props) {
+export default function LineItemSection({ section, label, items, markups, defaultTaxType, onChange, onBlur, onDelete, onAdd }: Props) {
   const isFB = section === 'F&B';
 
   return (
     <div>
       {/* Section header */}
       <div className="flex items-center justify-between py-2 border-b border-brand-cream mb-1">
-        <h4 className="text-xs font-semibold text-brand-brown uppercase tracking-[0.08em]">{SECTION_LABELS[section]}</h4>
+        <h4 className="text-xs font-semibold text-brand-brown uppercase tracking-[0.08em]">{label ?? SECTION_LABELS[section]}</h4>
         {items.length > 0 && (
           <div className="grid text-xs font-medium text-brand-silver gap-2 pr-6" style={{ gridTemplateColumns: '2fr 60px 90px 130px 60px 80px 80px 24px' }}>
             <span></span>
