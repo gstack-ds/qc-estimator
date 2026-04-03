@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { createEstimate } from '@/app/(programs)/programs/actions';
 import { duplicateEstimate, deleteEstimate, reorderEstimates } from '@/app/(programs)/programs/[id]/estimates/actions';
+import AddEstimateButton from './AddEstimateButton';
 
 interface Estimate {
   id: string;
@@ -23,14 +23,7 @@ export default function ScenarioTabs({ estimates: initialEstimates, currentEstim
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
-  // ─── Add / Duplicate ──────────────────────────────────────
-
-  function handleAddEstimate() {
-    startTransition(async () => {
-      const result = await createEstimate(programId);
-      if (result.id) router.push(`/programs/${programId}/estimates/${result.id}`);
-    });
-  }
+  // ─── Duplicate ────────────────────────────────────────────
 
   function handleDuplicate() {
     startTransition(async () => {
@@ -165,18 +158,8 @@ export default function ScenarioTabs({ estimates: initialEstimates, currentEstim
         );
       })}
 
-      {/* Add new estimate */}
-      <button
-        onClick={handleAddEstimate}
-        disabled={isPending}
-        className="px-3 py-2 text-sm text-brand-silver hover:text-brand-brown hover:bg-brand-cream/40 rounded-t-md border-b-2 border-transparent transition-colors"
-        title="New estimate"
-      >
-        +
-      </button>
-
-      {/* Duplicate current */}
-      <div className="ml-auto flex items-center gap-2 pr-1">
+      {/* Right side actions */}
+      <div className="ml-auto flex items-center gap-2 pr-1 flex-shrink-0">
         <button
           onClick={handleDuplicate}
           disabled={isPending}
@@ -185,6 +168,7 @@ export default function ScenarioTabs({ estimates: initialEstimates, currentEstim
         >
           Duplicate
         </button>
+        <AddEstimateButton programId={programId} />
       </div>
     </div>
   );
