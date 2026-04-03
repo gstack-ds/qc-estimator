@@ -3,6 +3,7 @@ import Image from 'next/image';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import NavLinks from '@/components/layout/NavLinks';
+import UserMenu from '@/components/layout/UserMenu';
 import { getProfile } from '@/lib/supabase/queries';
 
 const NAV_LINKS = [
@@ -47,7 +48,7 @@ export default async function AdminLayout({
             <NavLinks links={NAV_LINKS} />
           </nav>
         </div>
-        <span className="text-xs text-brand-silver">{user.email}</span>
+        <UserMenu email={user.email ?? ''} />
       </header>
       <main className="max-w-6xl mx-auto px-6 py-8">{children}</main>
     </div>
