@@ -92,3 +92,11 @@ export async function createEstimate(programId: string) {
   return { error: null, id: estimate.id as string };
 }
 
+export async function deleteProgram(programId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from('programs').delete().eq('id', programId);
+  if (error) return { error: error.message };
+  revalidatePath('/programs');
+  return { error: null };
+}
+

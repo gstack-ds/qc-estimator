@@ -83,6 +83,8 @@ export interface EstimateSummary {
   // Subtotals by section
   fbSubtotalOur: number;
   fbSubtotalClient: number;
+  fbFoodSubtotalClient: number;
+  fbAlcoholSubtotalClient: number;
   foodTax: number;
   alcoholTax: number;
   equipmentSubtotalOur: number;

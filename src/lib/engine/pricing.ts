@@ -85,11 +85,13 @@ export function calculateVenueEstimate(
 
   // Tax — food items
   const foodItems = fb.filter((li) => li.taxType === 'food');
+  const fbFoodSubtotalClient = foodItems.reduce((s, li) => s + li.clientCost, 0);
   const foodTaxOur = foodItems.reduce((s, li) => s + li.ourCost * li.taxRate, 0);
   const foodTax = foodItems.reduce((s, li) => s + li.clientCost * li.taxRate, 0);
 
   // Tax — alcohol items
   const alcoholItems = fb.filter((li) => li.taxType === 'alcohol');
+  const fbAlcoholSubtotalClient = alcoholItems.reduce((s, li) => s + li.clientCost, 0);
   const alcoholTaxOur = alcoholItems.reduce((s, li) => s + li.ourCost * li.taxRate, 0);
   const alcoholTax = alcoholItems.reduce((s, li) => s + li.clientCost * li.taxRate, 0);
 
@@ -154,6 +156,7 @@ export function calculateVenueEstimate(
 
   return {
     fbSubtotalOur, fbSubtotalClient,
+    fbFoodSubtotalClient, fbAlcoholSubtotalClient,
     foodTax, alcoholTax,
     equipmentSubtotalOur, equipmentSubtotalClient, equipmentTax,
     qcStaffingSubtotalOur, qcStaffingSubtotalClient,

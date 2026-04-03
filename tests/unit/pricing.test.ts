@@ -199,6 +199,16 @@ describe('calculateVenueEstimate', () => {
     expect(result.fbMinimumMet).toBe(false);
     expect(result.fbShortfall).toBe(2600);
   });
+
+  it('separates food vs alcohol F&B subtotals', () => {
+    const result = calculateVenueEstimate(beaubeau, BASE_CONFIG);
+
+    // Food: Per Person Food (3875) + NA Beverages (620) = 4495
+    // Alcohol: Bar Package = 3875
+    expect(result.fbFoodSubtotalClient).toBeCloseTo(4495);
+    expect(result.fbAlcoholSubtotalClient).toBeCloseTo(3875);
+    expect(result.fbFoodSubtotalClient + result.fbAlcoholSubtotalClient).toBeCloseTo(result.fbSubtotalClient);
+  });
 });
 
 // ─── Margin Health ───────────────────────────────────────

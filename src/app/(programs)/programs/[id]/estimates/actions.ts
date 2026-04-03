@@ -115,6 +115,7 @@ export async function upsertLineItem(data: {
   category_id: string | null;
   tax_type: string;
   custom_client_unit_price?: number | null;
+  markup_override?: number | null;
   sort_order: number;
 }) {
   const supabase = await createClient();
@@ -130,6 +131,7 @@ export async function upsertLineItem(data: {
         category_id: data.category_id,
         tax_type: data.tax_type,
         custom_client_unit_price: data.custom_client_unit_price ?? null,
+        markup_override: data.markup_override ?? null,
         sort_order: data.sort_order,
       })
       .eq('id', data.id);
@@ -147,6 +149,7 @@ export async function upsertLineItem(data: {
         category_id: data.category_id,
         tax_type: data.tax_type,
         custom_client_unit_price: data.custom_client_unit_price ?? null,
+        markup_override: data.markup_override ?? null,
         sort_order: data.sort_order,
       })
       .select('id')
@@ -161,4 +164,38 @@ export async function deleteLineItem(id: string) {
   const { error } = await supabase.from('estimate_line_items').delete().eq('id', id);
   if (error) return { error: error.message };
   return { error: null };
+}
+
+export async function cacheEstimateTotal(estimateId: string, programId: string, total: number) {
+  const supabase = await createClient();
+  await supabase.from('estimates').update({ cached_total: total }).eq('id', estimateId);
+  await supabase.from('programs').update({ latest_total: total }).eq('id', programId);
+  return { error: null };
+}
+
+export async function getExportDataForProgram(programId: string) {
+  const supabase = await createClient();
+  const { data: estimates, error: estErr } = await supabase
+    .from('estimates')
+    .select('id, name, fb_minimum, is_venue_taxable, service_charge_override, gratuity_override, admin_fee_override')
+    .eq('program_id', programId)
+    .order('sort_order');
+  if (estErr) return { error: estErr.message, data: null };
+
+  const estimateIds = (estimates ?? []).map((e) => e.id as string);
+  if (estimateIds.length === 0) return { error: null, data: [] };
+
+  const { data: lineItems, error: liErr } = await supabase
+    .from('estimate_line_items')
+    .select('id, estimate_id, section, name, qty, unit_price, category_id, tax_type, custom_client_unit_price, markup_override, sort_order')
+    .in('estimate_id', estimateIds)
+    .order('sort_order');
+  if (liErr) return { error: liErr.message, data: null };
+
+  const byEstimate = (estimates ?? []).map((est) => ({
+    estimate: est,
+    lineItems: (lineItems ?? []).filter((li) => li.estimate_id === est.id),
+  }));
+
+  return { error: null, data: byEstimate };
 }

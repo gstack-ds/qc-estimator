@@ -13,6 +13,7 @@ import {
 } from '@/lib/supabase/queries';
 import ProgramForm from '@/components/estimates/ProgramForm';
 import ComparisonView, { type EstimateCard } from '@/components/estimates/ComparisonView';
+import DeleteProgramButton from '@/components/estimates/DeleteProgramButton';
 import { createEstimate } from '@/app/(programs)/programs/actions';
 import { calculateVenueEstimate } from '@/lib/engine/pricing';
 import type { FeeOption, LineItem, TaxType, ProgramConfig } from '@/types';
@@ -137,11 +138,14 @@ export default async function ProgramPage({ params }: Props) {
   return (
     <div className="max-w-5xl mx-auto px-6 py-8 space-y-10">
       {/* Header */}
-      <div>
-        <Link href="/programs" className="text-sm text-gray-400 hover:text-gray-600">
-          ← Programs
-        </Link>
-        <h1 className="text-lg font-semibold text-gray-900 mt-1">{program.name}</h1>
+      <div className="flex items-start justify-between">
+        <div>
+          <Link href="/programs" className="text-sm text-gray-400 hover:text-gray-600">
+            ← Programs
+          </Link>
+          <h1 className="text-lg font-semibold text-gray-900 mt-1">{program.name}</h1>
+        </div>
+        <DeleteProgramButton programId={id} />
       </div>
 
       {/* Program form — constrained width */}

@@ -112,13 +112,14 @@ export interface DbProgramSummary {
   created_at: string;
   updated_at: string;
   estimate_count: number;
+  latest_total: number | null;
 }
 
 export async function getPrograms(): Promise<DbProgramSummary[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('programs')
-    .select('id, name, client_name, event_date, created_at, updated_at, estimates(count)')
+    .select('id, name, client_name, event_date, created_at, updated_at, latest_total, estimates(count)')
     .order('updated_at', { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []).map((p) => ({
@@ -128,6 +129,7 @@ export async function getPrograms(): Promise<DbProgramSummary[]> {
     event_date: p.event_date,
     created_at: p.created_at,
     updated_at: p.updated_at,
+    latest_total: (p as unknown as { latest_total: number | null }).latest_total,
     estimate_count: (p.estimates as unknown as [{ count: number }])[0]?.count ?? 0,
   }));
 }
@@ -206,17 +208,20 @@ export interface DbLineItem {
   category_id: string | null;
   tax_type: string;
   custom_client_unit_price: number | null;
+  markup_override: number | null;
   notes: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
 }
 
+const LINE_ITEM_FIELDS = 'id, estimate_id, section, name, qty, unit_price, category_id, tax_type, custom_client_unit_price, markup_override, notes, sort_order, created_at, updated_at';
+
 export async function getLineItemsForEstimate(estimateId: string): Promise<DbLineItem[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('estimate_line_items')
-    .select('id, estimate_id, section, name, qty, unit_price, category_id, tax_type, custom_client_unit_price, notes, sort_order, created_at, updated_at')
+    .select(LINE_ITEM_FIELDS)
     .eq('estimate_id', estimateId)
     .order('sort_order');
   if (error) throw new Error(error.message);
@@ -228,9 +233,30 @@ export async function getLineItemsForEstimates(estimateIds: string[]): Promise<D
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('estimate_line_items')
-    .select('id, estimate_id, section, name, qty, unit_price, category_id, tax_type, custom_client_unit_price, notes, sort_order, created_at, updated_at')
+    .select(LINE_ITEM_FIELDS)
     .in('estimate_id', estimateIds)
     .order('sort_order');
   if (error) throw new Error(error.message);
   return data ?? [];
+}
+
+// ─── Profiles ─────────────────────────────────────────────
+
+export interface DbProfile {
+  id: string;
+  user_id: string;
+  role: 'user' | 'admin';
+  name: string | null;
+  created_at: string;
+}
+
+export async function getProfile(userId: string): Promise<DbProfile | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, user_id, role, name, created_at')
+    .eq('user_id', userId)
+    .single();
+  if (error) return null;
+  return data as DbProfile;
 }

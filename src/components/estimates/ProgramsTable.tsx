@@ -53,6 +53,7 @@ export default function ProgramsTable({ programs }: Props) {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Program</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Client</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600 w-24">Estimates</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600 w-32">Latest Total</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600 w-36">Event Date</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600 w-36">Last Updated</th>
               </tr>
@@ -76,6 +77,15 @@ export default function ProgramsTable({ programs }: Props) {
                     )}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-600">{program.estimate_count}</td>
+                  <td className="px-4 py-3 text-right">
+                    {program.latest_total != null ? (
+                      <span className="text-gray-700 tabular-nums">
+                        ${Math.round(program.latest_total).toLocaleString('en-US')}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-gray-600">{formatDate(program.event_date)}</td>
                   <td className="px-4 py-3 text-gray-400">{formatDate(program.updated_at)}</td>
                 </tr>

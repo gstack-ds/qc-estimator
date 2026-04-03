@@ -27,21 +27,33 @@ export default function LineItemRow({ item, markups, showTaxToggle, onChange, on
     ? item.qty * item.customClientUnitPrice
     : ourCost * (1 + item.categoryMarkupPct);
 
+  const markupOverridden = !isCustom && item.categoryMarkupPct !== item.defaultMarkupPct;
+  const markupDisplayPct = parseFloat((item.categoryMarkupPct * 100).toFixed(2));
+
   function handleCategoryChange(categoryId: string) {
     if (categoryId === 'custom') {
-      onChange(item.id, { categoryId: 'custom', categoryMarkupPct: 0, customClientUnitPrice: item.unitPrice });
+      onChange(item.id, { categoryId: 'custom', defaultMarkupPct: 0, categoryMarkupPct: 0, customClientUnitPrice: item.unitPrice });
     } else {
       const markup = markups.find((m) => m.id === categoryId);
+      const defaultPct = markup?.markup_pct ?? 0.5;
       onChange(item.id, {
         categoryId,
-        categoryMarkupPct: markup?.markup_pct ?? 0.5,
+        defaultMarkupPct: defaultPct,
+        categoryMarkupPct: defaultPct,
         customClientUnitPrice: undefined,
       });
     }
   }
 
+  function handleMarkupBlur(e: React.FocusEvent<HTMLInputElement>) {
+    const raw = parseFloat(e.target.value);
+    const clamped = isNaN(raw) ? item.defaultMarkupPct : Math.min(3.0, Math.max(0.05, raw / 100));
+    onChange(item.id, { categoryMarkupPct: clamped });
+    onBlur(item.id);
+  }
+
   return (
-    <div className="grid items-center gap-2 py-1.5 border-b border-gray-50 last:border-0" style={{ gridTemplateColumns: '2fr 60px 90px 130px 80px 80px 24px' }}>
+    <div className="grid items-center gap-2 py-1.5 border-b border-gray-50 last:border-0" style={{ gridTemplateColumns: '2fr 60px 90px 130px 60px 80px 80px 24px' }}>
       {/* Name */}
       <input
         type="text"
@@ -91,6 +103,29 @@ export default function LineItemRow({ item, markups, showTaxToggle, onChange, on
         ))}
         <option value="custom">Custom (manual price)</option>
       </select>
+
+      {/* Markup % (editable, yellow when overridden) */}
+      {isCustom ? (
+        <div />
+      ) : (
+        <div className="relative">
+          <input
+            type="number"
+            min="5"
+            max="300"
+            step="1"
+            value={markupDisplayPct}
+            onChange={(e) => onChange(item.id, { categoryMarkupPct: (parseFloat(e.target.value) || 50) / 100 })}
+            onBlur={handleMarkupBlur}
+            className={
+              inputClass + ' text-right pr-5 ' +
+              (markupOverridden ? 'bg-yellow-50 border-yellow-300 focus:border-yellow-400 focus:ring-yellow-300' : '')
+            }
+            title={markupOverridden ? `Default: ${(item.defaultMarkupPct * 100).toFixed(0)}%` : undefined}
+          />
+          <span className="absolute right-2 top-1 text-gray-400 text-xs pointer-events-none">%</span>
+        </div>
+      )}
 
       {/* Custom client price OR our cost display */}
       {isCustom ? (

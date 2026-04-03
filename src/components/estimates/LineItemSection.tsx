@@ -32,12 +32,13 @@ export default function LineItemSection({ section, items, markups, defaultTaxTyp
       <div className="flex items-center justify-between py-2 border-b border-gray-200 mb-1">
         <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{SECTION_LABELS[section]}</h4>
         {items.length > 0 && (
-          <div className="grid text-xs font-medium text-gray-400 gap-2 pr-6" style={{ gridTemplateColumns: '2fr 60px 90px 130px 80px 80px 24px' }}>
+          <div className="grid text-xs font-medium text-gray-400 gap-2 pr-6" style={{ gridTemplateColumns: '2fr 60px 90px 130px 60px 80px 80px 24px' }}>
             <span></span>
             <span className="text-right">Qty</span>
-            <span className="text-right">Our Cost</span>
+            <span className="text-right">Unit Price</span>
             <span>Category</span>
-            <span className="text-right">{isFB ? 'Our Cost' : 'Our Cost'}</span>
+            <span className="text-right">Markup</span>
+            <span className="text-right">Our Cost</span>
             <span className="text-right">Client Cost</span>
             <span></span>
           </div>
@@ -45,7 +46,9 @@ export default function LineItemSection({ section, items, markups, defaultTaxTyp
       </div>
 
       {items.length === 0 && (
-        <p className="text-xs text-gray-300 py-2 pl-1">No items yet</p>
+        <p className="text-xs text-gray-400 italic py-3 pl-1">
+          No {SECTION_LABELS[section].toLowerCase()} items — click + Add item below
+        </p>
       )}
 
       {items.map((item) => (

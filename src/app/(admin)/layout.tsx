@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import NavLinks from '@/components/layout/NavLinks';
+import { getProfile } from '@/lib/supabase/queries';
 
 const NAV_LINKS = [
   { href: '/programs', label: 'Programs' },
@@ -16,6 +17,9 @@ export default async function AdminLayout({
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
+
+  const profile = await getProfile(user.id);
+  if (profile?.role !== 'admin') redirect('/programs');
 
   return (
     <div className="min-h-screen bg-gray-50">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { TaxType, FeeOption } from '@/types';
 import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation } from '@/lib/supabase/queries';
 import {
@@ -12,8 +12,9 @@ import ScenarioTabs from './ScenarioTabs';
 import LineItemSection from './LineItemSection';
 import SummaryPanel from './SummaryPanel';
 import MarginPanel from './MarginPanel';
+import ExportButtons from './ExportButtons';
 import { updateEstimate } from '@/app/(programs)/programs/[id]/estimates/actions';
-import { upsertLineItem, deleteLineItem } from '@/app/(programs)/programs/[id]/estimates/actions';
+import { upsertLineItem, deleteLineItem, cacheEstimateTotal } from '@/app/(programs)/programs/[id]/estimates/actions';
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -24,7 +25,8 @@ export interface LocalLineItem {
   qty: number;
   unitPrice: number;
   categoryId: string | 'custom' | null;
-  categoryMarkupPct: number;
+  defaultMarkupPct: number;    // category reference default (for yellow highlight)
+  categoryMarkupPct: number;   // effective markup (override ?? default)
   taxType: TaxType;
   customClientUnitPrice?: number;
   sortOrder: number;
@@ -93,6 +95,8 @@ function toTiers(tiers: DbTier[]): TeamHoursTier[] {
 function dbItemToLocal(item: DbLineItem, markups: DbMarkup[]): LocalLineItem {
   const isCustom = item.custom_client_unit_price !== null;
   const markup = markups.find((m) => m.id === item.category_id);
+  const defaultMarkupPct = isCustom ? 0 : (markup?.markup_pct ?? 0.5);
+  const effectiveMarkupPct = isCustom ? 0 : (item.markup_override ?? defaultMarkupPct);
   return {
     id: item.id,
     section: item.section as LocalLineItem['section'],
@@ -100,7 +104,8 @@ function dbItemToLocal(item: DbLineItem, markups: DbMarkup[]): LocalLineItem {
     qty: item.qty,
     unitPrice: item.unit_price,
     categoryId: isCustom ? 'custom' : (item.category_id ?? null),
-    categoryMarkupPct: isCustom ? 0 : (markup?.markup_pct ?? 0.5),
+    defaultMarkupPct,
+    categoryMarkupPct: effectiveMarkupPct,
     taxType: item.tax_type as TaxType,
     customClientUnitPrice: isCustom ? item.custom_client_unit_price! : undefined,
     sortOrder: item.sort_order,
@@ -173,6 +178,15 @@ export default function EstimateBuilder({
     [summary, programConfig, tiersList]
   );
 
+  // ─── Cache total (debounced 2s) ───────────────────────────
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      cacheEstimateTotal(estimate.id, program.id, summary.totalClient);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [summary.totalClient, estimate.id, program.id]);
+
   // ─── Save helpers ────────────────────────────────────────
 
   async function withSave<T>(fn: () => Promise<{ error: string | null } & T>) {
@@ -212,13 +226,22 @@ export default function EstimateBuilder({
   // ─── Line item mutations ──────────────────────────────────
 
   const handleItemChange = useCallback((id: string, patch: Partial<LocalLineItem>) => {
-    setLineItems((prev) => prev.map((item) => item.id === id ? { ...item, ...patch } : item));
+    setLineItems((prev) => prev.map((item) => {
+      if (item.id !== id) return item;
+      // When category changes, reset markup to new category's default
+      if (patch.categoryId !== undefined && patch.categoryId !== item.categoryId) {
+        const newDefault = patch.defaultMarkupPct ?? item.defaultMarkupPct;
+        return { ...item, ...patch, categoryMarkupPct: newDefault };
+      }
+      return { ...item, ...patch };
+    }));
   }, []);
 
   const handleItemSave = useCallback(async (id: string) => {
     const item = lineItems.find((li) => li.id === id);
     if (!item) return;
 
+    const isOverridden = item.categoryId !== 'custom' && item.categoryMarkupPct !== item.defaultMarkupPct;
     const result = await withSave(() => upsertLineItem({
       id: item.isNew ? undefined : item.id,
       estimate_id: estimate.id,
@@ -229,6 +252,7 @@ export default function EstimateBuilder({
       category_id: item.categoryId === 'custom' ? null : (item.categoryId ?? null),
       tax_type: item.taxType,
       custom_client_unit_price: item.categoryId === 'custom' ? (item.customClientUnitPrice ?? 0) : null,
+      markup_override: isOverridden ? item.categoryMarkupPct : null,
       sort_order: item.sortOrder,
     }));
 
@@ -261,6 +285,7 @@ export default function EstimateBuilder({
       qty: 1,
       unitPrice: 0,
       categoryId: null,
+      defaultMarkupPct: 0.5,
       categoryMarkupPct: 0.5,
       taxType,
       sortOrder: maxOrder + 1,
@@ -314,10 +339,13 @@ export default function EstimateBuilder({
             <span className="mx-1 text-gray-300">/</span>
             <span className="font-medium text-gray-700">Estimates</span>
           </div>
-          <div className="text-xs">
-            {saveState === 'saving' && <span className="text-gray-400">Saving...</span>}
-            {saveState === 'saved' && <span className="text-green-600">Saved</span>}
-            {saveState === 'error' && <span className="text-red-500">{saveError}</span>}
+          <div className="flex items-center gap-3">
+            <ExportButtons programId={program.id} programName={program.name} summary={summary} guestCount={program.guest_count} />
+            <div className="text-xs">
+              {saveState === 'saving' && <span className="text-gray-400">Saving...</span>}
+              {saveState === 'saved' && <span className="text-green-600">Saved</span>}
+              {saveState === 'error' && <span className="text-red-500">{saveError}</span>}
+            </div>
           </div>
         </div>
         <ScenarioTabs
