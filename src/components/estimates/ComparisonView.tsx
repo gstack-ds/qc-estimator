@@ -41,8 +41,8 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
 
   if (cards.length === 0) {
     return (
-      <div className="text-center py-10 border border-dashed border-gray-200 rounded-lg">
-        <p className="text-sm text-gray-400">No estimates yet.</p>
+      <div className="text-center py-12 border border-dashed border-brand-cream rounded-lg">
+        <p className="text-sm text-brand-silver">No estimates yet.</p>
       </div>
     );
   }
@@ -51,14 +51,14 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
     <div className="space-y-4">
       {/* Total Budget banner */}
       {budgetCount > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 flex items-center justify-between">
+        <div className="bg-brand-cream border border-brand-copper/40 rounded-lg px-4 py-3 flex items-center justify-between">
           <div>
-            <span className="text-sm font-medium text-blue-900">Total Budget</span>
-            <span className="text-xs text-blue-600 ml-2">
+            <span className="text-sm font-medium text-brand-charcoal">Total Budget</span>
+            <span className="text-xs text-brand-brown ml-2">
               {budgetCount} venue{budgetCount !== 1 ? 's' : ''} included
             </span>
           </div>
-          <span className="text-lg font-semibold text-blue-900">{fmt(budgetTotal)}</span>
+          <span className="font-serif text-lg font-medium text-brand-charcoal">{fmt(budgetTotal)}</span>
         </div>
       )}
 
@@ -71,17 +71,19 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
             <Link
               key={card.id}
               href={`/programs/${programId}/estimates/${card.id}`}
-              className={`block bg-white rounded-lg border p-4 flex flex-col gap-3 transition-shadow hover:shadow-md cursor-pointer ${
-                isLowest ? 'border-green-400 ring-1 ring-green-300' : 'border-gray-200 hover:border-gray-300'
+              className={`block bg-white rounded-lg border p-5 flex flex-col gap-3 transition-all hover:shadow-md cursor-pointer ${
+                isLowest
+                  ? 'border-brand-brown ring-1 ring-brand-copper/40'
+                  : 'border-brand-cream hover:border-brand-copper/50'
               }`}
             >
               {/* Header */}
               <div className="flex items-start justify-between gap-2">
-                <span className="font-medium text-gray-900 text-sm leading-snug">
+                <span className="font-medium text-brand-charcoal text-sm leading-snug">
                   {card.name}
                 </span>
                 {isLowest && (
-                  <span className="flex-shrink-0 text-xs bg-green-100 text-green-700 font-medium px-1.5 py-0.5 rounded">
+                  <span className="flex-shrink-0 text-xs bg-brand-cream text-brand-brown font-medium px-1.5 py-0.5 rounded tracking-wide">
                     Lowest
                   </span>
                 )}
@@ -90,27 +92,27 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
               {/* Totals */}
               <div className="flex items-end gap-4">
                 <div>
-                  <p className="text-xl font-semibold text-gray-900">{fmt(card.total)}</p>
-                  <p className="text-xs text-gray-400">total estimate</p>
+                  <p className="font-serif text-xl font-medium text-brand-charcoal">{fmt(card.total)}</p>
+                  <p className="text-xs text-brand-silver mt-0.5">total estimate</p>
                 </div>
                 {card.pricePerPerson > 0 && (
                   <div>
-                    <p className="text-base font-medium text-gray-700">
+                    <p className="text-base font-medium text-brand-brown">
                       ${card.pricePerPerson.toLocaleString('en-US')}
-                      <span className="text-xs font-normal text-gray-400">/pp</span>
+                      <span className="text-xs font-normal text-brand-silver">/pp</span>
                     </p>
-                    <p className="text-xs text-gray-400">per person</p>
+                    <p className="text-xs text-brand-silver mt-0.5">per person</p>
                   </div>
                 )}
               </div>
 
               {/* Line item count */}
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-brand-silver">
                 {card.lineItemCount} line item{card.lineItemCount !== 1 ? 's' : ''}
               </p>
 
               {/* Include in Budget toggle */}
-              <div className="border-t border-gray-100 pt-3 mt-auto">
+              <div className="border-t border-brand-cream pt-3 mt-auto">
                 <label
                   className="flex items-center gap-2 cursor-pointer"
                   onClick={(e) => e.preventDefault()}
@@ -118,7 +120,7 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
                   <div
                     onClick={(e) => { e.preventDefault(); handleToggle(card.id, !card.includeInBudget); }}
                     className={`w-8 h-4 rounded-full transition-colors cursor-pointer flex-shrink-0 ${
-                      card.includeInBudget ? 'bg-blue-600' : 'bg-gray-300'
+                      card.includeInBudget ? 'bg-brand-brown' : 'bg-brand-silver/40'
                     }`}
                   >
                     <div
@@ -127,7 +129,7 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
                       }`}
                     />
                   </div>
-                  <span className="text-xs text-gray-600">Include in Total Budget</span>
+                  <span className="text-xs text-brand-charcoal/70">Include in Total Budget</span>
                 </label>
               </div>
             </Link>

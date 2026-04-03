@@ -100,7 +100,7 @@ export default function ExportButtons({ programId, programName, summary, guestCo
     }
   }
 
-  const btnClass = 'text-xs px-2.5 py-1 rounded border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 transition-colors';
+  const btnClass = 'text-xs px-2.5 py-1 rounded border border-brand-cream bg-white hover:bg-brand-offwhite text-brand-charcoal/70 hover:text-brand-charcoal transition-colors';
 
   return (
     <div className="flex items-center gap-2">

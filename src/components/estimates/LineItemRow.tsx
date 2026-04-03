@@ -18,7 +18,7 @@ function fmt(val: number) {
   return '$' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-const inputClass = 'border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400 bg-white w-full';
+const inputClass = 'border border-brand-cream rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper focus:border-brand-brown bg-white text-brand-charcoal w-full';
 
 export default function LineItemRow({ item, markups, showTaxToggle, onChange, onBlur, onDelete }: Props) {
   const isCustom = item.categoryId === 'custom';
@@ -53,7 +53,7 @@ export default function LineItemRow({ item, markups, showTaxToggle, onChange, on
   }
 
   return (
-    <div className="grid items-center gap-2 py-1.5 border-b border-gray-50 last:border-0" style={{ gridTemplateColumns: '2fr 60px 90px 130px 60px 80px 80px 24px' }}>
+    <div className="grid items-center gap-2 py-1.5 border-b border-brand-cream/40 last:border-0" style={{ gridTemplateColumns: '2fr 60px 90px 130px 60px 80px 80px 24px' }}>
       {/* Name */}
       <input
         type="text"
@@ -144,16 +144,16 @@ export default function LineItemRow({ item, markups, showTaxToggle, onChange, on
           />
         </div>
       ) : (
-        <div className="text-right text-sm text-gray-500 tabular-nums pr-1">{fmt(ourCost)}</div>
+        <div className="text-right text-sm text-brand-silver tabular-nums pr-1">{fmt(ourCost)}</div>
       )}
 
       {/* Client cost */}
-      <div className="text-right text-sm font-medium text-gray-800 tabular-nums pr-1">{fmt(clientCost)}</div>
+      <div className="text-right text-sm font-medium text-brand-charcoal tabular-nums pr-1">{fmt(clientCost)}</div>
 
       {/* Delete */}
       <button
         onClick={() => onDelete(item.id)}
-        className="text-gray-300 hover:text-red-500 text-lg leading-none text-center"
+        className="text-brand-silver/50 hover:text-red-500 text-lg leading-none text-center transition-colors"
         title="Delete"
       >
         ×

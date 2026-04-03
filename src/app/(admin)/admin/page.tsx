@@ -15,8 +15,8 @@ export default async function AdminPage() {
   return (
     <div className="space-y-10">
       <div>
-        <h1 className="text-lg font-semibold text-gray-900">Reference Data</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <h1 className="font-serif text-2xl font-medium text-brand-charcoal">Reference Data</h1>
+        <p className="text-sm text-brand-silver mt-1">
           Click any cell to edit. Changes save automatically on blur.
         </p>
       </div>

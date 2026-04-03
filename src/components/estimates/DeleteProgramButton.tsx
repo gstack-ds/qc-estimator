@@ -27,17 +27,17 @@ export default function DeleteProgramButton({ programId }: Props) {
   if (confirming) {
     return (
       <div className="flex items-center gap-2">
-        <span className="text-sm text-gray-600">Delete this program and all its estimates?</span>
+        <span className="text-sm text-brand-charcoal/70">Delete this program and all its estimates?</span>
         <button
           onClick={() => setConfirming(false)}
-          className="text-sm px-3 py-1.5 rounded border border-gray-200 hover:bg-gray-50"
+          className="text-sm px-3 py-1.5 rounded border border-brand-cream text-brand-charcoal hover:bg-brand-cream/40 transition-colors"
         >
           Cancel
         </button>
         <button
           onClick={handleConfirm}
           disabled={deleting}
-          className="text-sm px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+          className="text-sm px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
         >
           {deleting ? 'Deleting…' : 'Delete'}
         </button>
@@ -48,7 +48,7 @@ export default function DeleteProgramButton({ programId }: Props) {
   return (
     <button
       onClick={() => setConfirming(true)}
-      className="text-sm px-3 py-1.5 rounded border border-red-200 text-red-600 hover:bg-red-50"
+      className="text-sm px-3 py-1.5 rounded border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
     >
       Delete Program
     </button>

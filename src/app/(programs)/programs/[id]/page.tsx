@@ -140,10 +140,10 @@ export default async function ProgramPage({ params }: Props) {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <Link href="/programs" className="text-sm text-gray-400 hover:text-gray-600">
+          <Link href="/programs" className="text-sm text-brand-silver hover:text-brand-brown transition-colors">
             ← Programs
           </Link>
-          <h1 className="text-lg font-semibold text-gray-900 mt-1">{program.name}</h1>
+          <h1 className="font-serif text-2xl font-medium text-brand-charcoal mt-1">{program.name}</h1>
         </div>
         <DeleteProgramButton programId={id} />
       </div>
@@ -156,7 +156,7 @@ export default async function ProgramPage({ params }: Props) {
       {/* Comparison section */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-gray-900">Venue Estimates</h2>
+          <h2 className="font-serif text-lg font-medium text-brand-charcoal">Venue Estimates</h2>
           <form
             action={async () => {
               'use server';
@@ -166,7 +166,7 @@ export default async function ProgramPage({ params }: Props) {
           >
             <button
               type="submit"
-              className="bg-blue-600 text-white text-sm font-medium rounded px-4 py-2 hover:bg-blue-700 transition-colors"
+              className="bg-brand-brown text-white text-sm font-medium rounded px-4 py-2 hover:bg-brand-charcoal transition-colors"
             >
               Add Estimate
             </button>

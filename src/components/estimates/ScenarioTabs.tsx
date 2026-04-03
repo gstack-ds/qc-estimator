@@ -111,8 +111,8 @@ export default function ScenarioTabs({ estimates: initialEstimates, currentEstim
             onDragEnd={handleDragEnd}
             className={`group relative flex items-center gap-1 rounded-t-md border-b-2 transition-colors cursor-grab active:cursor-grabbing ${
               isActive
-                ? 'border-blue-600 bg-white'
-                : 'border-transparent hover:bg-gray-100'
+                ? 'border-brand-brown bg-white'
+                : 'border-transparent hover:bg-brand-cream/40'
             } ${isDragging ? 'opacity-50' : 'opacity-100'}`}
           >
             {isConfirming ? (
@@ -140,7 +140,7 @@ export default function ScenarioTabs({ estimates: initialEstimates, currentEstim
                     if (!isActive) router.push(`/programs/${programId}/estimates/${est.id}`);
                   }}
                   className={`px-3 py-2 text-sm whitespace-nowrap ${
-                    isActive ? 'text-blue-700 font-medium' : 'text-gray-500 hover:text-gray-800'
+                    isActive ? 'text-brand-brown font-medium' : 'text-brand-silver hover:text-brand-charcoal'
                   }`}
                 >
                   {est.name}
@@ -169,7 +169,7 @@ export default function ScenarioTabs({ estimates: initialEstimates, currentEstim
       <button
         onClick={handleAddEstimate}
         disabled={isPending}
-        className="px-3 py-2 text-sm text-gray-400 hover:text-blue-600 hover:bg-gray-100 rounded-t-md border-b-2 border-transparent transition-colors"
+        className="px-3 py-2 text-sm text-brand-silver hover:text-brand-brown hover:bg-brand-cream/40 rounded-t-md border-b-2 border-transparent transition-colors"
         title="New estimate"
       >
         +
@@ -180,7 +180,7 @@ export default function ScenarioTabs({ estimates: initialEstimates, currentEstim
         <button
           onClick={handleDuplicate}
           disabled={isPending}
-          className="text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
+          className="text-xs text-brand-silver hover:text-brand-charcoal px-2 py-1 rounded hover:bg-brand-cream/40"
           title="Duplicate this estimate"
         >
           Duplicate

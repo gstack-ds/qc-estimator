@@ -1,12 +1,27 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Raleway, Cormorant_Garamond } from 'next/font/google';
 import './globals.css';
 
-const inter = Inter({ subsets: ['latin'] });
+const raleway = Raleway({
+  subsets: ['latin'],
+  variable: '--font-sans',
+  display: 'swap',
+});
+
+const cormorant = Cormorant_Garamond({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600'],
+  variable: '--font-serif',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
-  title: 'QC Estimator',
-  description: 'Internal pricing tool for QC Event Design',
+  title: 'QC Estimator — Quill Creative Event Design',
+  description: 'Internal pricing tool for Quill Creative Event Design',
+  icons: {
+    icon: '/images/qc-monogram.png',
+    apple: '/images/qc-monogram.png',
+  },
 };
 
 export default function RootLayout({
@@ -16,7 +31,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body className={`${raleway.variable} ${cormorant.variable} font-sans`}>
+        {children}
+      </body>
     </html>
   );
 }

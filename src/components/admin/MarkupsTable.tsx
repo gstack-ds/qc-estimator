@@ -98,14 +98,14 @@ export default function MarkupsTable({ initialData }: Props) {
     <div>
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Category Markups</h2>
+          <h2 className="text-base font-semibold text-brand-charcoal">Category Markups</h2>
           {lastUpdated && (
-            <p className="text-xs text-gray-400 mt-0.5">
+            <p className="text-xs text-brand-silver mt-0.5">
               Last updated {new Date(lastUpdated).toLocaleDateString()}
             </p>
           )}
         </div>
-        <button onClick={addRow} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+        <button onClick={addRow} className="text-sm text-brand-brown hover:text-brand-charcoal font-medium transition-colors">
           + Add category
         </button>
       </div>
@@ -116,20 +116,20 @@ export default function MarkupsTable({ initialData }: Props) {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
+      <div className="overflow-x-auto rounded-lg border border-brand-cream">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="bg-brand-offwhite border-b border-brand-cream">
             <tr>
-              <th className="text-left px-4 py-2.5 font-medium text-gray-600">Category</th>
-              <th className="text-right px-4 py-2.5 font-medium text-gray-600 w-28">Markup</th>
-              <th className="text-left px-4 py-2.5 font-medium text-gray-600">Notes</th>
-              <th className="text-right px-4 py-2.5 font-medium text-gray-600 w-20">Order</th>
+              <th className="text-left px-4 py-2.5 font-medium text-brand-charcoal/60 text-xs uppercase tracking-wide">Category</th>
+              <th className="text-right px-4 py-2.5 font-medium text-brand-charcoal/60 text-xs uppercase tracking-wide w-28">Markup</th>
+              <th className="text-left px-4 py-2.5 font-medium text-brand-charcoal/60 text-xs uppercase tracking-wide">Notes</th>
+              <th className="text-right px-4 py-2.5 font-medium text-brand-charcoal/60 text-xs uppercase tracking-wide w-20">Order</th>
               <th className="w-10"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-brand-cream/60">
             {rows.map((row) => (
-              <tr key={row.id} className="hover:bg-gray-50">
+              <tr key={row.id} className="hover:bg-brand-offwhite transition-colors">
                 {(['name', 'markup_pct', 'notes', 'sort_order'] as const).map((col) => {
                   const isEditing = editingCell?.rowId === row.id && editingCell?.col === col;
                   const isRight = col === 'markup_pct' || col === 'sort_order';
@@ -157,10 +157,10 @@ export default function MarkupsTable({ initialData }: Props) {
                             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                             if (e.key === 'Escape') setEditingCell(null);
                           }}
-                          className={`w-full border border-blue-400 rounded px-2 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 ${isRight ? 'text-right' : ''}`}
+                          className={`w-full border border-brand-brown rounded px-2 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper ${isRight ? 'text-right' : ''}`}
                         />
                       ) : (
-                        <span className={`cursor-text ${!displayValue ? 'text-gray-300' : col === 'markup_pct' ? 'font-medium text-gray-900' : 'text-gray-900'}`}>
+                        <span className={`cursor-text ${!displayValue ? 'text-brand-silver/40' : col === 'markup_pct' ? 'font-medium text-brand-charcoal' : 'text-brand-charcoal'}`}>
                           {displayValue || (col === 'notes' ? '' : 'Click to edit')}
                         </span>
                       )}
@@ -176,7 +176,7 @@ export default function MarkupsTable({ initialData }: Props) {
                   ) : (
                     <button
                       onClick={() => setConfirmDelete(row.id)}
-                      className="text-gray-300 hover:text-red-500 text-base leading-none"
+                      className="text-brand-silver/40 hover:text-red-500 transition-colors text-base leading-none"
                       title="Delete row"
                     >
                       ×

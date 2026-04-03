@@ -307,10 +307,10 @@ export default function EstimateBuilder({
   const isOverridden = (val: string | null, def: string) => val !== null && val !== def;
 
   const selectClass = (val: string | null, def: string) =>
-    `border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 ${
+    `border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper text-brand-charcoal ${
       isOverridden(val, def)
         ? 'border-yellow-300 bg-yellow-50 focus:border-yellow-400'
-        : 'border-gray-200 bg-white'
+        : 'border-brand-cream bg-white'
     }`;
 
   // ─── Sections ─────────────────────────────────────────────
@@ -324,25 +324,25 @@ export default function EstimateBuilder({
 
   // ─── Render ───────────────────────────────────────────────
 
-  const fieldClass = 'border border-gray-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 w-full';
-  const labelClass = 'block text-xs font-medium text-gray-500 mb-1';
+  const fieldClass = 'border border-brand-cream rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper focus:border-brand-brown bg-white text-brand-charcoal w-full';
+  const labelClass = 'block text-xs font-medium text-brand-charcoal/60 tracking-wide mb-1';
 
   return (
     <div className="flex flex-col h-full">
       {/* Tabs row */}
-      <div className="bg-gray-50 border-b border-gray-200 px-6 pt-4">
+      <div className="bg-brand-offwhite border-b border-brand-cream px-6 pt-4">
         <div className="flex items-center justify-between mb-1">
-          <div className="text-sm text-gray-600">
-            <a href={`/programs/${program.id}`} className="hover:text-blue-600 text-gray-400">
+          <div className="text-sm text-brand-charcoal/70">
+            <a href={`/programs/${program.id}`} className="hover:text-brand-brown text-brand-silver transition-colors">
               {program.name}
             </a>
-            <span className="mx-1 text-gray-300">/</span>
-            <span className="font-medium text-gray-700">Estimates</span>
+            <span className="mx-1 text-brand-silver/40">/</span>
+            <span className="font-medium text-brand-charcoal">Estimates</span>
           </div>
           <div className="flex items-center gap-3">
             <ExportButtons programId={program.id} programName={program.name} summary={summary} guestCount={program.guest_count} />
             <div className="text-xs">
-              {saveState === 'saving' && <span className="text-gray-400">Saving...</span>}
+              {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
               {saveState === 'saved' && <span className="text-green-600">Saved</span>}
               {saveState === 'error' && <span className="text-red-500">{saveError}</span>}
             </div>
@@ -359,7 +359,7 @@ export default function EstimateBuilder({
         {/* Main content */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {/* Estimate header */}
-          <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+          <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Estimate Name</label>
@@ -410,7 +410,7 @@ export default function EstimateBuilder({
                       updateEstField({ isVenueTaxable: next });
                       saveEstimate({ isVenueTaxable: next });
                     }}
-                    className={`w-9 h-5 rounded-full transition-colors cursor-pointer flex-shrink-0 ${est.isVenueTaxable ? 'bg-blue-600' : 'bg-gray-300'}`}
+                    className={`w-9 h-5 rounded-full transition-colors cursor-pointer flex-shrink-0 ${est.isVenueTaxable ? 'bg-brand-brown' : 'bg-brand-silver/40'}`}
                   >
                     <div className={`w-4 h-4 bg-white rounded-full mt-0.5 transition-transform ${est.isVenueTaxable ? 'translate-x-4 ml-0.5' : 'translate-x-0.5'}`} />
                   </div>
@@ -474,7 +474,7 @@ export default function EstimateBuilder({
           </div>
 
           {/* Line item sections */}
-          <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-6">
+          <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-6">
             {sections.map(({ name: sectionName, taxType }) => (
               <LineItemSection
                 key={sectionName}
@@ -498,7 +498,7 @@ export default function EstimateBuilder({
         </div>
 
         {/* Right sidebar — summary + margin */}
-        <div className="w-72 flex-shrink-0 border-l border-gray-200 bg-gray-50 overflow-y-auto p-4 space-y-4">
+        <div className="w-72 flex-shrink-0 border-l border-brand-cream bg-brand-offwhite overflow-y-auto p-4 space-y-4">
           <SummaryPanel summary={summary} guestCount={program.guest_count} fbMinimum={est.fbMinimum} />
           <MarginPanel margin={marginAnalysis} />
         </div>

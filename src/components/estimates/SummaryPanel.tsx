@@ -19,12 +19,18 @@ function Row({ label, value, pp, bold, indent, dim }: {
 }) {
   if (value === 0 && !bold) return null;
   return (
-    <div className={`flex justify-between py-1 text-sm ${bold ? 'font-semibold border-t border-gray-200 mt-1 pt-2' : ''} ${indent ? 'pl-4' : ''} ${dim ? 'text-gray-400' : 'text-gray-700'}`}>
+    <div className={`flex justify-between py-1 text-sm ${
+      bold
+        ? 'font-semibold border-t border-brand-cream mt-1 pt-2 text-brand-charcoal'
+        : dim
+        ? 'text-brand-silver'
+        : 'text-brand-charcoal/80'
+    } ${indent ? 'pl-3' : ''}`}>
       <span>{label}</span>
       <div className="text-right">
         <span className="tabular-nums">{fmt(value)}</span>
         {pp !== undefined && pp > 0 && (
-          <span className="text-xs text-gray-400 ml-2 tabular-nums">{fmtPP(pp)}/pp</span>
+          <span className="text-xs text-brand-silver ml-2 tabular-nums">{fmtPP(pp)}/pp</span>
         )}
       </div>
     </div>
@@ -32,15 +38,17 @@ function Row({ label, value, pp, bold, indent, dim }: {
 }
 
 function Divider() {
-  return <div className="border-t border-gray-100 my-1" />;
+  return <div className="border-t border-brand-cream/60 my-1.5" />;
 }
 
 export default function SummaryPanel({ summary, guestCount, fbMinimum }: Props) {
   const pp = (val: number) => guestCount > 0 ? Math.ceil(val / guestCount) : 0;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-1">
-      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Summary</h3>
+    <div className="bg-white border border-brand-cream rounded-lg p-4 space-y-0.5">
+      <h3 className="font-serif text-sm font-medium text-brand-charcoal tracking-wide mb-3">
+        Summary
+      </h3>
 
       {/* F&B */}
       <Row label="F&B Subtotal" value={summary.fbSubtotalClient} pp={pp(summary.fbSubtotalClient)} />
@@ -76,7 +84,11 @@ export default function SummaryPanel({ summary, guestCount, fbMinimum }: Props) 
 
       {/* F&B Minimum */}
       {fbMinimum > 0 && (
-        <div className={`mt-3 text-xs rounded px-2 py-1.5 ${summary.fbMinimumMet ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+        <div className={`mt-3 text-xs rounded px-2.5 py-2 ${
+          summary.fbMinimumMet
+            ? 'bg-green-50 text-green-700 border border-green-100'
+            : 'bg-amber-50 text-amber-700 border border-amber-100'
+        }`}>
           {summary.fbMinimumMet
             ? `F&B Minimum Met (${fmt(fbMinimum)})`
             : `F&B Minimum NOT Met — Shortfall: ${fmt(summary.fbShortfall)}`

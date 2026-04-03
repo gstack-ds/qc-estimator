@@ -83,12 +83,12 @@ export default function HoursTable({ initialData }: Props) {
     <div>
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Team Hours Tiers</h2>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <h2 className="text-base font-semibold text-brand-charcoal">Team Hours Tiers</h2>
+          <p className="text-xs text-brand-silver mt-0.5">
             Revenue thresholds for estimating team hours (OpEx = hours × $90)
           </p>
         </div>
-        <button onClick={addRow} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+        <button onClick={addRow} className="text-sm text-brand-brown hover:text-brand-charcoal font-medium transition-colors">
           + Add tier
         </button>
       </div>
@@ -99,20 +99,20 @@ export default function HoursTable({ initialData }: Props) {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
+      <div className="overflow-x-auto rounded-lg border border-brand-cream">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="bg-brand-offwhite border-b border-brand-cream">
             <tr>
-              <th className="text-left px-4 py-2.5 font-medium text-gray-600 w-36">Tier Name</th>
-              <th className="text-right px-4 py-2.5 font-medium text-gray-600 w-40">Revenue Threshold</th>
-              <th className="text-right px-4 py-2.5 font-medium text-gray-600 w-28">Base Hours</th>
-              <th className="text-right px-4 py-2.5 font-medium text-gray-600 w-28">OpEx Est.</th>
+              <th className="text-left px-4 py-2.5 font-medium text-brand-charcoal/60 text-xs uppercase tracking-wide w-36">Tier Name</th>
+              <th className="text-right px-4 py-2.5 font-medium text-brand-charcoal/60 text-xs uppercase tracking-wide w-40">Revenue Threshold</th>
+              <th className="text-right px-4 py-2.5 font-medium text-brand-charcoal/60 text-xs uppercase tracking-wide w-28">Base Hours</th>
+              <th className="text-right px-4 py-2.5 font-medium text-brand-charcoal/60 text-xs uppercase tracking-wide w-28">OpEx Est.</th>
               <th className="w-10"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-brand-cream/60">
             {rows.map((row) => (
-              <tr key={row.id} className="hover:bg-gray-50">
+              <tr key={row.id} className="hover:bg-brand-offwhite transition-colors">
                 {(['tier_name', 'revenue_threshold', 'base_hours'] as const).map((col) => {
                   const isEditing = editingCell?.rowId === row.id && editingCell?.col === col;
                   const isRight = col !== 'tier_name';
@@ -139,10 +139,10 @@ export default function HoursTable({ initialData }: Props) {
                             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                             if (e.key === 'Escape') setEditingCell(null);
                           }}
-                          className={`w-full border border-blue-400 rounded px-2 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 ${isRight ? 'text-right' : ''}`}
+                          className={`w-full border border-brand-brown rounded px-2 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper ${isRight ? 'text-right' : ''}`}
                         />
                       ) : (
-                        <span className={`cursor-text ${!displayValue ? 'text-gray-300' : 'text-gray-900'}`}>
+                        <span className={`cursor-text ${!displayValue ? 'text-brand-silver/40' : 'text-brand-charcoal'}`}>
                           {displayValue || 'Click to edit'}
                         </span>
                       )}
@@ -150,7 +150,7 @@ export default function HoursTable({ initialData }: Props) {
                   );
                 })}
                 {/* Computed OpEx column */}
-                <td className="px-4 py-2 text-right text-gray-500">
+                <td className="px-4 py-2 text-right text-brand-silver">
                   {formatCurrency(row.base_hours * 90)}
                 </td>
                 <td className="px-2 py-2 text-center">
@@ -162,7 +162,7 @@ export default function HoursTable({ initialData }: Props) {
                   ) : (
                     <button
                       onClick={() => setConfirmDelete(row.id)}
-                      className="text-gray-300 hover:text-red-500 text-base leading-none"
+                      className="text-brand-silver/40 hover:text-red-500 transition-colors text-base leading-none"
                       title="Delete row"
                     >
                       ×

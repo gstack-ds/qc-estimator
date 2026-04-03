@@ -9,11 +9,11 @@ export default async function ProgramsPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-lg font-semibold text-gray-900">Programs</h1>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="font-serif text-2xl font-medium text-brand-charcoal">Programs</h1>
         <Link
           href="/programs/new"
-          className="bg-blue-600 text-white text-sm font-medium rounded px-4 py-2 hover:bg-blue-700 transition-colors"
+          className="bg-brand-brown text-white text-sm font-medium rounded px-4 py-2 hover:bg-brand-charcoal transition-colors"
         >
           New Program
         </Link>

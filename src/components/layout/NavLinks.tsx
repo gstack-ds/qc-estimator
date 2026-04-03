@@ -19,10 +19,10 @@ export default function NavLinks({ links }: { links: NavLink[] }) {
           <Link
             key={href}
             href={href}
-            className={`text-sm transition-colors ${
+            className={`text-sm tracking-wide transition-colors ${
               isActive
-                ? 'text-blue-600 font-medium'
-                : 'text-gray-500 hover:text-gray-900'
+                ? 'text-brand-copper font-medium'
+                : 'text-brand-silver hover:text-brand-offwhite'
             }`}
           >
             {label}
