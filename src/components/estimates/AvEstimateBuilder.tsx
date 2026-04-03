@@ -321,18 +321,20 @@ export default function AvEstimateBuilder({
               />
             ))}
           </div>
-        </div>
 
-        {/* Right sidebar */}
-        <div className="w-72 flex-shrink-0 border-l border-brand-cream bg-brand-offwhite overflow-y-auto p-4 space-y-4">
-          <AvSummaryPanel summary={summary} guestCount={program.guest_count} />
-          <MarginPanel margin={marginAnalysis} />
+          {/* Travel Expenses */}
           <TravelPanel
             estimateId={estimate.id}
             initialTrips={initialTrips}
             refs={travelRefs}
             onTotalChange={setTravelExpenses}
           />
+        </div>
+
+        {/* Right sidebar */}
+        <div className="w-72 flex-shrink-0 border-l border-brand-cream bg-brand-offwhite overflow-y-auto p-4 space-y-4">
+          <AvSummaryPanel summary={summary} guestCount={program.guest_count} />
+          <MarginPanel margin={marginAnalysis} />
         </div>
       </div>
     </div>

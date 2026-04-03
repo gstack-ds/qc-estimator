@@ -426,6 +426,14 @@ export default function DecorEstimateBuilder({
             </div>
             {RENTAL_SECTIONS.map(renderSubSection)}
           </div>
+
+          {/* Travel Expenses */}
+          <TravelPanel
+            estimateId={estimate.id}
+            initialTrips={initialTrips}
+            refs={travelRefs}
+            onTotalChange={setTravelExpenses}
+          />
         </div>
 
         {/* Right sidebar */}
@@ -439,12 +447,6 @@ export default function DecorEstimateBuilder({
             rentalsNonTaxableClient={rentalsNonTaxableClient}
           />
           <MarginPanel margin={marginAnalysis} />
-          <TravelPanel
-            estimateId={estimate.id}
-            initialTrips={initialTrips}
-            refs={travelRefs}
-            onTotalChange={setTravelExpenses}
-          />
         </div>
       </div>
     </div>

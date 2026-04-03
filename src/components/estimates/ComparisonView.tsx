@@ -27,14 +27,22 @@ function fmt(val: number) {
 export default function ComparisonView({ programId, cards: initialCards }: Props) {
   const [cards, setCards] = useState(initialCards);
 
-  const withTotal = cards.filter((c) => c.total > 0);
-  const lowestTotal = withTotal.length > 0 ? Math.min(...withTotal.map((c) => c.total)) : null;
-  const bestMarginPct = withTotal.length > 0 ? Math.max(...withTotal.map((c) => c.qcMarginPct)) : null;
-
   const budgetTotal = cards
     .filter((c) => c.includeInBudget)
     .reduce((sum, c) => sum + c.total, 0);
   const budgetCount = cards.filter((c) => c.includeInBudget).length;
+
+  const TYPE_ORDER: { type: string; label: string }[] = [
+    { type: 'venue', label: 'Venue Options' },
+    { type: 'av', label: 'AV Options' },
+    { type: 'decor', label: 'Decor Options' },
+  ];
+
+  const groups = TYPE_ORDER
+    .map(({ type, label }) => ({ type, label, cards: cards.filter((c) => c.type === type) }))
+    .filter((g) => g.cards.length > 0);
+
+  const showHeaders = groups.length > 1;
 
   async function handleToggle(id: string, next: boolean) {
     setCards((prev) => prev.map((c) => (c.id === id ? { ...c, includeInBudget: next } : c)));
@@ -57,120 +65,128 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
           <div>
             <span className="text-sm font-medium text-brand-charcoal">Total Budget</span>
             <span className="text-xs text-brand-brown ml-2">
-              {budgetCount} venue{budgetCount !== 1 ? 's' : ''} included
+              {budgetCount} estimate{budgetCount !== 1 ? 's' : ''} included
             </span>
           </div>
           <span className="font-serif text-lg font-medium text-brand-charcoal">{fmt(budgetTotal)}</span>
         </div>
       )}
 
-      {/* Cards grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {cards.map((card) => {
-          const isLowest = lowestTotal !== null && card.total === lowestTotal && card.total > 0;
-          const isBestMargin = bestMarginPct !== null && card.qcMarginPct === bestMarginPct && card.total > 0;
+      {/* Grouped cards */}
+      {groups.map((group) => {
+        const groupWithTotal = group.cards.filter((c) => c.total > 0);
+        const groupLowest = groupWithTotal.length > 1 ? Math.min(...groupWithTotal.map((c) => c.total)) : null;
+        const groupBestMargin = groupWithTotal.length > 0 ? Math.max(...groupWithTotal.map((c) => c.qcMarginPct)) : null;
 
-          return (
-            <Link
-              key={card.id}
-              href={`/programs/${programId}/estimates/${card.id}`}
-              className="relative block bg-white rounded-lg border border-brand-cream p-5 flex flex-col gap-3 transition-all hover:shadow-md hover:border-brand-copper/50 cursor-pointer overflow-hidden"
-            >
-              {/* Left accent bar */}
-              {isLowest && (
-                <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500" />
-              )}
-              {!isLowest && isBestMargin && (
-                <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: '#C19C81' }} />
-              )}
-              {isLowest && isBestMargin && (
-                <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500">
-                  <div className="absolute bottom-0 left-0 right-0 h-1/2" style={{ backgroundColor: '#C19C81' }} />
-                </div>
-              )}
+        return (
+          <div key={group.type} className="space-y-3">
+            {showHeaders && (
+              <h3 className="text-xs font-semibold text-brand-charcoal/50 uppercase tracking-widest">
+                {group.label}
+              </h3>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {group.cards.map((card) => {
+                const isLowest = groupLowest !== null && card.total === groupLowest && card.total > 0;
+                const isBestMargin = groupBestMargin !== null && card.qcMarginPct === groupBestMargin && card.total > 0;
 
-              {/* Header: name + badges */}
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <span className="font-medium text-brand-charcoal text-sm leading-snug">
-                    {card.name}
-                  </span>
-                  {card.type !== 'venue' && (
-                    <span className="ml-2 text-[10px] font-medium text-brand-silver bg-brand-offwhite border border-brand-cream rounded px-1 py-0.5 uppercase tracking-wide">
-                      {card.type}
-                    </span>
-                  )}
-                </div>
-                {(isLowest || isBestMargin) && (
-                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                    {isLowest && (
-                      <span className="text-xs bg-green-100 text-green-800 font-medium px-1.5 py-0.5 rounded">
-                        Lowest
-                      </span>
-                    )}
-                    {isBestMargin && (
-                      <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: '#C19C81', color: 'white' }}>
-                        Best Margin
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Totals */}
-              <div className="flex items-end gap-4">
-                <div>
-                  <p className="font-serif text-xl font-medium text-brand-charcoal">{fmt(card.total)}</p>
-                  <p className="text-xs text-brand-silver mt-0.5">total estimate</p>
-                </div>
-                {card.pricePerPerson > 0 && (
-                  <div>
-                    <p className="text-base font-medium text-brand-brown">
-                      ${card.pricePerPerson.toLocaleString('en-US')}
-                      <span className="text-xs font-normal text-brand-silver">/pp</span>
-                    </p>
-                    <p className="text-xs text-brand-silver mt-0.5">per person</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Line item count + QC Margin */}
-              <div className="space-y-0.5">
-                <p className="text-xs text-brand-silver">
-                  {card.lineItemCount} line item{card.lineItemCount !== 1 ? 's' : ''}
-                </p>
-                {card.total > 0 && (
-                  <p className="text-xs text-brand-silver/70">
-                    QC Margin: {(card.qcMarginPct * 100).toFixed(1)}%
-                  </p>
-                )}
-              </div>
-
-              {/* Include in Budget toggle */}
-              <div className="border-t border-brand-cream pt-3 mt-auto">
-                <label
-                  className="flex items-center gap-2 cursor-pointer"
-                  onClick={(e) => e.preventDefault()}
-                >
-                  <div
-                    onClick={(e) => { e.preventDefault(); handleToggle(card.id, !card.includeInBudget); }}
-                    className={`w-8 h-4 rounded-full transition-colors cursor-pointer flex-shrink-0 ${
-                      card.includeInBudget ? 'bg-brand-brown' : 'bg-brand-silver/40'
-                    }`}
+                return (
+                  <Link
+                    key={card.id}
+                    href={`/programs/${programId}/estimates/${card.id}`}
+                    className="relative block bg-white rounded-lg border border-brand-cream p-5 flex flex-col gap-3 transition-all hover:shadow-md hover:border-brand-copper/50 cursor-pointer overflow-hidden"
                   >
-                    <div
-                      className={`w-3 h-3 bg-white rounded-full mt-0.5 transition-transform ${
-                        card.includeInBudget ? 'translate-x-4 ml-0.5' : 'translate-x-0.5'
-                      }`}
-                    />
-                  </div>
-                  <span className="text-xs text-brand-charcoal/70">Include in Total Budget</span>
-                </label>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
+                    {/* Left accent bar */}
+                    {isLowest && !isBestMargin && (
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500" />
+                    )}
+                    {!isLowest && isBestMargin && (
+                      <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: '#C19C81' }} />
+                    )}
+                    {isLowest && isBestMargin && (
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500">
+                        <div className="absolute bottom-0 left-0 right-0 h-1/2" style={{ backgroundColor: '#C19C81' }} />
+                      </div>
+                    )}
+
+                    {/* Header: name + badges */}
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-medium text-brand-charcoal text-sm leading-snug">
+                        {card.name}
+                      </span>
+                      {(isLowest || isBestMargin) && (
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          {isLowest && (
+                            <span className="text-xs bg-green-100 text-green-800 font-medium px-1.5 py-0.5 rounded">
+                              Lowest
+                            </span>
+                          )}
+                          {isBestMargin && (
+                            <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: '#C19C81', color: 'white' }}>
+                              Best Margin
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Totals */}
+                    <div className="flex items-end gap-4">
+                      <div>
+                        <p className="font-serif text-xl font-medium text-brand-charcoal">{fmt(card.total)}</p>
+                        <p className="text-xs text-brand-silver mt-0.5">total estimate</p>
+                      </div>
+                      {card.pricePerPerson > 0 && (
+                        <div>
+                          <p className="text-base font-medium text-brand-brown">
+                            ${card.pricePerPerson.toLocaleString('en-US')}
+                            <span className="text-xs font-normal text-brand-silver">/pp</span>
+                          </p>
+                          <p className="text-xs text-brand-silver mt-0.5">per person</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Line item count + QC Margin */}
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-brand-silver">
+                        {card.lineItemCount} line item{card.lineItemCount !== 1 ? 's' : ''}
+                      </p>
+                      {card.total > 0 && (
+                        <p className="text-xs text-brand-silver/70">
+                          QC Margin: {(card.qcMarginPct * 100).toFixed(1)}%
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Include in Budget toggle */}
+                    <div className="border-t border-brand-cream pt-3 mt-auto">
+                      <label
+                        className="flex items-center gap-2 cursor-pointer"
+                        onClick={(e) => e.preventDefault()}
+                      >
+                        <div
+                          onClick={(e) => { e.preventDefault(); handleToggle(card.id, !card.includeInBudget); }}
+                          className={`w-8 h-4 rounded-full transition-colors cursor-pointer flex-shrink-0 ${
+                            card.includeInBudget ? 'bg-brand-brown' : 'bg-brand-silver/40'
+                          }`}
+                        >
+                          <div
+                            className={`w-3 h-3 bg-white rounded-full mt-0.5 transition-transform ${
+                              card.includeInBudget ? 'translate-x-4 ml-0.5' : 'translate-x-0.5'
+                            }`}
+                          />
+                        </div>
+                        <span className="text-xs text-brand-charcoal/70">Include in Total Budget</span>
+                      </label>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

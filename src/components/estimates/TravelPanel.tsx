@@ -374,7 +374,7 @@ export default function TravelPanel({ estimateId, initialTrips, refs, onTotalCha
       </button>
 
       {open && (
-        <div className="space-y-2">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {trips.map((trip, i) => (
             <TripForm
               key={i}
