@@ -91,6 +91,17 @@ export async function duplicateEstimate(sourceId: string, programId: string) {
   return { error: null, id: newEstimate.id as string };
 }
 
+export async function reorderEstimates(programId: string, updates: { id: string; sort_order: number }[]) {
+  const supabase = await createClient();
+  await Promise.all(
+    updates.map(({ id, sort_order }) =>
+      supabase.from('estimates').update({ sort_order }).eq('id', id)
+    )
+  );
+  revalidatePath(`/programs/${programId}`);
+  return { error: null };
+}
+
 // ─── Line Items ──────────────────────────────────────────
 
 export async function upsertLineItem(data: {
