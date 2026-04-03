@@ -5,18 +5,20 @@ import {
   getLocations,
   getEstimatesForProgram,
   getMarkups,
+  getTiers,
   getLineItemsForEstimates,
   type DbEstimate,
   type DbLineItem,
   type DbMarkup,
   type DbLocation,
+  type DbTier,
 } from '@/lib/supabase/queries';
 import ProgramForm from '@/components/estimates/ProgramForm';
 import ComparisonView, { type EstimateCard } from '@/components/estimates/ComparisonView';
 import DeleteProgramButton from '@/components/estimates/DeleteProgramButton';
 import { createEstimate } from '@/app/(programs)/programs/actions';
-import { calculateVenueEstimate } from '@/lib/engine/pricing';
-import type { FeeOption, LineItem, TaxType, ProgramConfig } from '@/types';
+import { calculateVenueEstimate, calculateMarginAnalysis } from '@/lib/engine/pricing';
+import type { FeeOption, LineItem, TaxType, ProgramConfig, TeamHoursTier } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,7 +84,8 @@ function buildEstimateCard(
   estimate: DbEstimate,
   items: DbLineItem[],
   markups: DbMarkup[],
-  config: ProgramConfig
+  config: ProgramConfig,
+  tiers: TeamHoursTier[]
 ): EstimateCard {
   const lineItems = buildLineItems(items, markups);
   const sc = (estimate.service_charge_override ?? config.serviceChargeDefault) as FeeOption;
@@ -102,6 +105,8 @@ function buildEstimateCard(
     config
   );
 
+  const margin = calculateMarginAnalysis(summary, config, tiers);
+
   return {
     id: estimate.id,
     name: estimate.name,
@@ -109,6 +114,7 @@ function buildEstimateCard(
     pricePerPerson: summary.pricePerPerson,
     lineItemCount: items.length,
     includeInBudget: estimate.include_in_budget,
+    qcMarginPct: margin.qcMarginPct,
   };
 }
 
@@ -117,12 +123,19 @@ function buildEstimateCard(
 export default async function ProgramPage({ params }: Props) {
   const { id } = await params;
 
-  const [program, locations, estimates, markups] = await Promise.all([
+  const [program, locations, estimates, markups, dbTiers] = await Promise.all([
     getProgram(id),
     getLocations(),
     getEstimatesForProgram(id),
     getMarkups(),
+    getTiers(),
   ]);
+
+  const tiers: TeamHoursTier[] = dbTiers.map((t) => ({
+    revenueThreshold: t.revenue_threshold,
+    baseHours: t.base_hours,
+    tierName: t.tier_name ?? '',
+  }));
 
   if (!program) notFound();
 
@@ -132,7 +145,7 @@ export default async function ProgramPage({ params }: Props) {
 
   const cards: EstimateCard[] = estimates.map((est) => {
     const items = allLineItems.filter((li) => li.estimate_id === est.id);
-    return buildEstimateCard(est, items, markups, programConfig);
+    return buildEstimateCard(est, items, markups, programConfig, tiers);
   });
 
   return (

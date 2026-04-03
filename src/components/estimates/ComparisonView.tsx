@@ -11,6 +11,7 @@ export interface EstimateCard {
   pricePerPerson: number;
   lineItemCount: number;
   includeInBudget: boolean;
+  qcMarginPct: number;
 }
 
 interface Props {
@@ -27,6 +28,7 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
 
   const withTotal = cards.filter((c) => c.total > 0);
   const lowestTotal = withTotal.length > 0 ? Math.min(...withTotal.map((c) => c.total)) : null;
+  const bestMarginPct = withTotal.length > 0 ? Math.max(...withTotal.map((c) => c.qcMarginPct)) : null;
 
   const budgetTotal = cards
     .filter((c) => c.includeInBudget)
@@ -34,7 +36,6 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
   const budgetCount = cards.filter((c) => c.includeInBudget).length;
 
   async function handleToggle(id: string, next: boolean) {
-    // Optimistic update
     setCards((prev) => prev.map((c) => (c.id === id ? { ...c, includeInBudget: next } : c)));
     await updateEstimate(id, programId, { include_in_budget: next });
   }
@@ -66,26 +67,44 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {cards.map((card) => {
           const isLowest = lowestTotal !== null && card.total === lowestTotal && card.total > 0;
+          const isBestMargin = bestMarginPct !== null && card.qcMarginPct === bestMarginPct && card.total > 0;
+
+          // Border classes: left accent + surrounding border
+          let borderClass: string;
+          if (isLowest && isBestMargin) {
+            borderClass = 'border border-brand-cream border-l-4 border-l-green-500 ring-1 ring-brand-copper/50';
+          } else if (isLowest) {
+            borderClass = 'border border-brand-cream border-l-4 border-l-green-500';
+          } else if (isBestMargin) {
+            borderClass = 'border border-brand-cream border-l-4 border-l-brand-copper';
+          } else {
+            borderClass = 'border border-brand-cream hover:border-brand-copper/50';
+          }
 
           return (
             <Link
               key={card.id}
               href={`/programs/${programId}/estimates/${card.id}`}
-              className={`block bg-white rounded-lg border p-5 flex flex-col gap-3 transition-all hover:shadow-md cursor-pointer ${
-                isLowest
-                  ? 'border-brand-brown ring-1 ring-brand-copper/40'
-                  : 'border-brand-cream hover:border-brand-copper/50'
-              }`}
+              className={`block bg-white rounded-lg p-5 flex flex-col gap-3 transition-all hover:shadow-md cursor-pointer ${borderClass}`}
             >
-              {/* Header */}
+              {/* Header: name + badges */}
               <div className="flex items-start justify-between gap-2">
                 <span className="font-medium text-brand-charcoal text-sm leading-snug">
                   {card.name}
                 </span>
-                {isLowest && (
-                  <span className="flex-shrink-0 text-xs bg-brand-cream text-brand-brown font-medium px-1.5 py-0.5 rounded tracking-wide">
-                    Lowest
-                  </span>
+                {(isLowest || isBestMargin) && (
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    {isLowest && (
+                      <span className="text-xs bg-green-100 text-green-800 font-medium px-1.5 py-0.5 rounded tracking-wide">
+                        Lowest
+                      </span>
+                    )}
+                    {isBestMargin && (
+                      <span className="text-xs bg-brand-cream text-brand-brown font-medium px-1.5 py-0.5 rounded tracking-wide">
+                        Best Margin
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -106,10 +125,17 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
                 )}
               </div>
 
-              {/* Line item count */}
-              <p className="text-xs text-brand-silver">
-                {card.lineItemCount} line item{card.lineItemCount !== 1 ? 's' : ''}
-              </p>
+              {/* Line item count + QC Margin */}
+              <div className="space-y-0.5">
+                <p className="text-xs text-brand-silver">
+                  {card.lineItemCount} line item{card.lineItemCount !== 1 ? 's' : ''}
+                </p>
+                {card.total > 0 && (
+                  <p className="text-xs text-brand-silver/70">
+                    QC Margin: {(card.qcMarginPct * 100).toFixed(1)}%
+                  </p>
+                )}
+              </div>
 
               {/* Include in Budget toggle */}
               <div className="border-t border-brand-cream pt-3 mt-auto">
