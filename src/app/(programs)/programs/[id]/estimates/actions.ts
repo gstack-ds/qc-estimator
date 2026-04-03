@@ -15,6 +15,7 @@ export async function updateEstimate(id: string, programId: string, data: Partia
   admin_fee_override: string | null;
   venue_contact: string | null;
   menu_notes: string | null;
+  include_in_budget: boolean;
 }>) {
   const supabase = await createClient();
   const { error } = await supabase.from('estimates').update(data).eq('id', id);

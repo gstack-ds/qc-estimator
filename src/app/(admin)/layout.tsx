@@ -1,6 +1,12 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import NavLinks from '@/components/layout/NavLinks';
+
+const NAV_LINKS = [
+  { href: '/programs', label: 'Programs' },
+  { href: '/admin', label: 'Reference Data' },
+];
 
 export default async function AdminLayout({
   children,
@@ -18,13 +24,8 @@ export default async function AdminLayout({
           <Link href="/programs" className="font-semibold text-gray-900 text-sm hover:text-blue-600">
             QC Estimator
           </Link>
-          <nav className="flex items-center gap-4 text-sm">
-            <Link href="/programs" className="text-gray-600 hover:text-gray-900">
-              Programs
-            </Link>
-            <Link href="/admin" className="text-gray-600 hover:text-gray-900">
-              Reference Data
-            </Link>
+          <nav className="flex items-center gap-4">
+            <NavLinks links={NAV_LINKS} />
           </nav>
         </div>
         <span className="text-xs text-gray-400">{user.email}</span>

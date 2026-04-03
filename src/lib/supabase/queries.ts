@@ -222,3 +222,15 @@ export async function getLineItemsForEstimate(estimateId: string): Promise<DbLin
   if (error) throw new Error(error.message);
   return data ?? [];
 }
+
+export async function getLineItemsForEstimates(estimateIds: string[]): Promise<DbLineItem[]> {
+  if (estimateIds.length === 0) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('estimate_line_items')
+    .select('id, estimate_id, section, name, qty, unit_price, category_id, tax_type, custom_client_unit_price, notes, sort_order, created_at, updated_at')
+    .in('estimate_id', estimateIds)
+    .order('sort_order');
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
