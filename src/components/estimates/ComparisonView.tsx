@@ -68,20 +68,18 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
           const isLowest = lowestTotal !== null && card.total === lowestTotal && card.total > 0;
 
           return (
-            <div
+            <Link
               key={card.id}
-              className={`bg-white rounded-lg border p-4 flex flex-col gap-3 transition-shadow hover:shadow-sm ${
-                isLowest ? 'border-green-400 ring-1 ring-green-300' : 'border-gray-200'
+              href={`/programs/${programId}/estimates/${card.id}`}
+              className={`block bg-white rounded-lg border p-4 flex flex-col gap-3 transition-shadow hover:shadow-md cursor-pointer ${
+                isLowest ? 'border-green-400 ring-1 ring-green-300' : 'border-gray-200 hover:border-gray-300'
               }`}
             >
               {/* Header */}
               <div className="flex items-start justify-between gap-2">
-                <Link
-                  href={`/programs/${programId}/estimates/${card.id}`}
-                  className="font-medium text-gray-900 hover:text-blue-600 text-sm leading-snug"
-                >
+                <span className="font-medium text-gray-900 text-sm leading-snug">
                   {card.name}
-                </Link>
+                </span>
                 {isLowest && (
                   <span className="flex-shrink-0 text-xs bg-green-100 text-green-700 font-medium px-1.5 py-0.5 rounded">
                     Lowest
@@ -113,9 +111,12 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
 
               {/* Include in Budget toggle */}
               <div className="border-t border-gray-100 pt-3 mt-auto">
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label
+                  className="flex items-center gap-2 cursor-pointer"
+                  onClick={(e) => e.preventDefault()}
+                >
                   <div
-                    onClick={() => handleToggle(card.id, !card.includeInBudget)}
+                    onClick={(e) => { e.preventDefault(); handleToggle(card.id, !card.includeInBudget); }}
                     className={`w-8 h-4 rounded-full transition-colors cursor-pointer flex-shrink-0 ${
                       card.includeInBudget ? 'bg-blue-600' : 'bg-gray-300'
                     }`}
@@ -129,7 +130,7 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
                   <span className="text-xs text-gray-600">Include in Total Budget</span>
                 </label>
               </div>
-            </div>
+            </Link>
           );
         })}
       </div>
