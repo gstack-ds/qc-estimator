@@ -8,11 +8,12 @@ interface Props {
   programId: string;
 }
 
-type EstimateType = 'venue' | 'av';
+type EstimateType = 'venue' | 'av' | 'decor';
 
 const TYPE_LABELS: Record<EstimateType, string> = {
   venue: 'Venue',
   av: 'AV',
+  decor: 'Decor',
 };
 
 export default function AddEstimateButton({ programId }: Props) {
@@ -38,7 +39,6 @@ export default function AddEstimateButton({ programId }: Props) {
         {(Object.keys(TYPE_LABELS) as EstimateType[]).map((t) => (
           <option key={t} value={t}>{TYPE_LABELS[t]}</option>
         ))}
-        <option value="" disabled>Decor (coming soon)</option>
       </select>
       <button
         onClick={handleAdd}

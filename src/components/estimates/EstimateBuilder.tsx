@@ -18,9 +18,22 @@ import { upsertLineItem, deleteLineItem, cacheEstimateTotal } from '@/app/(progr
 
 // ─── Types ───────────────────────────────────────────────
 
+export type LocalSection =
+  | 'F&B'
+  | 'Equipment & Staffing'
+  | 'Venue Fees'
+  | 'Non-Taxable Staffing'
+  | 'Florals - Taxable'
+  | 'Florals - Non-Taxable'
+  | 'Rentals - Seating'
+  | 'Rentals - Lounge'
+  | 'Rentals - Tables'
+  | 'Rentals - Rugs & Accessories'
+  | 'Rentals - Non-Taxable';
+
 export interface LocalLineItem {
   id: string;
-  section: 'F&B' | 'Equipment & Staffing' | 'Venue Fees' | 'Non-Taxable Staffing';
+  section: LocalSection;
   name: string;
   qty: number;
   unitPrice: number;
@@ -99,7 +112,7 @@ function dbItemToLocal(item: DbLineItem, markups: DbMarkup[]): LocalLineItem {
   const effectiveMarkupPct = isCustom ? 0 : (item.markup_override ?? defaultMarkupPct);
   return {
     id: item.id,
-    section: item.section as LocalLineItem['section'],
+    section: item.section as LocalSection,
     name: item.name,
     qty: item.qty,
     unitPrice: item.unit_price,
@@ -272,7 +285,7 @@ export default function EstimateBuilder({
     }
   }, [lineItems]);
 
-  const handleAddItem = useCallback((section: LocalLineItem['section'], taxType: TaxType) => {
+  const handleAddItem = useCallback((section: LocalSection, taxType: TaxType) => {
     const tempId = `new-${Date.now()}-${Math.random()}`;
     const maxOrder = lineItems
       .filter((li) => li.section === section)
@@ -315,7 +328,7 @@ export default function EstimateBuilder({
 
   // ─── Sections ─────────────────────────────────────────────
 
-  const sections: { name: LocalLineItem['section']; taxType: TaxType }[] = [
+  const sections: { name: LocalSection; taxType: TaxType }[] = [
     { name: 'F&B', taxType: 'food' },
     { name: 'Equipment & Staffing', taxType: 'general' },
     { name: 'Venue Fees', taxType: 'general' },

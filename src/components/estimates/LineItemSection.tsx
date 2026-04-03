@@ -2,11 +2,11 @@
 
 import type { TaxType } from '@/types';
 import type { DbMarkup } from '@/lib/supabase/queries';
-import type { LocalLineItem } from './EstimateBuilder';
+import type { LocalLineItem, LocalSection } from './EstimateBuilder';
 import LineItemRow, { FbTaxToggle } from './LineItemRow';
 
 interface Props {
-  section: LocalLineItem['section'];
+  section: LocalSection;
   label?: string;
   items: LocalLineItem[];
   markups: DbMarkup[];
@@ -14,7 +14,7 @@ interface Props {
   onChange: (id: string, patch: Partial<LocalLineItem>) => void;
   onBlur: (id: string) => void;
   onDelete: (id: string) => void;
-  onAdd: (section: LocalLineItem['section'], taxType: TaxType) => void;
+  onAdd: (section: LocalSection, taxType: TaxType) => void;
 }
 
 const SECTION_LABELS: Record<string, string> = {
@@ -22,6 +22,13 @@ const SECTION_LABELS: Record<string, string> = {
   'Equipment & Staffing': 'Equipment & Staffing',
   'Venue Fees': 'Venue Fees',
   'Non-Taxable Staffing': 'Non-Taxable Staffing',
+  'Florals - Taxable': 'Taxable Floral Product',
+  'Florals - Non-Taxable': 'Non-Taxable Floral Fees',
+  'Rentals - Seating': 'Seating',
+  'Rentals - Lounge': 'Lounge',
+  'Rentals - Tables': 'Tables',
+  'Rentals - Rugs & Accessories': 'Rugs, Décor & Accessories',
+  'Rentals - Non-Taxable': 'Non-Taxable Rental Fees',
 };
 
 export default function LineItemSection({ section, label, items, markups, defaultTaxType, onChange, onBlur, onDelete, onAdd }: Props) {
@@ -48,7 +55,7 @@ export default function LineItemSection({ section, label, items, markups, defaul
 
       {items.length === 0 && (
         <p className="text-xs text-gray-400 italic py-3 pl-1">
-          No {SECTION_LABELS[section].toLowerCase()} items — click + Add item below
+          No {(label ?? SECTION_LABELS[section] ?? section).toLowerCase()} items — click + Add item below
         </p>
       )}
 

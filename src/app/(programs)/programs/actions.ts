@@ -84,7 +84,7 @@ export async function createEstimate(programId: string, type: 'venue' | 'av' | '
       name: defaultName,
       fb_minimum: 0,
       is_venue_taxable: type === 'venue',
-      ...(type === 'av' ? {
+      ...(type === 'av' || type === 'decor' ? {
         service_charge_override: 'None',
         gratuity_override: 'None',
         admin_fee_override: 'None',

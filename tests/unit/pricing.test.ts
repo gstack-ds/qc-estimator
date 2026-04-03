@@ -262,6 +262,73 @@ describe('calculateLineItem with clientCostOverride', () => {
   });
 });
 
+// ─── Decor Estimate Section Grouping ─────────────────────
+
+describe('calculateVenueEstimate — decor sections', () => {
+  it('groups decor taxable sections into equipment bucket', () => {
+    const input: VenueEstimateInput = {
+      name: 'Test Decor',
+      fbMinimum: 0,
+      isVenueTaxable: false,
+      serviceCharge: 'None',
+      gratuity: 'None',
+      adminFee: 'None',
+      lineItems: [
+        { id: '1', section: 'Florals - Taxable', name: 'Centerpieces', qty: 10, unitPrice: 100, categoryMarkupPct: 0.85, taxType: 'general' },
+        { id: '2', section: 'Rentals - Seating', name: 'Chairs', qty: 50, unitPrice: 10, categoryMarkupPct: 0.85, taxType: 'general' },
+        { id: '3', section: 'Rentals - Lounge', name: 'Sofa', qty: 1, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'general' },
+        { id: '4', section: 'Florals - Non-Taxable', name: 'Delivery', qty: 1, unitPrice: 300, categoryMarkupPct: 0.85, taxType: 'none' },
+        { id: '5', section: 'Rentals - Non-Taxable', name: 'Rental Delivery', qty: 1, unitPrice: 150, categoryMarkupPct: 0.85, taxType: 'none' },
+      ],
+    };
+
+    const result = calculateVenueEstimate(input, BASE_CONFIG);
+
+    // Taxable items: ourCost = 10×100 + 50×10 + 1×200 = 1700; clientCost = 1700 × 1.85 = 3145
+    expect(result.equipmentSubtotalOur).toBeCloseTo(1700);
+    expect(result.equipmentSubtotalClient).toBeCloseTo(3145);
+    expect(result.equipmentTax).toBeCloseTo(3145 * 0.0725);
+
+    // Non-taxable: ourCost = 300 + 150 = 450; clientCost = 450 × 1.85 = 832.5
+    expect(result.qcStaffingSubtotalOur).toBeCloseTo(450);
+    expect(result.qcStaffingSubtotalClient).toBeCloseTo(832.5);
+
+    // No F&B, no venue, no restaurant fees
+    expect(result.fbSubtotalClient).toBe(0);
+    expect(result.venueSubtotalClient).toBe(0);
+    expect(result.serviceChargeClient).toBe(0);
+  });
+
+  it('calculates correct totals for a decor estimate', () => {
+    const input: VenueEstimateInput = {
+      name: 'Simple Decor',
+      fbMinimum: 0,
+      isVenueTaxable: false,
+      serviceCharge: 'None',
+      gratuity: 'None',
+      adminFee: 'None',
+      lineItems: [
+        { id: '1', section: 'Rentals - Tables', name: 'Farm Tables', qty: 5, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'general' },
+      ],
+    };
+
+    const result = calculateVenueEstimate(input, BASE_CONFIG);
+
+    const ourCost = 5 * 200; // 1000
+    const clientCost = ourCost * 1.85; // 1850
+    const tax = clientCost * 0.0725; // 134.125
+    const subtotalClient = clientCost + tax; // 1984.125
+    const productionFee = subtotalClient * 0.035 + clientCost * 0.05;
+
+    expect(result.equipmentSubtotalOur).toBe(1000);
+    expect(result.equipmentSubtotalClient).toBe(1850);
+    expect(result.equipmentTax).toBeCloseTo(134.125);
+    expect(result.subtotalClient).toBeCloseTo(subtotalClient);
+    expect(result.productionFee).toBeCloseTo(productionFee);
+    expect(result.totalClient).toBeCloseTo(subtotalClient + productionFee);
+  });
+});
+
 // ─── Team Hours Lookup ───────────────────────────────────
 
 describe('lookupTeamHours', () => {
