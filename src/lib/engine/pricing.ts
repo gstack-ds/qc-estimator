@@ -47,7 +47,7 @@ export function calculateLineItem(
   config: ProgramConfig
 ): CalculatedLineItem {
   const ourCost = item.qty * item.unitPrice;
-  const clientCost = ourCost * (1 + item.categoryMarkupPct);
+  const clientCost = item.clientCostOverride ?? ourCost * (1 + item.categoryMarkupPct);
   const taxRate = getTaxRate(item.taxType, config);
 
   return {

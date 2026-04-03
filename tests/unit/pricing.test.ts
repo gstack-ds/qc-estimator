@@ -217,6 +217,41 @@ describe('getNetHealth', () => {
   it('returns LOSING MONEY for < 0%', () => expect(getNetHealth(-0.05)).toBe('✗ LOSING MONEY'));
 });
 
+// ─── Custom Client Cost Override ─────────────────────────
+
+describe('calculateLineItem with clientCostOverride', () => {
+  it('uses override as clientCost, skips markup formula', () => {
+    const item: LineItem = {
+      id: '99',
+      section: 'F&B',
+      name: 'Custom Item',
+      qty: 2,
+      unitPrice: 100,
+      categoryMarkupPct: 0.55,
+      taxType: 'food',
+      clientCostOverride: 300,  // user says total client cost is $300
+    };
+    const result = calculateLineItem(item, BASE_CONFIG);
+    expect(result.ourCost).toBe(200);          // qty × unitPrice, unchanged
+    expect(result.clientCost).toBe(300);       // override applied, not 200 × 1.55 = 310
+    expect(result.taxAmount).toBeCloseTo(300 * 0.0725);
+  });
+
+  it('falls back to markup formula when override is undefined', () => {
+    const item: LineItem = {
+      id: '100',
+      section: 'Equipment & Staffing',
+      name: 'Regular Item',
+      qty: 1,
+      unitPrice: 200,
+      categoryMarkupPct: 0.65,
+      taxType: 'general',
+    };
+    const result = calculateLineItem(item, BASE_CONFIG);
+    expect(result.clientCost).toBe(330);       // 200 × 1.65
+  });
+});
+
 // ─── Team Hours Lookup ───────────────────────────────────
 
 describe('lookupTeamHours', () => {
