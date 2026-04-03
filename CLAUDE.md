@@ -161,20 +161,36 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-04-03 | Build custom vs buy Curate | Curate doesn't support tri-rate taxes, 11 category markups, multi-scenario comparison, or internal margin analysis. Recent botched migration is a red flag. | Curate (~$100+/mo), Airtable + custom frontend, enhanced Excel |
 | 2026-04-03 | Next.js + Supabase + Vercel | Gary's proven stack. Zero new technology risk. Supabase handles auth + RLS + admin-friendly table editor as backup. | Python/Django (slower frontend iteration), Rails (unfamiliar) |
 | 2026-04-03 | Pricing engine as pure TypeScript | Must be testable independent of UI. Must produce identical results to Excel. Can't have framework dependencies polluting business logic. | Inline calculations in React components (untestable, fragile) |
+| 2026-04-03 | Single EstimateSummary type for all estimate types | AV and Decor map into the same summary fields (equipment→taxable, qcStaffing→non-taxable). Keeps engine simple; ExportButtons uses estimateType prop to relabel fields for copy output. | Separate summary types per estimate type (more code, same data shape) |
+| 2026-04-03 | Travel Expenses as full-width section below line items | Sidebar (288px) was too narrow for trip fields to be usable. Three trips render in 3-column grid at full width. Sidebar now contains only Summary + Margin Analysis. | Sidebar placement (rejected — unusable), separate travel page |
+| 2026-04-03 | ComparisonView groups cards by type | Lowest/Best Margin badges should only compare within the same category (venue vs venue, AV vs AV). Cross-type comparison is meaningless. | Single flat grid with type badge on each card (rejected — misleading badges) |
+| 2026-04-03 | UserMenu as thin client component receiving email as prop | Layout is a Server Component that already has the user. Passes email as prop to avoid a redundant client-side session fetch. | Client component fetching its own session (extra round trip) |
 
 ## Gotchas Log
 
 | Date | Issue | Resolution |
 |------|-------|------------|
-| — | — | — |
+| 2026-04-03 | QC monogram PNG is dark — invisible on dark charcoal nav | Added `brightness-0 invert` Tailwind filter classes to the Image in both layouts. No separate white asset needed. |
+| 2026-04-03 | Supabase password reset requires /reset-password in Redirect URLs allowlist | Must add the URL in Supabase dashboard → Auth → URL Configuration, otherwise the reset link is blocked. |
 
 ## Current TODOs
 
-- [ ] Scaffold Next.js project with App Router
-- [ ] Set up Supabase project and create migration files
-- [ ] Seed reference data from Excel workbook
-- [ ] Build pricing engine with tests
-- [ ] Build admin panel for reference data
-- [ ] Build estimate builder UI
-- [ ] Build export functionality
-- [ ] Validate against 3-5 real historical proposals
+### Completed ✓
+- [x] Scaffold Next.js project with App Router
+- [x] Set up Supabase project and create migration files
+- [x] Seed reference data from Excel workbook
+- [x] Build pricing engine with tests (55 tests passing)
+- [x] Build admin panel for reference data (locations, markups, tiers, travel tables)
+- [x] Build estimate builder UI (Venue, AV, Decor builders)
+- [x] Build export functionality (Copy Numbers, Export to Excel — all three estimate types)
+- [x] Travel expense calculator with per-trip breakdown feeding into True Net margin
+- [x] Auth: login, signup (@qceventdesign.com restriction), forgot password, reset password
+- [x] Nav: UserMenu with email + Sign Out, white monogram fix
+- [x] ComparisonView: grouped by estimate type, per-type badges
+- [x] ScenarioTabs: typed estimate creation (Venue/AV/Decor) inline, no page navigation needed
+
+### Remaining
+- [ ] Validate against 3-5 real historical proposals — compare engine output to Excel for same inputs
+- [ ] PDF/Canva export — format for client-facing proposals
+- [ ] Mobile polish — currently optimized for desktop/tablet only
+- [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
