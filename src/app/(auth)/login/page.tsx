@@ -6,14 +6,20 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 
+type View = 'login' | 'forgot' | 'forgot-sent';
+
 export default function LoginPage() {
   const router = useRouter();
+  const [view, setView] = useState<View>('login');
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [resetEmail, setResetEmail] = useState('');
+
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
@@ -31,7 +37,27 @@ export default function LoginPage() {
     router.refresh();
   }
 
+  async function handleForgot(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    const supabase = createClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+
+    setLoading(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    setView('forgot-sent');
+  }
+
   const inputClass = 'w-full border border-brand-cream rounded px-3 py-2.5 text-sm bg-white text-brand-charcoal placeholder:text-brand-silver focus:outline-none focus:ring-2 focus:ring-brand-copper focus:border-brand-brown transition-colors';
+  const btnClass = 'w-full bg-brand-brown text-white text-sm font-medium rounded px-4 py-2.5 hover:bg-brand-charcoal disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-2';
 
   return (
     <div className="min-h-screen bg-brand-offwhite flex items-center justify-center px-4">
@@ -50,51 +76,120 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="bg-white rounded-lg border border-brand-cream shadow-sm p-8">
-          <h1 className="font-serif text-xl text-brand-charcoal mb-1">Sign in</h1>
-          <p className="text-sm text-brand-silver mb-6">Access the internal pricing tool</p>
+          {view === 'login' && (
+            <>
+              <h1 className="font-serif text-xl text-brand-charcoal mb-1">Sign in</h1>
+              <p className="text-sm text-brand-silver mb-6">Access the internal pricing tool</p>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-brand-charcoal tracking-wide mb-1.5">
-                Email
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className={inputClass}
-                placeholder="you@quillcreative.com"
-              />
-            </div>
+              <form onSubmit={handleSignIn} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-brand-charcoal tracking-wide mb-1.5">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className={inputClass}
+                    placeholder="you@qceventdesign.com"
+                  />
+                </div>
 
-            <div>
-              <label className="block text-xs font-medium text-brand-charcoal tracking-wide mb-1.5">
-                Password
-              </label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className={inputClass}
-              />
-            </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-medium text-brand-charcoal tracking-wide">
+                      Password
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => { setError(null); setResetEmail(email); setView('forgot'); }}
+                      className="text-xs text-brand-brown hover:text-brand-charcoal transition-colors"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
 
-            {error && (
-              <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
-                {error}
+                {error && (
+                  <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
+                    {error}
+                  </p>
+                )}
+
+                <button type="submit" disabled={loading} className={btnClass}>
+                  {loading ? 'Signing in…' : 'Sign in'}
+                </button>
+              </form>
+            </>
+          )}
+
+          {view === 'forgot' && (
+            <>
+              <h1 className="font-serif text-xl text-brand-charcoal mb-1">Reset password</h1>
+              <p className="text-sm text-brand-silver mb-6">
+                Enter your email and we&apos;ll send a reset link.
               </p>
-            )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-brand-brown text-white text-sm font-medium rounded px-4 py-2.5 hover:bg-brand-charcoal disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-2"
-            >
-              {loading ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
+              <form onSubmit={handleForgot} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-brand-charcoal tracking-wide mb-1.5">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    className={inputClass}
+                    placeholder="you@qceventdesign.com"
+                  />
+                </div>
+
+                {error && (
+                  <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
+                    {error}
+                  </p>
+                )}
+
+                <button type="submit" disabled={loading} className={btnClass}>
+                  {loading ? 'Sending…' : 'Send reset link'}
+                </button>
+              </form>
+
+              <button
+                type="button"
+                onClick={() => { setError(null); setView('login'); }}
+                className="block w-full text-center text-xs text-brand-silver hover:text-brand-charcoal transition-colors mt-4"
+              >
+                Back to sign in
+              </button>
+            </>
+          )}
+
+          {view === 'forgot-sent' && (
+            <div className="text-center space-y-3">
+              <h1 className="font-serif text-xl text-brand-charcoal">Check your email</h1>
+              <p className="text-sm text-brand-silver">
+                A password reset link has been sent to{' '}
+                <span className="text-brand-charcoal font-medium">{resetEmail}</span>.
+              </p>
+              <button
+                type="button"
+                onClick={() => { setError(null); setView('login'); }}
+                className="block w-full text-center text-sm text-brand-brown hover:text-brand-charcoal transition-colors mt-4"
+              >
+                Back to sign in
+              </button>
+            </div>
+          )}
         </div>
 
         <p className="text-center text-xs text-brand-silver mt-6">

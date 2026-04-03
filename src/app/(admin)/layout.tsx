@@ -33,7 +33,7 @@ export default async function AdminLayout({
               alt="Quill Creative"
               width={32}
               height={32}
-              className="object-contain opacity-90 group-hover:opacity-100 transition-opacity"
+              className="object-contain opacity-90 group-hover:opacity-100 transition-opacity brightness-0 invert"
             />
             <div className="leading-none">
               <div className="text-brand-offwhite font-serif text-sm font-medium tracking-[0.12em] uppercase">
