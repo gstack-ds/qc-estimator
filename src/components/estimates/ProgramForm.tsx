@@ -35,21 +35,18 @@ export default function ProgramForm({ program, locations, mode }: Props) {
   const [eventTime, setEventTime] = useState(program?.event_time ?? '');
   const [clientHotel, setClientHotel] = useState(program?.client_hotel ?? '');
   const [locationId, setLocationId] = useState(program?.location_id ?? '');
-  const [ccFee, setCcFee] = useState(String((program?.cc_processing_fee ?? 0.035) * 100));
-  const [clientComm, setClientComm] = useState(String((program?.client_commission ?? 0.05) * 100));
+  const [ccFee, setCcFee] = useState(String(parseFloat(((program?.cc_processing_fee ?? 0.035) * 100).toFixed(4))));
+  const [clientComm, setClientComm] = useState(String(parseFloat(((program?.client_commission ?? 0.05) * 100).toFixed(4))));
   const [gdpEnabled, setGdpEnabled] = useState(program?.gdp_commission_enabled ?? false);
   const [serviceCharge, setServiceCharge] = useState(program?.service_charge_default ?? '20%');
   const [gratuity, setGratuity] = useState(program?.gratuity_default ?? '20%');
   const [adminFee, setAdminFee] = useState(program?.admin_fee_default ?? '5%');
 
   const save = useCallback(async (patch: Record<string, unknown>) => {
+    if (mode === 'create') return;
+
     setSaveState('saving');
     setSaveError(null);
-
-    if (mode === 'create') {
-      // On create, we save everything at once on "Create Program" button click
-      return;
-    }
 
     if (!program?.id) return;
     const result = await updateProgram(program.id, patch as Parameters<typeof updateProgram>[1]);
