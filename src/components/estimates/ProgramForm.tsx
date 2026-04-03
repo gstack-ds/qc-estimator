@@ -87,8 +87,8 @@ export default function ProgramForm({ program, locations, mode }: Props) {
     router.push(`/programs/${result.id}`);
   }
 
-  const fieldClass = 'w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent';
-  const labelClass = 'block text-xs font-medium text-gray-600 mb-1';
+  const fieldClass = 'w-full border border-brand-cream rounded px-3 py-2 text-sm text-brand-charcoal bg-white focus:outline-none focus:ring-2 focus:ring-brand-copper focus:border-brand-brown transition-colors';
+  const labelClass = 'block text-xs font-medium text-brand-charcoal/60 tracking-wide mb-1';
   const sectionClass = 'grid grid-cols-2 gap-4';
 
   return (
@@ -96,7 +96,7 @@ export default function ProgramForm({ program, locations, mode }: Props) {
       {/* Save status */}
       {mode === 'edit' && (
         <div className="text-xs text-right">
-          {saveState === 'saving' && <span className="text-gray-400">Saving...</span>}
+          {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
           {saveState === 'saved' && <span className="text-green-600">Saved</span>}
           {saveState === 'error' && <span className="text-red-500">{saveError}</span>}
         </div>
@@ -104,7 +104,7 @@ export default function ProgramForm({ program, locations, mode }: Props) {
 
       {/* Event Details */}
       <div>
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Event Details</h3>
+        <h3 className="text-xs font-semibold text-brand-brown uppercase tracking-wide mb-3">Event Details</h3>
         <div className="space-y-3">
           <div className={sectionClass}>
             <div>
@@ -226,7 +226,7 @@ export default function ProgramForm({ program, locations, mode }: Props) {
               const loc = locations.find((l) => l.id === locationId);
               if (!loc) return null;
               return (
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-brand-silver mt-1">
                   Food: {(loc.food_tax_rate * 100).toFixed(3)}% · Alcohol: {(loc.alcohol_tax_rate * 100).toFixed(3)}% · General: {(loc.general_tax_rate * 100).toFixed(3)}%
                 </p>
               );
@@ -237,7 +237,7 @@ export default function ProgramForm({ program, locations, mode }: Props) {
 
       {/* Commission Config */}
       <div>
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Commission & Fees</h3>
+        <h3 className="text-xs font-semibold text-brand-brown uppercase tracking-wide mb-3">Commission & Fees</h3>
         <div className="space-y-3">
           <div className="grid grid-cols-3 gap-4">
             <div>
@@ -252,7 +252,7 @@ export default function ProgramForm({ program, locations, mode }: Props) {
                   onBlur={() => save({ cc_processing_fee: parseFloat(ccFee) / 100 || 0.035 })}
                   className={fieldClass + ' pr-6'}
                 />
-                <span className="absolute right-2 top-2 text-gray-400 text-sm">%</span>
+                <span className="absolute right-2 top-2 text-brand-silver text-sm">%</span>
               </div>
             </div>
             <div>
@@ -267,18 +267,18 @@ export default function ProgramForm({ program, locations, mode }: Props) {
                   onBlur={() => save({ client_commission: parseFloat(clientComm) / 100 || 0.05 })}
                   className={fieldClass + ' pr-6'}
                 />
-                <span className="absolute right-2 top-2 text-gray-400 text-sm">%</span>
+                <span className="absolute right-2 top-2 text-brand-silver text-sm">%</span>
               </div>
             </div>
             <div className="flex items-end pb-2">
               <label className="flex items-center gap-2 cursor-pointer">
                 <div
                   onClick={() => { const next = !gdpEnabled; setGdpEnabled(next); save({ gdp_commission_enabled: next }); }}
-                  className={`w-10 h-5 rounded-full transition-colors cursor-pointer ${gdpEnabled ? 'bg-blue-600' : 'bg-gray-300'}`}
+                  className={`w-10 h-5 rounded-full transition-colors cursor-pointer ${gdpEnabled ? 'bg-brand-brown' : 'bg-brand-silver/40'}`}
                 >
                   <div className={`w-4 h-4 bg-white rounded-full mt-0.5 transition-transform ${gdpEnabled ? 'translate-x-5 ml-0.5' : 'translate-x-0.5'}`} />
                 </div>
-                <span className="text-sm text-gray-700">GDP Commission (6.5%)</span>
+                <span className="text-sm text-brand-charcoal/70">GDP Commission (6.5%)</span>
               </label>
             </div>
           </div>
@@ -287,7 +287,7 @@ export default function ProgramForm({ program, locations, mode }: Props) {
 
       {/* Restaurant Fee Defaults */}
       <div>
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Restaurant Fee Defaults</h3>
+        <h3 className="text-xs font-semibold text-brand-brown uppercase tracking-wide mb-3">Restaurant Fee Defaults</h3>
         <div className="grid grid-cols-3 gap-4">
           <div>
             <label className={labelClass}>Service Charge</label>
@@ -326,7 +326,7 @@ export default function ProgramForm({ program, locations, mode }: Props) {
         <button
           onClick={handleCreate}
           disabled={saveState === 'saving' || !name.trim()}
-          className="bg-blue-600 text-white text-sm font-medium rounded px-5 py-2.5 hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          className="bg-brand-brown text-white text-sm font-medium rounded px-5 py-2.5 hover:bg-brand-charcoal disabled:opacity-50 transition-colors"
         >
           {saveState === 'saving' ? 'Creating...' : 'Create Program'}
         </button>
