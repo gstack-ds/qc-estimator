@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 
@@ -96,7 +97,14 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-xs text-brand-silver mt-8">
+        <p className="text-center text-xs text-brand-silver mt-6">
+          New team member?{' '}
+          <Link href="/signup" className="text-brand-brown hover:text-brand-charcoal transition-colors">
+            Create account
+          </Link>
+        </p>
+
+        <p className="text-center text-xs text-brand-silver mt-4">
           Quill Creative Event Design · Internal Use Only
         </p>
       </div>
