@@ -373,7 +373,7 @@ export default function DecorEstimateBuilder({
             <span className="font-medium text-brand-charcoal">Estimates</span>
           </div>
           <div className="flex items-center gap-3">
-            <ExportButtons programId={program.id} programName={program.name} estimateName={name} summary={summary} guestCount={program.guest_count} estimateType="decor" />
+            <ExportButtons programId={program.id} programName={program.name} estimateName={name} summary={summary} guestCount={program.guest_count} estimateType="decor" lineItems={lineItems} markups={markups} />
             <div className="text-xs">
               {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
               {saveState === 'saved' && <span className="text-green-600">Saved</span>}
