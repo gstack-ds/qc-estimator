@@ -2,7 +2,13 @@
 -- 1. Convert fee rate columns from TEXT to NUMERIC (store as decimal, e.g. 0.20 = 20%)
 -- 2. Add event_start_time and event_end_time to programs (replacing free-text event_time)
 
--- ─── programs: fee defaults TEXT → NUMERIC ───────────────────────────────────
+-- ─── programs: drop defaults, alter types, set new defaults ──────────────────
+-- Must drop string defaults before type change; PostgreSQL can't auto-cast them.
+
+ALTER TABLE programs
+  ALTER COLUMN service_charge_default DROP DEFAULT,
+  ALTER COLUMN gratuity_default       DROP DEFAULT,
+  ALTER COLUMN admin_fee_default      DROP DEFAULT;
 
 ALTER TABLE programs
   ALTER COLUMN service_charge_default TYPE NUMERIC(6,4) USING (
@@ -35,6 +41,7 @@ ALTER TABLE programs
   ALTER COLUMN admin_fee_default      SET DEFAULT 0.0500;
 
 -- ─── estimates: fee overrides TEXT → NUMERIC ─────────────────────────────────
+-- Override columns are nullable so no defaults to drop.
 
 ALTER TABLE estimates
   ALTER COLUMN service_charge_override TYPE NUMERIC(6,4) USING (
