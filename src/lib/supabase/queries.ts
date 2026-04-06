@@ -85,6 +85,8 @@ export interface DbProgram {
   service_style: string | null;
   alcohol_type: string | null;
   event_time: string | null;
+  event_start_time: string | null;
+  event_end_time: string | null;
   company_name: string | null;
   client_hotel: string | null;
   location_id: string | null;
@@ -92,9 +94,9 @@ export interface DbProgram {
   client_commission: number;
   gdp_commission_enabled: boolean;
   gdp_commission_rate: number;
-  service_charge_default: string;
-  gratuity_default: string;
-  admin_fee_default: string;
+  service_charge_default: number;
+  gratuity_default: number;
+  admin_fee_default: number;
   third_party_commissions: { name: string; rate: number }[];
   created_at: string;
   updated_at: string;
@@ -140,7 +142,7 @@ export async function getProgram(id: string): Promise<DbProgramWithLocation | nu
     .from('programs')
     .select(`
       id, name, client_name, event_date, guest_count, service_style,
-      alcohol_type, event_time, company_name, client_hotel,
+      alcohol_type, event_time, event_start_time, event_end_time, company_name, client_hotel,
       location_id, cc_processing_fee, client_commission,
       gdp_commission_enabled, gdp_commission_rate,
       service_charge_default, gratuity_default, admin_fee_default,
@@ -163,9 +165,9 @@ export interface DbEstimate {
   room_space: string | null;
   fb_minimum: number;
   is_venue_taxable: boolean;
-  service_charge_override: string | null;
-  gratuity_override: string | null;
-  admin_fee_override: string | null;
+  service_charge_override: number | null;
+  gratuity_override: number | null;
+  admin_fee_override: number | null;
   include_in_budget: boolean;
   sort_order: number;
   venue_contact: string | null;

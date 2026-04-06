@@ -11,7 +11,6 @@ import type {
   MarginAnalysis,
   MarginHealth,
   NetHealth,
-  FeeOption,
   TaxType,
   TeamHoursTier,
   ClientExportRow,
@@ -19,11 +18,8 @@ import type {
 
 // ─── Fee Parsing ─────────────────────────────────────────
 
-export function parseFeeRate(fee: FeeOption): number {
-  if (fee === '20%') return 0.20;
-  if (fee === '21.5%') return 0.215;
-  if (fee === '5%') return 0.05;
-  return 0; // 'None'
+export function parseFeeRate(rate: number): number {
+  return rate;
 }
 
 // ─── Tax Rate Resolution ─────────────────────────────────

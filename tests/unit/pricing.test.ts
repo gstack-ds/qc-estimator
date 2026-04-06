@@ -32,9 +32,9 @@ const BASE_CONFIG: ProgramConfig = {
   clientCommission: 0.05,
   gdpCommissionEnabled: true,
   gdpCommissionRate: 0.065,
-  serviceChargeDefault: '20%',
-  gratuityDefault: '20%',
-  adminFeeDefault: '5%',
+  serviceChargeDefault: 0.20,
+  gratuityDefault: 0.20,
+  adminFeeDefault: 0.05,
 };
 
 const TEAM_HOURS_TIERS: TeamHoursTier[] = [
@@ -48,10 +48,11 @@ const TEAM_HOURS_TIERS: TeamHoursTier[] = [
 // ─── Fee Parsing ─────────────────────────────────────────
 
 describe('parseFeeRate', () => {
-  it('parses 20%', () => expect(parseFeeRate('20%')).toBe(0.20));
-  it('parses 21.5%', () => expect(parseFeeRate('21.5%')).toBe(0.215));
-  it('parses 5%', () => expect(parseFeeRate('5%')).toBe(0.05));
-  it('parses None', () => expect(parseFeeRate('None')).toBe(0));
+  it('returns numeric value as-is (20% stored as 0.20)', () => expect(parseFeeRate(0.20)).toBe(0.20));
+  it('returns numeric value as-is (21.5% stored as 0.215)', () => expect(parseFeeRate(0.215)).toBe(0.215));
+  it('returns numeric value as-is (5% stored as 0.05)', () => expect(parseFeeRate(0.05)).toBe(0.05));
+  it('returns 0 for zero (None)', () => expect(parseFeeRate(0)).toBe(0));
+  it('returns arbitrary value (7.3% stored as 0.073)', () => expect(parseFeeRate(0.073)).toBe(0.073));
 });
 
 // ─── Tax Rate Resolution ─────────────────────────────────
@@ -137,9 +138,9 @@ describe('calculateVenueEstimate', () => {
     name: 'Beau Beau',
     fbMinimum: 8000,
     isVenueTaxable: true,
-    serviceCharge: '20%',
-    gratuity: '20%',
-    adminFee: '5%',
+    serviceCharge: 0.20,
+    gratuity: 0.20,
+    adminFee: 0.05,
     lineItems: [
       // F&B
       { id: '1', section: 'F&B', name: 'Per Person Food', qty: 50, unitPrice: 50, categoryMarkupPct: 0.55, taxType: 'food' },
@@ -270,9 +271,9 @@ describe('calculateVenueEstimate — decor sections', () => {
       name: 'Test Decor',
       fbMinimum: 0,
       isVenueTaxable: false,
-      serviceCharge: 'None',
-      gratuity: 'None',
-      adminFee: 'None',
+      serviceCharge: 0,
+      gratuity: 0,
+      adminFee: 0,
       lineItems: [
         { id: '1', section: 'Florals - Taxable', name: 'Centerpieces', qty: 10, unitPrice: 100, categoryMarkupPct: 0.85, taxType: 'general' },
         { id: '2', section: 'Rentals - Seating', name: 'Chairs', qty: 50, unitPrice: 10, categoryMarkupPct: 0.85, taxType: 'general' },
@@ -304,9 +305,9 @@ describe('calculateVenueEstimate — decor sections', () => {
       name: 'Simple Decor',
       fbMinimum: 0,
       isVenueTaxable: false,
-      serviceCharge: 'None',
-      gratuity: 'None',
-      adminFee: 'None',
+      serviceCharge: 0,
+      gratuity: 0,
+      adminFee: 0,
       lineItems: [
         { id: '1', section: 'Rentals - Tables', name: 'Farm Tables', qty: 5, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'general' },
       ],

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import type { TaxType, FeeOption } from '@/types';
+import type { TaxType } from '@/types';
 import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation } from '@/lib/supabase/queries';
 import {
   calculateVenueEstimate,
@@ -53,9 +53,9 @@ interface LocalEstimate {
   roomSpace: string;
   fbMinimum: number;
   isVenueTaxable: boolean;
-  serviceChargeOverride: string | null;
-  gratuityOverride: string | null;
-  adminFeeOverride: string | null;
+  serviceChargeOverride: number | null;
+  gratuityOverride: number | null;
+  adminFeeOverride: number | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -92,9 +92,9 @@ function toProgramConfig(program: DbProgram, location: DbLocation | null): Progr
     clientCommission: program.client_commission,
     gdpCommissionEnabled: program.gdp_commission_enabled,
     gdpCommissionRate: program.gdp_commission_rate,
-    serviceChargeDefault: program.service_charge_default as FeeOption,
-    gratuityDefault: program.gratuity_default as FeeOption,
-    adminFeeDefault: program.admin_fee_default as FeeOption,
+    serviceChargeDefault: program.service_charge_default,
+    gratuityDefault: program.gratuity_default,
+    adminFeeDefault: program.admin_fee_default,
     thirdPartyCommissions: program.third_party_commissions ?? [],
   };
 }
@@ -180,9 +180,9 @@ export default function EstimateBuilder({
     name: est.name,
     fbMinimum: est.fbMinimum,
     isVenueTaxable: est.isVenueTaxable,
-    serviceCharge: resolveOverride(est.serviceChargeOverride, program.service_charge_default) as FeeOption,
-    gratuity: resolveOverride(est.gratuityOverride, program.gratuity_default) as FeeOption,
-    adminFee: resolveOverride(est.adminFeeOverride, program.admin_fee_default) as FeeOption,
+    serviceCharge: resolveOverride(est.serviceChargeOverride, program.service_charge_default),
+    gratuity: resolveOverride(est.gratuityOverride, program.gratuity_default),
+    adminFee: resolveOverride(est.adminFeeOverride, program.admin_fee_default),
     lineItems: toEngineLineItems(lineItems),
   }), [est, lineItems, program]);
 
@@ -322,10 +322,10 @@ export default function EstimateBuilder({
   const defaultGrat = program.gratuity_default;
   const defaultAdmin = program.admin_fee_default;
 
-  const isOverridden = (val: string | null, def: string) => val !== null && val !== def;
+  const isOverridden = (val: number | null, def: number) => val !== null && val !== def;
 
-  const selectClass = (val: string | null, def: string) =>
-    `border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper text-brand-charcoal ${
+  const feeInputClass = (val: number | null, def: number) =>
+    `border rounded px-2 py-1.5 pr-6 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper text-brand-charcoal w-full text-right ${
       isOverridden(val, def)
         ? 'border-yellow-300 bg-yellow-50 focus:border-yellow-400'
         : 'border-brand-cream bg-white'
@@ -358,7 +358,7 @@ export default function EstimateBuilder({
             <span className="font-medium text-brand-charcoal">Estimates</span>
           </div>
           <div className="flex items-center gap-3">
-            <ExportButtons programId={program.id} programName={program.name} summary={summary} guestCount={program.guest_count} />
+            <ExportButtons programId={program.id} programName={program.name} estimateName={est.name} summary={summary} guestCount={program.guest_count} />
             <div className="text-xs">
               {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
               {saveState === 'saved' && <span className="text-green-600">Saved</span>}
@@ -440,52 +440,63 @@ export default function EstimateBuilder({
               <div className="grid grid-cols-3 gap-2 col-span-1">
                 <div>
                   <label className={labelClass}>Svc Charge</label>
-                  <select
-                    value={est.serviceChargeOverride ?? ''}
-                    onChange={(e) => {
-                      const val = e.target.value === '' ? null : e.target.value;
-                      updateEstField({ serviceChargeOverride: val });
-                      saveEstimate({ serviceChargeOverride: val });
-                    }}
-                    className={selectClass(est.serviceChargeOverride, defaultSC)}
-                  >
-                    <option value="">Default ({defaultSC})</option>
-                    <option value="20%">20%</option>
-                    <option value="21.5%">21.5%</option>
-                    <option value="None">None</option>
-                  </select>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      value={est.serviceChargeOverride !== null ? parseFloat((est.serviceChargeOverride * 100).toFixed(4)) : ''}
+                      placeholder={`${parseFloat((defaultSC * 100).toFixed(2))}`}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? null : parseFloat(e.target.value) / 100;
+                        updateEstField({ serviceChargeOverride: val });
+                      }}
+                      onBlur={() => saveEstimate({ serviceChargeOverride: est.serviceChargeOverride })}
+                      className={feeInputClass(est.serviceChargeOverride, defaultSC)}
+                    />
+                    <span className="absolute right-2 top-1.5 text-brand-silver text-xs pointer-events-none">%</span>
+                  </div>
                 </div>
                 <div>
                   <label className={labelClass}>Gratuity</label>
-                  <select
-                    value={est.gratuityOverride ?? ''}
-                    onChange={(e) => {
-                      const val = e.target.value === '' ? null : e.target.value;
-                      updateEstField({ gratuityOverride: val });
-                      saveEstimate({ gratuityOverride: val });
-                    }}
-                    className={selectClass(est.gratuityOverride, defaultGrat)}
-                  >
-                    <option value="">Default ({defaultGrat})</option>
-                    <option value="20%">20%</option>
-                    <option value="None">None</option>
-                  </select>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      value={est.gratuityOverride !== null ? parseFloat((est.gratuityOverride * 100).toFixed(4)) : ''}
+                      placeholder={`${parseFloat((defaultGrat * 100).toFixed(2))}`}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? null : parseFloat(e.target.value) / 100;
+                        updateEstField({ gratuityOverride: val });
+                      }}
+                      onBlur={() => saveEstimate({ gratuityOverride: est.gratuityOverride })}
+                      className={feeInputClass(est.gratuityOverride, defaultGrat)}
+                    />
+                    <span className="absolute right-2 top-1.5 text-brand-silver text-xs pointer-events-none">%</span>
+                  </div>
                 </div>
                 <div>
                   <label className={labelClass}>Admin Fee</label>
-                  <select
-                    value={est.adminFeeOverride ?? ''}
-                    onChange={(e) => {
-                      const val = e.target.value === '' ? null : e.target.value;
-                      updateEstField({ adminFeeOverride: val });
-                      saveEstimate({ adminFeeOverride: val });
-                    }}
-                    className={selectClass(est.adminFeeOverride, defaultAdmin)}
-                  >
-                    <option value="">Default ({defaultAdmin})</option>
-                    <option value="5%">5%</option>
-                    <option value="None">None</option>
-                  </select>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      value={est.adminFeeOverride !== null ? parseFloat((est.adminFeeOverride * 100).toFixed(4)) : ''}
+                      placeholder={`${parseFloat((defaultAdmin * 100).toFixed(2))}`}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? null : parseFloat(e.target.value) / 100;
+                        updateEstField({ adminFeeOverride: val });
+                      }}
+                      onBlur={() => saveEstimate({ adminFeeOverride: est.adminFeeOverride })}
+                      className={feeInputClass(est.adminFeeOverride, defaultAdmin)}
+                    />
+                    <span className="absolute right-2 top-1.5 text-brand-silver text-xs pointer-events-none">%</span>
+                  </div>
                 </div>
               </div>
             </div>

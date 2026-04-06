@@ -10,9 +10,9 @@ export async function updateEstimate(id: string, programId: string, data: Partia
   room_space: string | null;
   fb_minimum: number;
   is_venue_taxable: boolean;
-  service_charge_override: string | null;
-  gratuity_override: string | null;
-  admin_fee_override: string | null;
+  service_charge_override: number | null;
+  gratuity_override: number | null;
+  admin_fee_override: number | null;
   venue_contact: string | null;
   menu_notes: string | null;
   include_in_budget: boolean;

@@ -3,7 +3,7 @@
 
 export type TaxType = 'food' | 'alcohol' | 'general' | 'none';
 export type EstimateType = 'venue' | 'av' | 'decor';
-export type FeeOption = '20%' | '21.5%' | '5%' | 'None';
+export type FeeOption = number; // stored as decimal (e.g. 0.20 = 20%)
 export type MarginHealth = '✓ STRONG' | '→ ON TARGET' | '⚠ REVIEW' | '✗ BELOW FLOOR';
 export type NetHealth = '✓ STRONG' | '→ ON TARGET' | '⚠ THIN' | '✗ LOSING MONEY';
 

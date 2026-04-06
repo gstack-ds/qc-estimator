@@ -18,7 +18,7 @@ import ComparisonView, { type EstimateCard } from '@/components/estimates/Compar
 import DeleteProgramButton from '@/components/estimates/DeleteProgramButton';
 import AddEstimateButton from '@/components/estimates/AddEstimateButton';
 import { calculateVenueEstimate, calculateMarginAnalysis } from '@/lib/engine/pricing';
-import type { FeeOption, LineItem, TaxType, ProgramConfig, TeamHoursTier } from '@/types';
+import type { LineItem, TaxType, ProgramConfig, TeamHoursTier } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,9 +34,9 @@ function buildProgramConfig(program: {
   client_commission: number;
   gdp_commission_enabled: boolean;
   gdp_commission_rate: number;
-  service_charge_default: string;
-  gratuity_default: string;
-  admin_fee_default: string;
+  service_charge_default: number;
+  gratuity_default: number;
+  admin_fee_default: number;
   third_party_commissions: { name: string; rate: number }[];
 }, location: DbLocation | null): ProgramConfig {
   return {
@@ -54,9 +54,9 @@ function buildProgramConfig(program: {
     clientCommission: program.client_commission,
     gdpCommissionEnabled: program.gdp_commission_enabled,
     gdpCommissionRate: program.gdp_commission_rate,
-    serviceChargeDefault: program.service_charge_default as FeeOption,
-    gratuityDefault: program.gratuity_default as FeeOption,
-    adminFeeDefault: program.admin_fee_default as FeeOption,
+    serviceChargeDefault: program.service_charge_default,
+    gratuityDefault: program.gratuity_default,
+    adminFeeDefault: program.admin_fee_default,
     thirdPartyCommissions: program.third_party_commissions ?? [],
   };
 }
@@ -88,9 +88,9 @@ function buildEstimateCard(
   tiers: TeamHoursTier[]
 ): EstimateCard {
   const lineItems = buildLineItems(items, markups);
-  const sc = (estimate.service_charge_override ?? config.serviceChargeDefault) as FeeOption;
-  const gr = (estimate.gratuity_override ?? config.gratuityDefault) as FeeOption;
-  const af = (estimate.admin_fee_override ?? config.adminFeeDefault) as FeeOption;
+  const sc = estimate.service_charge_override ?? config.serviceChargeDefault;
+  const gr = estimate.gratuity_override ?? config.gratuityDefault;
+  const af = estimate.admin_fee_override ?? config.adminFeeDefault;
 
   const summary = calculateVenueEstimate(
     {

@@ -15,9 +15,19 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 const SERVICE_STYLES = ['Family Style', 'Plated', 'Buffet', 'Stations', 'Cocktail Reception'];
 const ALCOHOL_TYPES = ['Full Bar', 'Beer & Wine', 'None'];
-const SERVICE_CHARGE_OPTS = ['20%', '21.5%', 'None'];
-const GRATUITY_OPTS = ['20%', 'None'];
-const ADMIN_FEE_OPTS = ['5%', 'None'];
+
+function calcDuration(start: string, end: string): string {
+  if (!start || !end) return '';
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  const startMins = sh * 60 + sm;
+  let endMins = eh * 60 + em;
+  if (endMins <= startMins) endMins += 24 * 60; // crosses midnight
+  const diff = endMins - startMins;
+  const h = Math.floor(diff / 60);
+  const m = diff % 60;
+  return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
+}
 
 export default function ProgramForm({ program, locations, mode }: Props) {
   const router = useRouter();
@@ -32,15 +42,16 @@ export default function ProgramForm({ program, locations, mode }: Props) {
   const [guestCount, setGuestCount] = useState(String(program?.guest_count ?? ''));
   const [serviceStyle, setServiceStyle] = useState(program?.service_style ?? '');
   const [alcoholType, setAlcoholType] = useState(program?.alcohol_type ?? '');
-  const [eventTime, setEventTime] = useState(program?.event_time ?? '');
+  const [eventStartTime, setEventStartTime] = useState(program?.event_start_time ?? '');
+  const [eventEndTime, setEventEndTime] = useState(program?.event_end_time ?? '');
   const [clientHotel, setClientHotel] = useState(program?.client_hotel ?? '');
   const [locationId, setLocationId] = useState(program?.location_id ?? '');
   const [ccFee, setCcFee] = useState(String(parseFloat(((program?.cc_processing_fee ?? 0.035) * 100).toFixed(4))));
   const [clientComm, setClientComm] = useState(String(parseFloat(((program?.client_commission ?? 0.05) * 100).toFixed(4))));
   const [gdpEnabled, setGdpEnabled] = useState(program?.gdp_commission_enabled ?? false);
-  const [serviceCharge, setServiceCharge] = useState(program?.service_charge_default ?? '20%');
-  const [gratuity, setGratuity] = useState(program?.gratuity_default ?? '20%');
-  const [adminFee, setAdminFee] = useState(program?.admin_fee_default ?? '5%');
+  const [serviceCharge, setServiceCharge] = useState(String(parseFloat(((program?.service_charge_default ?? 0.20) * 100).toFixed(4))));
+  const [gratuity, setGratuity] = useState(String(parseFloat(((program?.gratuity_default ?? 0.20) * 100).toFixed(4))));
+  const [adminFee, setAdminFee] = useState(String(parseFloat(((program?.admin_fee_default ?? 0.05) * 100).toFixed(4))));
 
   const save = useCallback(async (patch: Record<string, unknown>) => {
     if (mode === 'create') return;
@@ -68,16 +79,18 @@ export default function ProgramForm({ program, locations, mode }: Props) {
       guest_count: parseInt(guestCount) || 0,
       service_style: serviceStyle || null,
       alcohol_type: alcoholType || null,
-      event_time: eventTime || null,
+      event_time: null,
+      event_start_time: eventStartTime || null,
+      event_end_time: eventEndTime || null,
       company_name: companyName || null,
       client_hotel: clientHotel || null,
       location_id: locationId || null,
       cc_processing_fee: parseFloat(ccFee) / 100 || 0.035,
       client_commission: parseFloat(clientComm) / 100 || 0.05,
       gdp_commission_enabled: gdpEnabled,
-      service_charge_default: serviceCharge,
-      gratuity_default: gratuity,
-      admin_fee_default: adminFee,
+      service_charge_default: parseFloat(serviceCharge) / 100 || 0.20,
+      gratuity_default: parseFloat(gratuity) / 100 || 0.20,
+      admin_fee_default: parseFloat(adminFee) / 100 || 0.05,
     });
     if (result.error || !result.id) {
       setSaveState('error');
@@ -152,7 +165,7 @@ export default function ProgramForm({ program, locations, mode }: Props) {
               />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <div>
               <label className={labelClass}>Event Date</label>
               <input
@@ -175,15 +188,27 @@ export default function ProgramForm({ program, locations, mode }: Props) {
               />
             </div>
             <div>
-              <label className={labelClass}>Event Time</label>
+              <label className={labelClass}>Start Time</label>
               <input
-                type="text"
-                value={eventTime}
-                onChange={(e) => setEventTime(e.target.value)}
-                onBlur={() => save({ event_time: eventTime || null })}
+                type="time"
+                value={eventStartTime}
+                onChange={(e) => setEventStartTime(e.target.value)}
+                onBlur={() => save({ event_start_time: eventStartTime || null })}
                 className={fieldClass}
-                placeholder="e.g., 6-9"
               />
+            </div>
+            <div>
+              <label className={labelClass}>End Time</label>
+              <input
+                type="time"
+                value={eventEndTime}
+                onChange={(e) => setEventEndTime(e.target.value)}
+                onBlur={() => save({ event_end_time: eventEndTime || null })}
+                className={fieldClass}
+              />
+              {eventStartTime && eventEndTime && (
+                <p className="text-xs text-brand-silver mt-1">{calcDuration(eventStartTime, eventEndTime)}</p>
+              )}
             </div>
           </div>
           <div className={sectionClass}>
@@ -291,33 +316,54 @@ export default function ProgramForm({ program, locations, mode }: Props) {
         <div className="grid grid-cols-3 gap-4">
           <div>
             <label className={labelClass}>Service Charge</label>
-            <select
-              value={serviceCharge}
-              onChange={(e) => { setServiceCharge(e.target.value); save({ service_charge_default: e.target.value }); }}
-              className={fieldClass}
-            >
-              {SERVICE_CHARGE_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
+            <div className="relative">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                value={serviceCharge}
+                onChange={(e) => setServiceCharge(e.target.value)}
+                onBlur={() => save({ service_charge_default: parseFloat(serviceCharge) / 100 || 0 })}
+                className={fieldClass + ' pr-6'}
+                placeholder="20"
+              />
+              <span className="absolute right-2 top-2 text-brand-silver text-sm">%</span>
+            </div>
           </div>
           <div>
             <label className={labelClass}>Gratuity</label>
-            <select
-              value={gratuity}
-              onChange={(e) => { setGratuity(e.target.value); save({ gratuity_default: e.target.value }); }}
-              className={fieldClass}
-            >
-              {GRATUITY_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
+            <div className="relative">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                value={gratuity}
+                onChange={(e) => setGratuity(e.target.value)}
+                onBlur={() => save({ gratuity_default: parseFloat(gratuity) / 100 || 0 })}
+                className={fieldClass + ' pr-6'}
+                placeholder="20"
+              />
+              <span className="absolute right-2 top-2 text-brand-silver text-sm">%</span>
+            </div>
           </div>
           <div>
             <label className={labelClass}>Admin Fee</label>
-            <select
-              value={adminFee}
-              onChange={(e) => { setAdminFee(e.target.value); save({ admin_fee_default: e.target.value }); }}
-              className={fieldClass}
-            >
-              {ADMIN_FEE_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
+            <div className="relative">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                value={adminFee}
+                onChange={(e) => setAdminFee(e.target.value)}
+                onBlur={() => save({ admin_fee_default: parseFloat(adminFee) / 100 || 0 })}
+                className={fieldClass + ' pr-6'}
+                placeholder="5"
+              />
+              <span className="absolute right-2 top-2 text-brand-silver text-sm">%</span>
+            </div>
           </div>
         </div>
       </div>

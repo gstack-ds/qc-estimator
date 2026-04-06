@@ -7,57 +7,62 @@ import { getExportDataForProgram } from '@/app/(programs)/programs/[id]/estimate
 interface Props {
   programId: string;
   programName: string;
+  estimateName: string;
   summary: EstimateSummary;
   guestCount: number;
   estimateType?: 'venue' | 'av' | 'decor';
 }
 
-function fmtAmt(n: number) {
-  return '$' + Math.round(n).toLocaleString('en-US');
+function fmtAmtDecimal(n: number) {
+  return '$' + Math.round(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function fmtPP(n: number, guests: number) {
-  if (guests <= 0) return '—';
-  return '$' + Math.ceil(n / guests).toLocaleString('en-US') + '/pp';
-}
-
-function buildCopyText(summary: EstimateSummary, guestCount: number, type: 'venue' | 'av' | 'decor'): string {
-  const g = guestCount;
+function buildCopyText(
+  summary: EstimateSummary,
+  guestCount: number,
+  type: 'venue' | 'av' | 'decor',
+  estimateName: string
+): string {
   const tax = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax;
+  const pp = guestCount > 0 ? Math.ceil(summary.totalClient / guestCount) : 0;
 
   const rows: [string, number][] = [];
 
   if (type === 'av') {
     if (summary.equipmentSubtotalClient > 0) rows.push(['AV Equipment', summary.equipmentSubtotalClient]);
     if (summary.qcStaffingSubtotalClient > 0) rows.push(['Labor & Fees', summary.qcStaffingSubtotalClient]);
+    if (tax > 0) rows.push(['Tax', tax]);
+    if (summary.productionFee > 0) rows.push(['Production Fee', summary.productionFee]);
   } else if (type === 'decor') {
     if (summary.equipmentSubtotalClient > 0) rows.push(['Florals & Rentals', summary.equipmentSubtotalClient]);
     if (summary.qcStaffingSubtotalClient > 0) rows.push(['Non-Taxable Fees', summary.qcStaffingSubtotalClient]);
+    if (tax > 0) rows.push(['Tax', tax]);
+    if (summary.productionFee > 0) rows.push(['Production Fee', summary.productionFee]);
   } else {
+    // Venue: exact format for Canva paste
     if (summary.fbFoodSubtotalClient > 0) rows.push(['Menu', summary.fbFoodSubtotalClient]);
-    if (summary.fbAlcoholSubtotalClient > 0) rows.push(['Bar', summary.fbAlcoholSubtotalClient]);
+    if (summary.fbAlcoholSubtotalClient > 0) rows.push(['Bar Package', summary.fbAlcoholSubtotalClient]);
     if (summary.qcStaffingSubtotalClient > 0) rows.push(['Staffing', summary.qcStaffingSubtotalClient]);
     if (summary.equipmentSubtotalClient > 0) rows.push(['Equipment', summary.equipmentSubtotalClient]);
     if (summary.venueSubtotalClient > 0) rows.push(['Venue Rental', summary.venueSubtotalClient]);
-    if (summary.serviceChargeClient > 0) rows.push(['Service Charge', summary.serviceChargeClient]);
-    if (summary.gratuityClient > 0) rows.push(['Gratuity', summary.gratuityClient]);
-    if (summary.adminFeeClient > 0) rows.push(['Admin Fee', summary.adminFeeClient]);
+    if (summary.productionFee > 0) rows.push(['Production Fee', summary.productionFee]);
+    if (tax > 0) rows.push(['Tax', tax]);
   }
 
-  if (tax > 0) rows.push(['Tax', tax]);
-  if (summary.productionFee > 0) rows.push(['Production Fee', summary.productionFee]);
-  rows.push(['Total', summary.totalClient]);
+  const header = `${estimateName}\n\nItem | Amount`;
+  const itemLines = rows.map(([label, amt]) => `${label} | ${fmtAmtDecimal(amt)}`);
+  const total = `TOTAL ESTIMATE | ${fmtAmtDecimal(summary.totalClient)}`;
+  const pricePP = `Price PP | ${fmtAmtDecimal(pp)}`;
 
-  const lines = rows.map(([label, amt]) => `${label}: ${fmtAmt(amt)}  (${fmtPP(amt, g)})`);
-  return lines.join('\n');
+  return [header, ...itemLines, total, pricePP].join('\n');
 }
 
-export default function ExportButtons({ programId, programName, summary, guestCount, estimateType = 'venue' }: Props) {
+export default function ExportButtons({ programId, programName, estimateName, summary, guestCount, estimateType = 'venue' }: Props) {
   const [copyLabel, setCopyLabel] = useState<'Copy Numbers' | 'Copied!'>('Copy Numbers');
   const [exporting, setExporting] = useState(false);
 
   async function handleCopy() {
-    const text = buildCopyText(summary, guestCount, estimateType);
+    const text = buildCopyText(summary, guestCount, estimateType, estimateName);
     await navigator.clipboard.writeText(text);
     setCopyLabel('Copied!');
     setTimeout(() => setCopyLabel('Copy Numbers'), 2000);

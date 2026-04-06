@@ -52,9 +52,9 @@ function toProgramConfig(program: DbProgram, location: DbLocation | null): Progr
     clientCommission: program.client_commission,
     gdpCommissionEnabled: program.gdp_commission_enabled,
     gdpCommissionRate: program.gdp_commission_rate,
-    serviceChargeDefault: 'None',
-    gratuityDefault: 'None',
-    adminFeeDefault: 'None',
+    serviceChargeDefault: 0,
+    gratuityDefault: 0,
+    adminFeeDefault: 0,
     thirdPartyCommissions: program.third_party_commissions ?? [],
   };
 }
@@ -133,9 +133,9 @@ export default function AvEstimateBuilder({
         name,
         fbMinimum: 0,
         isVenueTaxable: false,
-        serviceCharge: 'None',
-        gratuity: 'None',
-        adminFee: 'None',
+        serviceCharge: 0,
+        gratuity: 0,
+        adminFee: 0,
         lineItems: toEngineLineItems(lineItems),
       },
       programConfig
@@ -267,7 +267,7 @@ export default function AvEstimateBuilder({
             <span className="font-medium text-brand-charcoal">Estimates</span>
           </div>
           <div className="flex items-center gap-3">
-            <ExportButtons programId={program.id} programName={program.name} summary={summary} guestCount={program.guest_count} estimateType="av" />
+            <ExportButtons programId={program.id} programName={program.name} estimateName={name} summary={summary} guestCount={program.guest_count} estimateType="av" />
             <div className="text-xs">
               {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
               {saveState === 'saved' && <span className="text-green-600">Saved</span>}
