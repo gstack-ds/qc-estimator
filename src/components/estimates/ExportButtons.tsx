@@ -2,24 +2,15 @@
 
 import { useState } from 'react';
 import type { EstimateSummary } from '@/types';
+import {
+  buildCopyText,
+  buildSummaryRows,
+  itemClientCost,
+  type LineItemForExport,
+  type MarkupForExport,
+} from '@/lib/utils/export';
 
-// ─── Prop types ───────────────────────────────────────────
-
-export interface LineItemForExport {
-  name: string;
-  section: string;
-  qty: number;
-  unitPrice: number;
-  categoryMarkupPct: number;
-  categoryId: string | 'custom' | null;
-  customClientUnitPrice?: number;
-  taxType: string;
-}
-
-export interface MarkupForExport {
-  id: string;
-  name: string;
-}
+export type { LineItemForExport, MarkupForExport };
 
 interface Props {
   programId: string;
@@ -30,93 +21,6 @@ interface Props {
   estimateType?: 'venue' | 'av' | 'decor';
   lineItems: LineItemForExport[];
   markups: MarkupForExport[];
-}
-
-// ─── Helpers ──────────────────────────────────────────────
-
-function fmtAmt(n: number) {
-  return '$' + Math.round(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function itemClientCost(li: LineItemForExport): number {
-  if (li.categoryId === 'custom' && li.customClientUnitPrice !== undefined) {
-    return li.qty * li.customClientUnitPrice;
-  }
-  return li.qty * li.unitPrice * (1 + li.categoryMarkupPct);
-}
-
-// Split Equipment & Staffing section into staffing-category vs equipment-category items
-function splitStaffingEquipment(
-  lineItems: LineItemForExport[],
-  markups: MarkupForExport[],
-  summary: EstimateSummary
-): { staffing: number; equipment: number } {
-  const staffingCatId = markups.find((m) => m.name === 'Staffing & Labor')?.id;
-  const staffingFromEquipment = lineItems
-    .filter((li) => li.section === 'Equipment & Staffing' && staffingCatId && li.categoryId === staffingCatId)
-    .reduce((s, li) => s + itemClientCost(li), 0);
-  return {
-    staffing: summary.qcStaffingSubtotalClient + staffingFromEquipment,
-    equipment: summary.equipmentSubtotalClient - staffingFromEquipment,
-  };
-}
-
-// Shared row builder used by both Copy and Excel
-function buildSummaryRows(
-  summary: EstimateSummary,
-  type: 'venue' | 'av' | 'decor',
-  lineItems: LineItemForExport[],
-  markups: MarkupForExport[]
-): { label: string; amount: number }[] {
-  const tax = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax;
-  const rows: { label: string; amount: number }[] = [];
-
-  if (type === 'av') {
-    if (summary.equipmentSubtotalClient > 0) rows.push({ label: 'AV Equipment', amount: summary.equipmentSubtotalClient });
-    if (summary.qcStaffingSubtotalClient > 0) rows.push({ label: 'Labor & Fees', amount: summary.qcStaffingSubtotalClient });
-    if (tax > 0) rows.push({ label: 'Tax', amount: tax });
-    if (summary.productionFee > 0) rows.push({ label: 'Production Fee', amount: summary.productionFee });
-  } else if (type === 'decor') {
-    if (summary.equipmentSubtotalClient > 0) rows.push({ label: 'Florals & Rentals', amount: summary.equipmentSubtotalClient });
-    if (summary.qcStaffingSubtotalClient > 0) rows.push({ label: 'Non-Taxable Fees', amount: summary.qcStaffingSubtotalClient });
-    if (tax > 0) rows.push({ label: 'Tax', amount: tax });
-    if (summary.productionFee > 0) rows.push({ label: 'Production Fee', amount: summary.productionFee });
-  } else {
-    // Venue: Menu / Bar Package / Staffing / Equipment / Venue Rental / Production Fee / Tax
-    const { staffing, equipment } = splitStaffingEquipment(lineItems, markups, summary);
-    if (summary.fbFoodSubtotalClient > 0)  rows.push({ label: 'Menu', amount: summary.fbFoodSubtotalClient });
-    if (summary.fbAlcoholSubtotalClient > 0) rows.push({ label: 'Bar Package', amount: summary.fbAlcoholSubtotalClient });
-    if (staffing > 0)                        rows.push({ label: 'Staffing', amount: staffing });
-    if (equipment > 0)                       rows.push({ label: 'Equipment', amount: equipment });
-    if (summary.venueSubtotalClient > 0)     rows.push({ label: 'Venue Rental', amount: summary.venueSubtotalClient });
-    if (summary.productionFee > 0)           rows.push({ label: 'Production Fee', amount: summary.productionFee });
-    if (tax > 0)                             rows.push({ label: 'Tax', amount: tax });
-  }
-
-  return rows;
-}
-
-function buildCopyText(
-  summary: EstimateSummary,
-  guestCount: number,
-  type: 'venue' | 'av' | 'decor',
-  estimateName: string,
-  lineItems: LineItemForExport[],
-  markups: MarkupForExport[]
-): string {
-  const pp = guestCount > 0 ? Math.ceil(summary.totalClient / guestCount) : 0;
-  const rows = buildSummaryRows(summary, type, lineItems, markups);
-
-  const lines = [
-    estimateName.toUpperCase(),
-    '',
-    'Item | Amount',
-    ...rows.map(({ label, amount }) => `${label} | ${fmtAmt(amount)}`),
-    `TOTAL ESTIMATE | ${fmtAmt(summary.totalClient)}`,
-    `Price PP | ${fmtAmt(pp)}`,
-  ];
-
-  return lines.join('\n');
 }
 
 // ─── Component ────────────────────────────────────────────
@@ -163,7 +67,7 @@ export default function ExportButtons({
       xlsx.utils.book_append_sheet(wb, ws1, 'Client Summary');
 
       // ── Sheet 2: Detail ────────────────────────────────────
-      const sheet2: (string | number | string)[][] = [
+      const sheet2: (string | number)[][] = [
         ['Item', 'Section', 'Qty', 'Unit Price', 'Our Cost', 'Markup %', 'Client Cost'],
       ];
       for (const li of lineItems) {
