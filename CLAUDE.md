@@ -179,11 +179,13 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Scaffold Next.js project with App Router
 - [x] Set up Supabase project and create migration files
 - [x] Seed reference data from Excel workbook
-- [x] Build pricing engine with tests (55 tests passing)
+- [x] Build pricing engine with tests (74 tests passing)
 - [x] Build admin panel for reference data (locations, markups, tiers, travel tables)
 - [x] Build estimate builder UI (Venue, AV, Decor builders)
 - [x] Build export functionality (Copy Numbers, Export to Excel — all three estimate types)
+- [x] Copy Numbers: grouped summary format (Menu/Bar Package/Staffing/Equipment/Venue Rental/Production Fee/Tax) with 18 unit tests
 - [x] Travel expense calculator with per-trip breakdown feeding into True Net margin
+- [x] File attachments per estimate (Supabase Storage) — PDF/PNG/JPG/JPEG, max 10MB, with upload/list/delete UI
 - [x] Auth: login, signup (@qceventdesign.com restriction), forgot password, reset password
 - [x] Nav: UserMenu with email + Sign Out, white monogram fix
 - [x] ComparisonView: grouped by estimate type, per-type badges
