@@ -12,6 +12,7 @@ import MarginPanel from './MarginPanel';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { LocalLineItem, LocalSection } from './EstimateBuilder';
 import TravelPanel from './TravelPanel';
+import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
 import type { TravelRefData, DbTrip } from '@/lib/supabase/queries';
 
@@ -436,6 +437,9 @@ export default function DecorEstimateBuilder({
             refs={travelRefs}
             onTotalChange={setTravelExpenses}
           />
+
+          {/* Attachments */}
+          <AttachmentsPanel estimateId={estimate.id} />
         </div>
 
         {/* Right sidebar */}

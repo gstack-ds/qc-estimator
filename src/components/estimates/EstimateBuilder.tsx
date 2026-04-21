@@ -13,6 +13,7 @@ import LineItemSection from './LineItemSection';
 import SummaryPanel from './SummaryPanel';
 import MarginPanel from './MarginPanel';
 import TravelPanel from './TravelPanel';
+import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
 import { updateEstimate } from '@/app/(programs)/programs/[id]/estimates/actions';
 import { upsertLineItem, deleteLineItem, cacheEstimateTotal } from '@/app/(programs)/programs/[id]/estimates/actions';
@@ -532,6 +533,9 @@ export default function EstimateBuilder({
             refs={travelRefs}
             onTotalChange={setTravelExpenses}
           />
+
+          {/* Attachments */}
+          <AttachmentsPanel estimateId={estimate.id} />
         </div>
 
         {/* Right sidebar — summary + margin */}

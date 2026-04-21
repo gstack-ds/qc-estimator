@@ -16,6 +16,7 @@ import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { LocalLineItem, LocalSection } from './EstimateBuilder';
 import TravelPanel from './TravelPanel';
+import AttachmentsPanel from './AttachmentsPanel';
 import type { TravelRefData, DbTrip } from '@/lib/supabase/queries';
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -331,6 +332,9 @@ export default function AvEstimateBuilder({
             refs={travelRefs}
             onTotalChange={setTravelExpenses}
           />
+
+          {/* Attachments */}
+          <AttachmentsPanel estimateId={estimate.id} />
         </div>
 
         {/* Right sidebar */}
