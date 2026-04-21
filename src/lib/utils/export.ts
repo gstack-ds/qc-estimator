@@ -93,10 +93,10 @@ export function buildCopyText(
   const lines = [
     estimateName.toUpperCase(),
     '',
-    'Item | Amount',
-    ...rows.map(({ label, amount }) => `${label} | ${fmtAmt(amount)}`),
-    `TOTAL ESTIMATE | ${fmtAmt(summary.totalClient)}`,
-    `Price PP | ${fmtAmt(pp)}`,
+    'Item\tAmount',
+    ...rows.map(({ label, amount }) => `${label}\t${fmtAmt(amount)}`),
+    `TOTAL ESTIMATE\t${fmtAmt(summary.totalClient)}`,
+    `Price PP\t${fmtAmt(pp)}`,
   ];
 
   return lines.join('\n');

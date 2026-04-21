@@ -208,29 +208,29 @@ describe('buildCopyText', () => {
     expect(text.split('\n')[1]).toBe('');
   });
 
-  it('third line is header row', () => {
+  it('third line is tab-separated header row', () => {
     const summary = makeSummary({ fbFoodSubtotalClient: 5000, totalClient: 5000 });
     const text = buildCopyText(summary, 50, 'venue', 'Test', [], MARKUPS);
-    expect(text.split('\n')[2]).toBe('Item | Amount');
+    expect(text.split('\n')[2]).toBe('Item\tAmount');
   });
 
-  it('formats amounts with $ and commas', () => {
+  it('formats amounts with $ and commas, tab-separated', () => {
     const summary = makeSummary({ fbFoodSubtotalClient: 12500, totalClient: 12500 });
     const text = buildCopyText(summary, 50, 'venue', 'Test', [], MARKUPS);
-    expect(text).toContain('Menu | $12,500.00');
+    expect(text).toContain('Menu\t$12,500.00');
   });
 
-  it('includes TOTAL ESTIMATE line', () => {
+  it('includes TOTAL ESTIMATE line tab-separated', () => {
     const summary = makeSummary({ fbFoodSubtotalClient: 5000, totalClient: 15000 });
     const text = buildCopyText(summary, 50, 'venue', 'Test', [], MARKUPS);
-    expect(text).toContain('TOTAL ESTIMATE | $15,000.00');
+    expect(text).toContain('TOTAL ESTIMATE\t$15,000.00');
   });
 
-  it('includes Price PP line rounded up', () => {
+  it('includes Price PP line rounded up, tab-separated', () => {
     const summary = makeSummary({ totalClient: 15001 });
     const text = buildCopyText(summary, 50, 'venue', 'Test', [], MARKUPS);
     // ceil(15001 / 50) = 301
-    expect(text).toContain('Price PP | $301.00');
+    expect(text).toContain('Price PP\t$301.00');
   });
 
   it('full venue estimate with real numbers matches spec format', () => {
@@ -250,15 +250,15 @@ describe('buildCopyText', () => {
     const lines = text.split('\n');
     expect(lines[0]).toBe('SPRING GALA — THE BELMOND');
     expect(lines[1]).toBe('');
-    expect(lines[2]).toBe('Item | Amount');
-    expect(text).toContain('Menu | $8,680.00');
-    expect(text).toContain('Bar Package | $3,250.00');
-    expect(text).toContain('Staffing | $475.00');
-    expect(text).toContain('Equipment | $620.00');
-    expect(text).toContain('Venue Rental | $1,500.00');
-    expect(text).toContain('Production Fee | $872.00');
-    expect(text).toContain('Tax | $910.00'); // 629+236+45
-    expect(text).toContain('TOTAL ESTIMATE | $16,307.00');
-    expect(text).toContain('Price PP | $218.00'); // ceil(16307/75)
+    expect(lines[2]).toBe('Item\tAmount');
+    expect(text).toContain('Menu\t$8,680.00');
+    expect(text).toContain('Bar Package\t$3,250.00');
+    expect(text).toContain('Staffing\t$475.00');
+    expect(text).toContain('Equipment\t$620.00');
+    expect(text).toContain('Venue Rental\t$1,500.00');
+    expect(text).toContain('Production Fee\t$872.00');
+    expect(text).toContain('Tax\t$910.00'); // 629+236+45
+    expect(text).toContain('TOTAL ESTIMATE\t$16,307.00');
+    expect(text).toContain('Price PP\t$218.00'); // ceil(16307/75)
   });
 });
