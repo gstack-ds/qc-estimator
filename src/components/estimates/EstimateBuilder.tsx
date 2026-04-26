@@ -17,7 +17,7 @@ import TravelPanel from './TravelPanel';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
-import type { DbTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
+import type { DbTemplate, ExtractedMenuItem } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { TravelRefData, DbTrip } from '@/lib/supabase/queries';
 
 // ─── Types ───────────────────────────────────────────────
@@ -358,6 +358,35 @@ export default function EstimateBuilder({
     imported.forEach((item) => setTimeout(() => handleItemSave(item.id), 0));
   }, [handleItemSave]);
 
+  const handlePopulateFromExtraction = useCallback((items: ExtractedMenuItem[]) => {
+    const cateringMarkup = markups.find((m) => m.name === 'Catering & F&B');
+    const baseOrder = lineItemsRef.current
+      .filter((li) => li.section === 'F&B')
+      .reduce((max, li) => Math.max(max, li.sortOrder), -1) + 1;
+
+    const toImport: LocalLineItem[] = items.map((item, idx) => {
+      const taxType: import('@/types').TaxType =
+        item.category === 'alcohol' ? 'alcohol'
+        : item.category === 'food' ? 'food'
+        : 'none';
+      const tempId = `new-${Date.now()}-${Math.random()}-${idx}`;
+      return {
+        id: tempId,
+        section: 'F&B',
+        name: item.name,
+        qty: program.guest_count,
+        unitPrice: item.pricePerPerson,
+        categoryId: cateringMarkup?.id ?? null,
+        defaultMarkupPct: cateringMarkup?.markup_pct ?? 0.55,
+        categoryMarkupPct: cateringMarkup?.markup_pct ?? 0.55,
+        taxType,
+        sortOrder: baseOrder + idx,
+        isNew: true,
+      };
+    });
+    handleImportItems(toImport);
+  }, [markups, program.guest_count, handleImportItems]);
+
   // ─── Fee override helpers ─────────────────────────────────
 
   const defaultSC = program.service_charge_default;
@@ -583,7 +612,7 @@ export default function EstimateBuilder({
           />
 
           {/* Attachments */}
-          <AttachmentsPanel estimateId={estimate.id} />
+          <AttachmentsPanel estimateId={estimate.id} onPopulateLineItems={handlePopulateFromExtraction} />
         </div>
 
         {/* Right sidebar — summary + margin */}

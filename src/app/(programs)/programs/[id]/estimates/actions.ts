@@ -2,6 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import Anthropic from '@anthropic-ai/sdk';
+import type { DocumentBlockParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
 
 // ─── Estimate details ─────────────────────────────────────
 
@@ -225,6 +227,24 @@ export async function cacheEstimateTotal(estimateId: string, programId: string, 
 
 // ─── Attachments ─────────────────────────────────────────
 
+export interface ExtractedMenuItem {
+  name: string;
+  description?: string;
+  pricePerPerson: number;
+  category: 'food' | 'alcohol' | 'na_beverage';
+}
+
+export interface ExtractedVenueFee {
+  name: string;
+  value: number;
+  type: 'percentage' | 'flat';
+}
+
+export interface ExtractedData {
+  menuItems: ExtractedMenuItem[];
+  venueFees: ExtractedVenueFee[];
+}
+
 export interface AttachmentRecord {
   id: string;
   estimate_id: string;
@@ -234,6 +254,7 @@ export interface AttachmentRecord {
   mime_type: string;
   created_at: string;
   url: string;
+  extracted_data: ExtractedData | null;
 }
 
 const ACCEPTED_MIME_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/jpg']);
@@ -270,7 +291,7 @@ export async function uploadAttachment(formData: FormData): Promise<{ error: str
       mime_type: file.type,
       uploaded_by: user?.id ?? null,
     })
-    .select('id, estimate_id, file_name, storage_path, file_size, mime_type, created_at')
+    .select('id, estimate_id, file_name, storage_path, file_size, mime_type, created_at, extracted_data')
     .single();
 
   if (dbError) {
@@ -292,7 +313,7 @@ export async function getAttachmentsForEstimate(estimateId: string): Promise<{ e
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('estimate_attachments')
-    .select('id, estimate_id, file_name, storage_path, file_size, mime_type, created_at')
+    .select('id, estimate_id, file_name, storage_path, file_size, mime_type, created_at, extracted_data')
     .eq('estimate_id', estimateId)
     .order('created_at', { ascending: false });
 
@@ -318,6 +339,70 @@ export async function deleteAttachment(id: string, storagePath: string): Promise
   const { error } = await supabase.from('estimate_attachments').delete().eq('id', id);
   if (error) return { error: error.message };
   return { error: null };
+}
+
+const EXTRACTION_PROMPT =
+  'Extract all menu items, prices, and descriptions from this venue menu. ' +
+  'Also extract any venue fees mentioned (service charge, gratuity, admin fee, F&B minimum, room rental). ' +
+  'Return ONLY valid JSON with two arrays: ' +
+  'menuItems (fields: name, description, pricePerPerson, category: food|alcohol|na_beverage) ' +
+  'and venueFees (fields: name, value, type: percentage|flat). ' +
+  'No markdown, no explanation — raw JSON only.';
+
+export async function extractAttachmentData(
+  attachmentId: string,
+): Promise<{ error: string | null; data: ExtractedData | null }> {
+  const supabase = await createClient();
+
+  const { data: rec, error: fetchErr } = await supabase
+    .from('estimate_attachments')
+    .select('storage_path, mime_type')
+    .eq('id', attachmentId)
+    .single();
+  if (fetchErr || !rec) return { error: fetchErr?.message ?? 'Attachment not found', data: null };
+  if (rec.mime_type !== 'application/pdf') return { error: 'Only PDF files can be extracted', data: null };
+
+  const { data: fileBlob, error: downloadErr } = await supabase.storage
+    .from('estimate-attachments')
+    .download(rec.storage_path);
+  if (downloadErr || !fileBlob) return { error: downloadErr?.message ?? 'Download failed', data: null };
+
+  const base64 = Buffer.from(await fileBlob.arrayBuffer()).toString('base64');
+
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  let text: string;
+  try {
+    const docBlock: DocumentBlockParam = {
+      type: 'document',
+      source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+    };
+    const textBlock: TextBlockParam = { type: 'text', text: EXTRACTION_PROMPT };
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      messages: [{ role: 'user', content: [docBlock, textBlock] }],
+    });
+    text = (response.content.find((c) => c.type === 'text') as { type: 'text'; text: string } | undefined)?.text ?? '';
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'API call failed', data: null };
+  }
+
+  let extracted: ExtractedData;
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    extracted = JSON.parse(jsonMatch?.[0] ?? text) as ExtractedData;
+    if (!Array.isArray(extracted.menuItems)) extracted.menuItems = [];
+    if (!Array.isArray(extracted.venueFees)) extracted.venueFees = [];
+  } catch {
+    return { error: 'Could not parse extraction response', data: null };
+  }
+
+  await supabase
+    .from('estimate_attachments')
+    .update({ extracted_data: extracted })
+    .eq('id', attachmentId);
+
+  return { error: null, data: extracted };
 }
 
 // ─── Copy Items From Estimate ─────────────────────────────
