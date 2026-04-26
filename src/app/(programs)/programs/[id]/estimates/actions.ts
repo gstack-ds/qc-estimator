@@ -443,10 +443,12 @@ export async function extractAttachmentData(
     return { error: 'Could not parse extraction response', data: null };
   }
 
-  await supabase
+  const { error: updateErr } = await supabase
     .from('estimate_attachments')
     .update({ extracted_data: extracted })
     .eq('id', attachmentId);
+
+  if (updateErr) return { error: updateErr.message, data: null };
 
   return { error: null, data: extracted };
 }
