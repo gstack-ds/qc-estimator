@@ -14,6 +14,7 @@ import {
 interface Props {
   estimateId: string;
   onPopulateLineItems?: (items: ExtractedMenuItem[]) => void;
+  onPopulateEstimateDetails?: (data: ExtractedData) => void;
 }
 
 type ExtractionStatus =
@@ -52,7 +53,7 @@ function buildCanvaCopyText(data: ExtractedData): string {
   return lines.join('\n').trim();
 }
 
-export default function AttachmentsPanel({ estimateId, onPopulateLineItems }: Props) {
+export default function AttachmentsPanel({ estimateId, onPopulateLineItems, onPopulateEstimateDetails }: Props) {
   const [records, setRecords] = useState<AttachmentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -60,6 +61,7 @@ export default function AttachmentsPanel({ estimateId, onPopulateLineItems }: Pr
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [extractionState, setExtractionState] = useState<Record<string, ExtractionStatus>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [detailsToast, setDetailsToast] = useState<{ id: string; msg: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -138,6 +140,24 @@ export default function AttachmentsPanel({ estimateId, onPopulateLineItems }: Pr
       });
     }
     setDeletingId(null);
+  }
+
+  function handlePopulateDetails(attachmentId: string, data: ExtractedData) {
+    if (!onPopulateEstimateDetails) return;
+    const fees = data.venueFees;
+    let count = 0;
+    if (data.venueName) count++;
+    if (data.roomSpace) count++;
+    if (fees.some((f) => ['f&b', 'food', 'beverage'].some((kw) => f.name.toLowerCase().includes(kw)))) count++;
+    if (fees.some((f) => f.name.toLowerCase().includes('service charge'))) count++;
+    if (fees.some((f) => f.name.toLowerCase().includes('gratuity'))) count++;
+    if (fees.some((f) => f.name.toLowerCase().includes('admin'))) count++;
+    onPopulateEstimateDetails(data);
+    const msg = count > 0
+      ? `Populated ${count} estimate field${count !== 1 ? 's' : ''}.`
+      : 'No estimate fields found in this PDF.';
+    setDetailsToast({ id: attachmentId, msg });
+    setTimeout(() => setDetailsToast((t) => t?.id === attachmentId ? null : t), 3000);
   }
 
   async function handleCopyToCanva(attachmentId: string, data: ExtractedData) {
@@ -249,7 +269,9 @@ export default function AttachmentsPanel({ estimateId, onPopulateLineItems }: Pr
                         data={extraction.data}
                         onCopyToCanva={() => handleCopyToCanva(rec.id, extraction.data)}
                         onPopulateLineItems={onPopulateLineItems ? () => onPopulateLineItems(extraction.data.menuItems) : undefined}
+                        onPopulateEstimateDetails={onPopulateEstimateDetails ? () => handlePopulateDetails(rec.id, extraction.data) : undefined}
                         copied={copiedId === rec.id}
+                        detailsToast={detailsToast?.id === rec.id ? detailsToast.msg : undefined}
                       />
                     )}
                   </div>
@@ -268,21 +290,24 @@ interface ExtractionResultPanelProps {
   data: ExtractedData;
   onCopyToCanva: () => void;
   onPopulateLineItems?: () => void;
+  onPopulateEstimateDetails?: () => void;
   copied: boolean;
+  detailsToast?: string;
 }
 
-function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, copied }: ExtractionResultPanelProps) {
+function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, onPopulateEstimateDetails, copied, detailsToast }: ExtractionResultPanelProps) {
   const hasItems = data.menuItems.length > 0;
   const hasFees = data.venueFees.length > 0;
+  const hasEstimateDetails = hasFees || !!data.venueName || !!data.roomSpace;
 
-  if (!hasItems && !hasFees) {
+  if (!hasItems && !hasFees && !data.venueName && !data.roomSpace) {
     return <p className="text-xs text-brand-silver">No menu data found in this PDF.</p>;
   }
 
   return (
     <div className="space-y-2">
       {/* Action buttons */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center flex-wrap gap-2">
         <button
           onClick={onCopyToCanva}
           className="text-xs px-2 py-0.5 rounded border border-brand-cream bg-white hover:bg-brand-offwhite text-brand-charcoal/70 hover:text-brand-charcoal transition-colors"
@@ -297,7 +322,18 @@ function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, copie
             Populate Line Items
           </button>
         )}
+        {onPopulateEstimateDetails && hasEstimateDetails && (
+          <button
+            onClick={onPopulateEstimateDetails}
+            className="text-xs px-2 py-0.5 rounded border border-brand-copper/40 bg-brand-copper/5 hover:bg-brand-copper/10 text-brand-copper transition-colors"
+          >
+            Populate Estimate Details
+          </button>
+        )}
       </div>
+      {detailsToast && (
+        <p className="text-xs text-green-700">{detailsToast}</p>
+      )}
 
       {/* Menu items table */}
       {hasItems && (

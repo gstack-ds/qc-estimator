@@ -243,6 +243,8 @@ export interface ExtractedVenueFee {
 export interface ExtractedData {
   menuItems: ExtractedMenuItem[];
   venueFees: ExtractedVenueFee[];
+  venueName?: string;
+  roomSpace?: string;
 }
 
 export interface AttachmentRecord {
@@ -343,10 +345,12 @@ export async function deleteAttachment(id: string, storagePath: string): Promise
 
 const EXTRACTION_PROMPT =
   'Extract all menu items, prices, and descriptions from this venue menu. ' +
-  'Also extract any venue fees mentioned (service charge, gratuity, admin fee, F&B minimum, room rental). ' +
-  'Return ONLY valid JSON with two arrays: ' +
-  'menuItems (fields: name, description, pricePerPerson, category: food|alcohol|na_beverage) ' +
-  'and venueFees (fields: name, value, type: percentage|flat). ' +
+  'Also extract any venue fees mentioned (service charge, gratuity, admin fee, F&B minimum, room rental), ' +
+  'plus the venue name and room/space name if present. ' +
+  'Return ONLY valid JSON with these fields: ' +
+  'venueName (string, optional), roomSpace (string, optional), ' +
+  'menuItems (array: name, description, pricePerPerson, category: food|alcohol|na_beverage), ' +
+  'venueFees (array: name, value, type: percentage|flat). ' +
   'No markdown, no explanation — raw JSON only.';
 
 export async function extractAttachmentData(

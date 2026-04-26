@@ -17,7 +17,7 @@ import TravelPanel from './TravelPanel';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
-import type { DbTemplate, ExtractedMenuItem } from '@/app/(programs)/programs/[id]/estimates/actions';
+import type { DbTemplate, ExtractedMenuItem, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { TravelRefData, DbTrip } from '@/lib/supabase/queries';
 
 // ─── Types ───────────────────────────────────────────────
@@ -387,6 +387,28 @@ export default function EstimateBuilder({
     handleImportItems(toImport);
   }, [markups, program.guest_count, handleImportItems]);
 
+  function handlePopulateEstimateDetails(data: ExtractedData) {
+    const fees = data.venueFees;
+    function findFee(...keywords: string[]) {
+      return fees.find((f) => keywords.some((kw) => f.name.toLowerCase().includes(kw)));
+    }
+    const patch: Partial<LocalEstimate> = {};
+    if (data.venueName) patch.name = data.venueName;
+    if (data.roomSpace) patch.roomSpace = data.roomSpace;
+    const fbMin = findFee('f&b minimum', 'food & beverage minimum', 'fb minimum', 'food minimum', 'beverage minimum');
+    if (fbMin && fbMin.type === 'flat') patch.fbMinimum = fbMin.value;
+    const svcCharge = findFee('service charge');
+    if (svcCharge && svcCharge.type === 'percentage') patch.serviceChargeOverride = svcCharge.value / 100;
+    const gratuityFee = findFee('gratuity');
+    if (gratuityFee && gratuityFee.type === 'percentage') patch.gratuityOverride = gratuityFee.value / 100;
+    const adminFee = findFee('admin fee', 'admin');
+    if (adminFee && adminFee.type === 'percentage') patch.adminFeeOverride = adminFee.value / 100;
+    if (Object.keys(patch).length > 0) {
+      updateEstField(patch);
+      saveEstimate(patch);
+    }
+  }
+
   // ─── Fee override helpers ─────────────────────────────────
 
   const defaultSC = program.service_charge_default;
@@ -612,7 +634,7 @@ export default function EstimateBuilder({
           />
 
           {/* Attachments */}
-          <AttachmentsPanel estimateId={estimate.id} onPopulateLineItems={handlePopulateFromExtraction} />
+          <AttachmentsPanel estimateId={estimate.id} onPopulateLineItems={handlePopulateFromExtraction} onPopulateEstimateDetails={handlePopulateEstimateDetails} />
         </div>
 
         {/* Right sidebar — summary + margin */}
