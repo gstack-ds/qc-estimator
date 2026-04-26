@@ -644,6 +644,9 @@ export default function EstimateBuilder({
             </div>
           </div>
 
+          {/* Attachments */}
+          <AttachmentsPanel estimateId={estimate.id} onPopulateLineItems={handlePopulateFromExtraction} onPopulateEstimateDetails={handlePopulateEstimateDetails} />
+
           {/* Line item sections */}
           <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-6">
             {sections.map(({ name: sectionName, taxType }) => (
@@ -675,9 +678,6 @@ export default function EstimateBuilder({
             refs={travelRefs}
             onTotalChange={setTravelExpenses}
           />
-
-          {/* Attachments */}
-          <AttachmentsPanel estimateId={estimate.id} onPopulateLineItems={handlePopulateFromExtraction} onPopulateEstimateDetails={handlePopulateEstimateDetails} />
         </div>
 
         {/* Right sidebar — summary + margin */}

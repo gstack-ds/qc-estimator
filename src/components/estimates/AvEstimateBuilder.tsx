@@ -389,6 +389,9 @@ export default function AvEstimateBuilder({
             />
           </div>
 
+          {/* Attachments */}
+          <AttachmentsPanel estimateId={estimate.id} estimateType="av" onPopulateLineItems={handlePopulateFromExtraction} />
+
           {/* Line item sections */}
           <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-6">
             {AV_SECTIONS.map(({ name: sectionName, label, taxType }) => (
@@ -421,9 +424,6 @@ export default function AvEstimateBuilder({
             refs={travelRefs}
             onTotalChange={setTravelExpenses}
           />
-
-          {/* Attachments */}
-          <AttachmentsPanel estimateId={estimate.id} estimateType="av" onPopulateLineItems={handlePopulateFromExtraction} />
         </div>
 
         {/* Right sidebar */}

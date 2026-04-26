@@ -511,6 +511,9 @@ export default function DecorEstimateBuilder({
             />
           </div>
 
+          {/* Attachments */}
+          <AttachmentsPanel estimateId={estimate.id} estimateType="decor" onPopulateLineItems={handlePopulateFromExtraction} />
+
           {/* Florals section */}
           <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-brand-cream">
@@ -540,9 +543,6 @@ export default function DecorEstimateBuilder({
             refs={travelRefs}
             onTotalChange={setTravelExpenses}
           />
-
-          {/* Attachments */}
-          <AttachmentsPanel estimateId={estimate.id} estimateType="decor" onPopulateLineItems={handlePopulateFromExtraction} />
         </div>
 
         {/* Right sidebar */}
