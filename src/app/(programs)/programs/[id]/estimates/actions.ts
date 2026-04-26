@@ -266,6 +266,8 @@ export interface AttachmentRecord {
   created_at: string;
   url: string;
   extracted_data: ExtractedData | null;
+  line_items_populated: boolean;
+  details_populated: boolean;
 }
 
 const ACCEPTED_MIME_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/jpg']);
@@ -302,7 +304,7 @@ export async function uploadAttachment(formData: FormData): Promise<{ error: str
       mime_type: file.type,
       uploaded_by: user?.id ?? null,
     })
-    .select('id, estimate_id, file_name, storage_path, file_size, mime_type, created_at, extracted_data')
+    .select('id, estimate_id, file_name, storage_path, file_size, mime_type, created_at, extracted_data, line_items_populated, details_populated')
     .single();
 
   if (dbError) {
@@ -324,7 +326,7 @@ export async function getAttachmentsForEstimate(estimateId: string): Promise<{ e
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('estimate_attachments')
-    .select('id, estimate_id, file_name, storage_path, file_size, mime_type, created_at, extracted_data')
+    .select('id, estimate_id, file_name, storage_path, file_size, mime_type, created_at, extracted_data, line_items_populated, details_populated')
     .eq('estimate_id', estimateId)
     .order('created_at', { ascending: false });
 
@@ -340,6 +342,19 @@ export async function getAttachmentsForEstimate(estimateId: string): Promise<{ e
   );
 
   return { error: null, records };
+}
+
+export async function markAttachmentPopulated(
+  id: string,
+  field: 'line_items_populated' | 'details_populated',
+): Promise<void> {
+  const supabase = await createClient();
+  await supabase.from('estimate_attachments').update({ [field]: true }).eq('id', id);
+}
+
+export async function resetAttachmentPopulatedFlags(id: string): Promise<void> {
+  const supabase = await createClient();
+  await supabase.from('estimate_attachments').update({ line_items_populated: false, details_populated: false }).eq('id', id);
 }
 
 export async function deleteAttachment(id: string, storagePath: string): Promise<{ error: string | null }> {

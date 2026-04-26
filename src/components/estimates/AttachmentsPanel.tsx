@@ -6,6 +6,8 @@ import {
   getAttachmentsForEstimate,
   deleteAttachment,
   extractAttachmentData,
+  markAttachmentPopulated,
+  resetAttachmentPopulatedFlags,
   type AttachmentRecord,
   type ExtractedData,
 } from '@/app/(programs)/programs/[id]/estimates/actions';
@@ -89,6 +91,17 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
       }
       return next;
     });
+    // Seed populate Sets from DB flags (union: keep in-memory + add any DB-flagged IDs)
+    setPopulatedLineItems((prev) => {
+      const next = new Set(prev);
+      for (const rec of r) { if (rec.line_items_populated) next.add(rec.id); }
+      return next;
+    });
+    setPopulatedDetails((prev) => {
+      const next = new Set(prev);
+      for (const rec of r) { if (rec.details_populated) next.add(rec.id); }
+      return next;
+    });
     setLoading(false);
   }
 
@@ -123,6 +136,7 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
   async function triggerExtraction(attachmentId: string) {
     setPopulatedLineItems((prev) => { const s = new Set(prev); s.delete(attachmentId); return s; });
     setPopulatedDetails((prev) => { const s = new Set(prev); s.delete(attachmentId); return s; });
+    resetAttachmentPopulatedFlags(attachmentId);
     setExtractionState((prev) => ({ ...prev, [attachmentId]: { status: 'extracting' } }));
     const { error: extractErr, data } = await extractAttachmentData(attachmentId, estimateType);
     if (extractErr || !data) {
@@ -158,6 +172,7 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
     if (!onPopulateLineItems) return;
     onPopulateLineItems(data);
     setPopulatedLineItems((prev) => new Set([...prev, attachmentId]));
+    markAttachmentPopulated(attachmentId, 'line_items_populated');
   }
 
   function handlePopulateDetails(attachmentId: string, data: ExtractedData) {
@@ -172,6 +187,7 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
     if (fees.some((f) => f.name.toLowerCase().includes('admin'))) count++;
     onPopulateEstimateDetails(data);
     setPopulatedDetails((prev) => new Set([...prev, attachmentId]));
+    markAttachmentPopulated(attachmentId, 'details_populated');
     const msg = count > 0
       ? `Populated ${count} estimate field${count !== 1 ? 's' : ''}.`
       : 'No estimate fields found in this PDF.';
