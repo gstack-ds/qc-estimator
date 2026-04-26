@@ -167,6 +167,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-04-03 | UserMenu as thin client component receiving email as prop | Layout is a Server Component that already has the user. Passes email as prop to avoid a redundant client-side session fetch. | Client component fetching its own session (extra round trip) |
 | 2026-04-26 | PDF extraction via Claude API server action only | API key must never reach the browser. All extraction logic lives in `extractAttachmentData()` in `actions.ts` — downloads from Storage, sends base64 doc block to `claude-sonnet-4-6`, stores JSON result in `extracted_data` JSONB column. | Client-side API call (rejected — exposes key), separate API route (unnecessary with server actions) |
 | 2026-04-26 | Populate Line Items only wired in venue (EstimateBuilder), not AV/Decor | Menu PDFs are venue artifacts — food/alcohol/NA beverages map to F&B section with Catering & F&B markup. AV and Decor builders don't pass `onPopulateLineItems` so the button is hidden. | Show button in all builders (rejected — no meaningful section mapping for AV/Decor) |
+| 2026-04-26 | Transportation stored our_cost/client_cost in schedule rows | Comparison view needs aggregates without a complex JOIN+math query. Decouples quoted costs from future rate card edits. | Compute from JOIN at query time (complex), denormalized total on estimates (drifts) |
+| 2026-04-26 | Transportation uses fake EstimateSummary to reuse calculateMarginAnalysis | Avoids a separate margin engine for transportation. Sets equipmentSubtotalClient = subtotalClient, uses transportCommission as clientCommission, gdpCommissionEnabled=false. | Duplicate margin logic (maintenance burden) |
 
 ## Gotchas Log
 
@@ -177,6 +179,7 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-04-26 | JS falsy `\|\|` trap with numeric 0: `parseFloat('0') / 100 \|\| 0.05` evaluates to `0.05` because `0` is falsy | Use `isNaN(v) ? fallback : v / 100` pattern wherever a numeric field has a meaningful zero value (client commission, CC fee, etc.) |
 | 2026-04-26 | Stale closures in `useCallback` + `setTimeout`: category changes weren't saving because `handleItemSave` captured old `lineItems` state | Use a `lineItemsRef` (updated every render via `lineItemsRef.current = lineItems`) and read from `lineItemsRef.current` inside callbacks instead of the closed-over state variable |
 | 2026-04-26 | Git heredoc `$(cat <<'EOF'...)` fails in bash on Windows when run from PowerShell | Use PowerShell's `@'...'@` here-string syntax for multiline git commit messages on this machine |
+| 2026-04-26 | estimate_type is a PostgreSQL ENUM — adding new estimate types requires ALTER TYPE | Adding 'transportation' to AddEstimateButton without also running `ALTER TYPE estimate_type ADD VALUE 'transportation'` caused silent INSERT failures. Always add a migration when introducing a new type. |
 
 ## Current TODOs
 
@@ -201,13 +204,11 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] ComparisonView: grouped by estimate type, per-type badges
 - [x] ScenarioTabs: typed estimate creation (Venue/AV/Decor) inline, no page navigation needed
 - [x] Claude API PDF extraction — auto-extracts menu items + venue fees from uploaded PDFs; Copy to Canva + Populate Line Items buttons (venue builder only); requires ANTHROPIC_API_KEY in env
-
-### ⚠️ Migrations Pending — Apply Before Using New Features
-Two migrations are written but have NOT been applied to Supabase yet. Features are blocked until these run in the Supabase SQL Editor:
-- `007_line_item_templates.sql` — required for: Line Item Templates, Copy Items From
-- `008_extracted_data.sql` — required for: PDF extraction (adds `extracted_data JSONB` to `estimate_attachments`)
-
-Also add `ANTHROPIC_API_KEY` to `.env.local` (and Vercel env vars) before PDF extraction will work.
+- [x] PDF extraction type-aware (venue/AV/decor/transportation) — each estimate type has its own extraction prompt and populate handler
+- [x] RFP extraction: eventName → Program Name, eventStartTime/eventEndTime → Start/End Time fields
+- [x] PDF extraction persistence: extracted_data UPDATE was silently rejected (missing RLS UPDATE policy on estimate_attachments — migration 010)
+- [x] Populate button persistence: line_items_populated + details_populated columns on estimate_attachments (migration 012), reset on re-extraction
+- [x] Transportation estimate builder — 4th estimate type with vehicle rate card, daily schedule, per-estimate commission (default 0), general sales tax, margin analysis (migrations 011 + 013)
 
 ### Remaining
 - [ ] Validate against 3-5 real historical proposals — compare engine output to Excel for same inputs
