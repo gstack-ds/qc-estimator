@@ -149,13 +149,15 @@ export async function deleteProgram(programId: string) {
 // ─── Program Attachments ──────────────────────────────────
 
 export interface ExtractedProgramBrief {
+  eventName?: string;
   clientName?: string;
   companyName?: string;
   eventDate?: string;
   guestCount?: number;
   serviceStyle?: string;
   alcoholType?: string;
-  eventTime?: string;
+  eventStartTime?: string;
+  eventEndTime?: string;
   clientHotel?: string;
   venueName?: string;
   roomSpace?: string;
@@ -175,9 +177,11 @@ export interface ProgramAttachmentRecord {
 
 const BRIEF_EXTRACTION_PROMPT =
   'Extract event planning details from this document. ' +
-  'Return JSON with fields: clientName, companyName, eventDate (YYYY-MM-DD), guestCount, ' +
+  'Return JSON with fields: eventName (the name or title of the event/program), ' +
+  'clientName, companyName, eventDate (YYYY-MM-DD), guestCount, ' +
   'serviceStyle (Plated/Buffet/Family Style/Stations), alcoholType (Full Bar/Beer & Wine/None), ' +
-  'eventTime, clientHotel, venueName, roomSpace, notes. ' +
+  'eventStartTime (24hr format HH:MM, e.g. "17:00"), eventEndTime (24hr format HH:MM, e.g. "22:00"), ' +
+  'clientHotel, venueName, roomSpace, notes. ' +
   'Only include fields you can find — omit any that aren\'t in the document. ' +
   'No markdown, no explanation — raw JSON only.';
 

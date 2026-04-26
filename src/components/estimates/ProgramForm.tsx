@@ -97,12 +97,15 @@ export default function ProgramForm({ program, locations, mode }: Props) {
     if (error || !data) { setExtractError(error ?? 'Extraction failed.'); return; }
     setPendingExtracted(data);
     let filled = 0;
+    if (data.eventName) { setName(data.eventName); filled++; }
     if (data.clientName) { setClientName(data.clientName); filled++; }
     if (data.companyName) { setCompanyName(data.companyName); filled++; }
     if (data.eventDate) { setEventDate(data.eventDate); filled++; }
     if (data.guestCount && data.guestCount > 0) { setGuestCount(String(data.guestCount)); filled++; }
     if (data.serviceStyle && SERVICE_STYLES.includes(data.serviceStyle)) { setServiceStyle(data.serviceStyle); filled++; }
     if (data.alcoholType && ALCOHOL_TYPES.includes(data.alcoholType)) { setAlcoholType(data.alcoholType); filled++; }
+    if (data.eventStartTime) { setEventStartTime(data.eventStartTime); filled++; }
+    if (data.eventEndTime) { setEventEndTime(data.eventEndTime); filled++; }
     if (data.clientHotel) { setClientHotel(data.clientHotel); filled++; }
     const msg = filled > 0
       ? `Extracted ${filled} field${filled !== 1 ? 's' : ''} from document.`
