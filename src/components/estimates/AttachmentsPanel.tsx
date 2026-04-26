@@ -75,14 +75,20 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
     const { records: r, error: e } = await getAttachmentsForEstimate(estimateId);
     setRecords(r);
     if (e) setError(e);
-    // Seed extraction state from DB-stored results
-    const initial: Record<string, ExtractionStatus> = {};
-    for (const rec of r) {
-      if (rec.extracted_data) {
-        initial[rec.id] = { status: 'done', data: rec.extracted_data };
+    setExtractionState((prev) => {
+      const next: Record<string, ExtractionStatus> = {};
+      for (const rec of r) {
+        const inMemory = prev[rec.id];
+        // Never overwrite an in-flight or completed extraction with idle
+        if (inMemory?.status === 'done' || inMemory?.status === 'extracting') {
+          next[rec.id] = inMemory;
+        } else if (rec.extracted_data) {
+          next[rec.id] = { status: 'done', data: rec.extracted_data };
+        }
+        // else: omit → defaults to idle via ?? fallback in render
       }
-    }
-    setExtractionState(initial);
+      return next;
+    });
     setLoading(false);
   }
 
@@ -126,6 +132,7 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
       }));
     } else {
       setExtractionState((prev) => ({ ...prev, [attachmentId]: { status: 'done', data } }));
+      setRecords((prev) => prev.map((r) => r.id === attachmentId ? { ...r, extracted_data: data } : r));
     }
   }
 
