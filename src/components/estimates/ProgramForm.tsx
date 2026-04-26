@@ -85,8 +85,8 @@ export default function ProgramForm({ program, locations, mode }: Props) {
       company_name: companyName || null,
       client_hotel: clientHotel || null,
       location_id: locationId || null,
-      cc_processing_fee: parseFloat(ccFee) / 100 || 0.035,
-      client_commission: parseFloat(clientComm) / 100 || 0.05,
+      cc_processing_fee: isNaN(parseFloat(ccFee)) ? 0.035 : parseFloat(ccFee) / 100,
+      client_commission: isNaN(parseFloat(clientComm)) ? 0.05 : parseFloat(clientComm) / 100,
       gdp_commission_enabled: gdpEnabled,
       service_charge_default: parseFloat(serviceCharge) / 100 || 0.20,
       gratuity_default: parseFloat(gratuity) / 100 || 0.20,
@@ -274,7 +274,7 @@ export default function ProgramForm({ program, locations, mode }: Props) {
                   min="0"
                   value={ccFee}
                   onChange={(e) => setCcFee(e.target.value)}
-                  onBlur={() => save({ cc_processing_fee: parseFloat(ccFee) / 100 || 0.035 })}
+                  onBlur={() => { const v = parseFloat(ccFee); save({ cc_processing_fee: isNaN(v) ? 0.035 : v / 100 }); }}
                   className={fieldClass + ' pr-6'}
                 />
                 <span className="absolute right-2 top-2 text-brand-silver text-sm">%</span>
@@ -289,7 +289,7 @@ export default function ProgramForm({ program, locations, mode }: Props) {
                   min="0"
                   value={clientComm}
                   onChange={(e) => setClientComm(e.target.value)}
-                  onBlur={() => save({ client_commission: parseFloat(clientComm) / 100 || 0.05 })}
+                  onBlur={() => { const v = parseFloat(clientComm); save({ client_commission: isNaN(v) ? 0.05 : v / 100 }); }}
                   className={fieldClass + ' pr-6'}
                 />
                 <span className="absolute right-2 top-2 text-brand-silver text-sm">%</span>

@@ -147,6 +147,8 @@ export default function DecorEstimateBuilder({
   const [lineItems, setLineItems] = useState<LocalLineItem[]>(
     dbLineItems.map((item) => dbItemToLocal(item, markups))
   );
+  const lineItemsRef = useRef(lineItems);
+  lineItemsRef.current = lineItems;
 
   // All sub-sections open by default
   const [openMap, setOpenMap] = useState<OpenMap>(() => {
@@ -237,7 +239,7 @@ export default function DecorEstimateBuilder({
   }, []);
 
   const handleItemSave = useCallback(async (id: string) => {
-    const item = lineItems.find((li) => li.id === id);
+    const item = lineItemsRef.current.find((li) => li.id === id);
     if (!item) return;
 
     const isOverridden = item.categoryId !== 'custom' && item.categoryMarkupPct !== item.defaultMarkupPct;
@@ -260,19 +262,19 @@ export default function DecorEstimateBuilder({
         prev.map((li) => li.id === id ? { ...li, id: result.id!, isNew: false } : li)
       );
     }
-  }, [lineItems, estimate.id]);
+  }, [estimate.id]);
 
   const handleItemDelete = useCallback(async (id: string) => {
-    const item = lineItems.find((li) => li.id === id);
+    const item = lineItemsRef.current.find((li) => li.id === id);
     setLineItems((prev) => prev.filter((li) => li.id !== id));
     if (item && !item.isNew) {
       await withSave(() => deleteLineItem(id));
     }
-  }, [lineItems]);
+  }, []);
 
   const handleAddItem = useCallback((section: LocalSection, taxType: TaxType) => {
     const tempId = `new-${Date.now()}-${Math.random()}`;
-    const maxOrder = lineItems
+    const maxOrder = lineItemsRef.current
       .filter((li) => li.section === section)
       .reduce((max, li) => Math.max(max, li.sortOrder), -1);
 
@@ -292,7 +294,7 @@ export default function DecorEstimateBuilder({
 
     setLineItems((prev) => [...prev, newItem]);
     setTimeout(() => handleItemSave(tempId), 0);
-  }, [lineItems, handleItemSave]);
+  }, [handleItemSave]);
 
   function toggleSection(section: LocalSection) {
     setOpenMap((prev) => ({ ...prev, [section]: !prev[section] }));

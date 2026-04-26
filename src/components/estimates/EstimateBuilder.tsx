@@ -169,6 +169,8 @@ export default function EstimateBuilder({
   const [lineItems, setLineItems] = useState<LocalLineItem[]>(
     dbLineItems.map((item) => dbItemToLocal(item, markups))
   );
+  const lineItemsRef = useRef(lineItems);
+  lineItemsRef.current = lineItems;
 
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -257,7 +259,7 @@ export default function EstimateBuilder({
   }, []);
 
   const handleItemSave = useCallback(async (id: string) => {
-    const item = lineItems.find((li) => li.id === id);
+    const item = lineItemsRef.current.find((li) => li.id === id);
     if (!item) return;
 
     const isOverridden = item.categoryId !== 'custom' && item.categoryMarkupPct !== item.defaultMarkupPct;
@@ -281,19 +283,19 @@ export default function EstimateBuilder({
         prev.map((li) => li.id === id ? { ...li, id: result.id!, isNew: false } : li)
       );
     }
-  }, [lineItems, estimate.id]);
+  }, [estimate.id]);
 
   const handleItemDelete = useCallback(async (id: string) => {
-    const item = lineItems.find((li) => li.id === id);
+    const item = lineItemsRef.current.find((li) => li.id === id);
     setLineItems((prev) => prev.filter((li) => li.id !== id));
     if (item && !item.isNew) {
       await withSave(() => deleteLineItem(id));
     }
-  }, [lineItems]);
+  }, []);
 
   const handleAddItem = useCallback((section: LocalSection, taxType: TaxType) => {
     const tempId = `new-${Date.now()}-${Math.random()}`;
-    const maxOrder = lineItems
+    const maxOrder = lineItemsRef.current
       .filter((li) => li.section === section)
       .reduce((max, li) => Math.max(max, li.sortOrder), -1);
 
@@ -315,7 +317,7 @@ export default function EstimateBuilder({
 
     // Save to DB immediately so we get an id
     setTimeout(() => handleItemSave(tempId), 0);
-  }, [lineItems, handleItemSave]);
+  }, [handleItemSave]);
 
   // ─── Fee override helpers ─────────────────────────────────
 
