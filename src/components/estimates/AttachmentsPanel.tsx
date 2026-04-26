@@ -108,6 +108,9 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
 
     if (record) {
       setRecords((prev) => [record, ...prev]);
+      if (record.mime_type === 'application/pdf' && record.extracted_data === null) {
+        triggerExtraction(record.id);
+      }
     }
   }
 
