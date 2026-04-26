@@ -2,6 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import Anthropic from '@anthropic-ai/sdk';
+import type { DocumentBlockParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
 
 // ─── Programs ────────────────────────────────────────────
 
@@ -142,5 +144,129 @@ export async function deleteProgram(programId: string) {
   if (error) return { error: error.message };
   revalidatePath('/programs');
   return { error: null };
+}
+
+// ─── Program Attachments ──────────────────────────────────
+
+export interface ExtractedProgramBrief {
+  clientName?: string;
+  companyName?: string;
+  eventDate?: string;
+  guestCount?: number;
+  serviceStyle?: string;
+  alcoholType?: string;
+  eventTime?: string;
+  clientHotel?: string;
+  venueName?: string;
+  roomSpace?: string;
+  notes?: string;
+}
+
+export interface ProgramAttachmentRecord {
+  id: string;
+  program_id: string;
+  file_name: string;
+  storage_path: string;
+  file_size: number;
+  mime_type: string;
+  created_at: string;
+  url: string;
+}
+
+const BRIEF_EXTRACTION_PROMPT =
+  'Extract event planning details from this document. ' +
+  'Return JSON with fields: clientName, companyName, eventDate (YYYY-MM-DD), guestCount, ' +
+  'serviceStyle (Plated/Buffet/Family Style/Stations), alcoholType (Full Bar/Beer & Wine/None), ' +
+  'eventTime, clientHotel, venueName, roomSpace, notes. ' +
+  'Only include fields you can find — omit any that aren\'t in the document. ' +
+  'No markdown, no explanation — raw JSON only.';
+
+export async function extractProgramBrief(
+  formData: FormData,
+): Promise<{ error: string | null; data: ExtractedProgramBrief | null }> {
+  const file = formData.get('file') as File | null;
+  if (!file) return { error: 'No file provided', data: null };
+  if (file.type !== 'application/pdf') return { error: 'Only PDF files are supported', data: null };
+  if (file.size > 10 * 1024 * 1024) return { error: 'File exceeds 10 MB limit', data: null };
+
+  const base64 = Buffer.from(await file.arrayBuffer()).toString('base64');
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  let text: string;
+  try {
+    const docBlock: DocumentBlockParam = {
+      type: 'document',
+      source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+    };
+    const textBlock: TextBlockParam = { type: 'text', text: BRIEF_EXTRACTION_PROMPT };
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: [docBlock, textBlock] }],
+    });
+    text = (response.content.find((c) => c.type === 'text') as { type: 'text'; text: string } | undefined)?.text ?? '';
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'API call failed', data: null };
+  }
+
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const data = JSON.parse(jsonMatch?.[0] ?? text) as ExtractedProgramBrief;
+    return { error: null, data };
+  } catch {
+    return { error: 'Could not parse extraction response', data: null };
+  }
+}
+
+export async function uploadProgramAttachment(
+  formData: FormData,
+  extractedData?: ExtractedProgramBrief,
+): Promise<{ error: string | null; record: ProgramAttachmentRecord | null }> {
+  const file = formData.get('file') as File | null;
+  const programId = formData.get('programId') as string | null;
+
+  if (!file || !programId) return { error: 'Missing file or programId', record: null };
+  if (file.size > 10 * 1024 * 1024) return { error: 'File exceeds 10 MB limit', record: null };
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const ext = file.name.split('.').pop() ?? '';
+  const storagePath = `programs/${programId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const { error: uploadError } = await supabase.storage
+    .from('estimate-attachments')
+    .upload(storagePath, buffer, { contentType: file.type });
+
+  if (uploadError) return { error: uploadError.message, record: null };
+
+  const { data: record, error: dbError } = await supabase
+    .from('program_attachments')
+    .insert({
+      program_id: programId,
+      file_name: file.name,
+      storage_path: storagePath,
+      file_size: file.size,
+      mime_type: file.type,
+      uploaded_by: user?.id ?? null,
+      extracted_data: extractedData ?? null,
+    })
+    .select('id, program_id, file_name, storage_path, file_size, mime_type, created_at')
+    .single();
+
+  if (dbError) {
+    await supabase.storage.from('estimate-attachments').remove([storagePath]);
+    return { error: dbError.message, record: null };
+  }
+
+  const { data: signedData } = await supabase.storage
+    .from('estimate-attachments')
+    .createSignedUrl(storagePath, 3600);
+
+  return {
+    error: null,
+    record: { ...record, url: signedData?.signedUrl ?? '' },
+  };
 }
 

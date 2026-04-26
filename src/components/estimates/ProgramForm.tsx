@@ -1,9 +1,15 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { DbProgramWithLocation, DbLocation } from '@/lib/supabase/queries';
-import { createProgram, updateProgram } from '@/app/(programs)/programs/actions';
+import {
+  createProgram,
+  updateProgram,
+  extractProgramBrief,
+  uploadProgramAttachment,
+  type ExtractedProgramBrief,
+} from '@/app/(programs)/programs/actions';
 
 interface Props {
   program?: DbProgramWithLocation;
@@ -53,6 +59,14 @@ export default function ProgramForm({ program, locations, mode }: Props) {
   const [gratuity, setGratuity] = useState(String(parseFloat(((program?.gratuity_default ?? 0.20) * 100).toFixed(4))));
   const [adminFee, setAdminFee] = useState(String(parseFloat(((program?.admin_fee_default ?? 0.05) * 100).toFixed(4))));
 
+  // Brief extraction (create mode only)
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingExtracted, setPendingExtracted] = useState<ExtractedProgramBrief | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extractToast, setExtractToast] = useState<string | null>(null);
+  const [extractError, setExtractError] = useState<string | null>(null);
+  const briefFileRef = useRef<HTMLInputElement>(null);
+
   const save = useCallback(async (patch: Record<string, unknown>) => {
     if (mode === 'create') return;
 
@@ -69,6 +83,33 @@ export default function ProgramForm({ program, locations, mode }: Props) {
       setTimeout(() => setSaveState('idle'), 2000);
     }
   }, [mode, program?.id]);
+
+  async function handleBriefFile(file: File) {
+    if (file.type !== 'application/pdf') { setExtractError('Only PDF files are supported.'); return; }
+    if (file.size > 10 * 1024 * 1024) { setExtractError('File exceeds 10 MB limit.'); return; }
+    setPendingFile(file);
+    setExtractError(null);
+    setExtracting(true);
+    const fd = new FormData();
+    fd.append('file', file);
+    const { error, data } = await extractProgramBrief(fd);
+    setExtracting(false);
+    if (error || !data) { setExtractError(error ?? 'Extraction failed.'); return; }
+    setPendingExtracted(data);
+    let filled = 0;
+    if (data.clientName) { setClientName(data.clientName); filled++; }
+    if (data.companyName) { setCompanyName(data.companyName); filled++; }
+    if (data.eventDate) { setEventDate(data.eventDate); filled++; }
+    if (data.guestCount && data.guestCount > 0) { setGuestCount(String(data.guestCount)); filled++; }
+    if (data.serviceStyle && SERVICE_STYLES.includes(data.serviceStyle)) { setServiceStyle(data.serviceStyle); filled++; }
+    if (data.alcoholType && ALCOHOL_TYPES.includes(data.alcoholType)) { setAlcoholType(data.alcoholType); filled++; }
+    if (data.clientHotel) { setClientHotel(data.clientHotel); filled++; }
+    const msg = filled > 0
+      ? `Extracted ${filled} field${filled !== 1 ? 's' : ''} from document.`
+      : 'No matching fields found in document.';
+    setExtractToast(msg);
+    setTimeout(() => setExtractToast(null), 5000);
+  }
 
   async function handleCreate() {
     setSaveState('saving');
@@ -97,6 +138,12 @@ export default function ProgramForm({ program, locations, mode }: Props) {
       setSaveError(result.error ?? 'Failed to create program');
       return;
     }
+    if (pendingFile) {
+      const fd = new FormData();
+      fd.append('file', pendingFile);
+      fd.append('programId', result.id);
+      await uploadProgramAttachment(fd, pendingExtracted ?? undefined);
+    }
     router.push(`/programs/${result.id}`);
   }
 
@@ -112,6 +159,53 @@ export default function ProgramForm({ program, locations, mode }: Props) {
           {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
           {saveState === 'saved' && <span className="text-green-600">Saved</span>}
           {saveState === 'error' && <span className="text-red-500">{saveError}</span>}
+        </div>
+      )}
+
+      {/* PDF brief dropzone — create mode only */}
+      {mode === 'create' && (
+        <div>
+          <div
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleBriefFile(f); }}
+            onClick={() => !extracting && briefFileRef.current?.click()}
+            className={`border-2 border-dashed rounded-lg px-6 py-7 text-center transition-colors ${extracting ? 'cursor-default border-brand-silver/30 bg-brand-offwhite/30' : 'cursor-pointer border-brand-cream hover:border-brand-copper/50 hover:bg-brand-offwhite/50'}`}
+          >
+            {extracting ? (
+              <p className="text-sm text-brand-silver italic">Extracting details from document…</p>
+            ) : pendingFile ? (
+              <div>
+                <p className="text-sm font-medium text-brand-charcoal/70">{pendingFile.name}</p>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setPendingFile(null); setPendingExtracted(null); }}
+                  className="text-xs text-brand-silver hover:text-red-500 mt-1"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-brand-charcoal/70">Upload an event brief, RFP, or client document to auto-fill details.</p>
+                <p className="text-xs text-brand-silver mt-1">PDF only · Max 10 MB · Click or drag to upload</p>
+              </>
+            )}
+          </div>
+          <input
+            ref={briefFileRef}
+            type="file"
+            accept=".pdf"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleBriefFile(f); e.target.value = ''; }}
+          />
+          {extractError && (
+            <p className="text-xs text-red-500 mt-2">{extractError}</p>
+          )}
+          {extractToast && (
+            <div className="mt-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded px-3 py-2">
+              {extractToast}
+            </div>
+          )}
         </div>
       )}
 
