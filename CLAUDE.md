@@ -186,6 +186,11 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Copy Numbers: grouped summary format (Menu/Bar Package/Staffing/Equipment/Venue Rental/Production Fee/Tax) with 18 unit tests
 - [x] Travel expense calculator with per-trip breakdown feeding into True Net margin
 - [x] File attachments per estimate (Supabase Storage) — PDF/PNG/JPG/JPEG, max 10MB, with upload/list/delete UI
+- [x] Bug fix: client commission 0% now persists (was reverting to 5% due to JS falsy `||` trap)
+- [x] Bug fix: category selections now persist on save (was stale closure in all three builders)
+- [x] Copy Line Items export — tab-separated, client-facing prices only, for Planning Pod
+- [x] Line item templates — save ☆ on any row, "+ From template" picker in each section (migration 007 required)
+- [x] Copy Items From — import all line items from another estimate in the same program
 - [x] Auth: login, signup (@qceventdesign.com restriction), forgot password, reset password
 - [x] Nav: UserMenu with email + Sign Out, white monogram fix
 - [x] ComparisonView: grouped by estimate type, per-type badges
