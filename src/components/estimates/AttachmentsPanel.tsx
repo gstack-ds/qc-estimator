@@ -40,13 +40,13 @@ function buildCanvaCopyText(data: ExtractedData): string {
     for (const item of data.menuItems) {
       lines.push(item.name);
       if (item.description) lines.push(item.description);
-      lines.push(`$${item.pricePerPerson.toFixed(2)} per person`, '');
+      lines.push(`$${(item.pricePerPerson ?? 0).toFixed(2)} per person`, '');
     }
   }
   if (data.venueFees.length > 0) {
     lines.push('VENUE FEES', '');
     for (const fee of data.venueFees) {
-      const val = fee.type === 'percentage' ? `${fee.value}%` : `$${fee.value.toFixed(2)}`;
+      const val = fee.type === 'percentage' ? `${fee.value ?? 0}%` : `$${(fee.value ?? 0).toFixed(2)}`;
       lines.push(`${fee.name}: ${val}`);
     }
   }
@@ -365,6 +365,10 @@ function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, onPop
         <p className="text-xs text-green-700">{detailsToast}</p>
       )}
 
+      {!hasItems && !hasEquipment && (
+        <p className="text-xs text-brand-silver italic">No pricing items found in this document.</p>
+      )}
+
       {/* Menu items table */}
       {hasItems && (
         <div className="rounded border border-brand-cream overflow-hidden">
@@ -388,7 +392,7 @@ function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, onPop
                     )}
                   </td>
                   <td className="px-2 py-1 text-right text-brand-charcoal tabular-nums">
-                    ${item.pricePerPerson.toFixed(2)}
+                    ${(item.pricePerPerson ?? 0).toFixed(2)}
                   </td>
                   <td className="px-2 py-1 text-brand-silver capitalize">
                     {item.category === 'na_beverage' ? 'NA bev' : item.category}
@@ -423,8 +427,8 @@ function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, onPop
                       </span>
                     )}
                   </td>
-                  <td className="px-2 py-1 text-right text-brand-charcoal tabular-nums">{item.qty}</td>
-                  <td className="px-2 py-1 text-right text-brand-charcoal tabular-nums">${item.unitPrice.toFixed(2)}</td>
+                  <td className="px-2 py-1 text-right text-brand-charcoal tabular-nums">{item.qty ?? 1}</td>
+                  <td className="px-2 py-1 text-right text-brand-charcoal tabular-nums">${(item.unitPrice ?? 0).toFixed(2)}</td>
                   <td className="px-2 py-1 text-brand-silver capitalize">{item.section.replace('_', ' ')}</td>
                 </tr>
               ))}
@@ -448,7 +452,7 @@ function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, onPop
                 <tr key={i} className="border-t border-brand-cream/60">
                   <td className="px-2 py-1 text-brand-charcoal">{fee.name}</td>
                   <td className="px-2 py-1 text-right text-brand-charcoal tabular-nums">
-                    {fee.type === 'percentage' ? `${fee.value}%` : `$${fee.value.toFixed(2)}`}
+                    {fee.type === 'percentage' ? `${fee.value ?? 0}%` : `$${(fee.value ?? 0).toFixed(2)}`}
                   </td>
                 </tr>
               ))}
