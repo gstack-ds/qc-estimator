@@ -320,6 +320,19 @@ export async function deleteAttachment(id: string, storagePath: string): Promise
   return { error: null };
 }
 
+// ─── Copy Items From Estimate ─────────────────────────────
+
+export async function getLineItemsForEstimate(estimateId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('estimate_line_items')
+    .select('id, section, name, qty, unit_price, category_id, tax_type, custom_client_unit_price, markup_override, sort_order')
+    .eq('estimate_id', estimateId)
+    .order('sort_order');
+  if (error) return { error: error.message, items: [] };
+  return { error: null, items: data ?? [] };
+}
+
 // ─── Line Item Templates ──────────────────────────────────
 
 export interface DbTemplate {

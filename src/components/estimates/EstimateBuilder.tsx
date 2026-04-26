@@ -9,6 +9,7 @@ import {
 } from '@/lib/engine/pricing';
 import type { ProgramConfig, TeamHoursTier, VenueEstimateInput } from '@/types';
 import ScenarioTabs from './ScenarioTabs';
+import CopyItemsFromButton from './CopyItemsFromButton';
 import LineItemSection from './LineItemSection';
 import SummaryPanel from './SummaryPanel';
 import MarginPanel from './MarginPanel';
@@ -352,6 +353,11 @@ export default function EstimateBuilder({
     setTimeout(() => handleItemSave(tempId), 0);
   }, [handleItemSave]);
 
+  const handleImportItems = useCallback((imported: LocalLineItem[]) => {
+    setLineItems((prev) => [...prev, ...imported]);
+    imported.forEach((item) => setTimeout(() => handleItemSave(item.id), 0));
+  }, [handleItemSave]);
+
   // ─── Fee override helpers ─────────────────────────────────
 
   const defaultSC = program.service_charge_default;
@@ -394,6 +400,12 @@ export default function EstimateBuilder({
             <span className="font-medium text-brand-charcoal">Estimates</span>
           </div>
           <div className="flex items-center gap-3">
+            <CopyItemsFromButton
+              currentEstimateId={estimate.id}
+              otherEstimates={allEstimates.map((e) => ({ id: e.id, name: e.name }))}
+              markups={markups}
+              onImport={handleImportItems}
+            />
             <ExportButtons programId={program.id} programName={program.name} estimateName={est.name} summary={summary} guestCount={program.guest_count} lineItems={lineItems} markups={markups} />
             <div className="text-xs">
               {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}

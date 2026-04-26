@@ -6,6 +6,7 @@ import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation } 
 import { calculateVenueEstimate, calculateMarginAnalysis } from '@/lib/engine/pricing';
 import type { ProgramConfig, TeamHoursTier } from '@/types';
 import ScenarioTabs from './ScenarioTabs';
+import CopyItemsFromButton from './CopyItemsFromButton';
 import LineItemSection from './LineItemSection';
 import DecorSummaryPanel from './DecorSummaryPanel';
 import MarginPanel from './MarginPanel';
@@ -330,6 +331,11 @@ export default function DecorEstimateBuilder({
     setTimeout(() => handleItemSave(tempId), 0);
   }, [handleItemSave]);
 
+  const handleImportItems = useCallback((imported: LocalLineItem[]) => {
+    setLineItems((prev) => [...prev, ...imported]);
+    imported.forEach((item) => setTimeout(() => handleItemSave(item.id), 0));
+  }, [handleItemSave]);
+
   function toggleSection(section: LocalSection) {
     setOpenMap((prev) => ({ ...prev, [section]: !prev[section] }));
   }
@@ -412,6 +418,12 @@ export default function DecorEstimateBuilder({
             <span className="font-medium text-brand-charcoal">Estimates</span>
           </div>
           <div className="flex items-center gap-3">
+            <CopyItemsFromButton
+              currentEstimateId={estimate.id}
+              otherEstimates={allEstimates.map((e) => ({ id: e.id, name: e.name }))}
+              markups={markups}
+              onImport={handleImportItems}
+            />
             <ExportButtons programId={program.id} programName={program.name} estimateName={name} summary={summary} guestCount={program.guest_count} estimateType="decor" lineItems={lineItems} markups={markups} />
             <div className="text-xs">
               {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
