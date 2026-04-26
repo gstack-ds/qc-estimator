@@ -15,7 +15,7 @@ import AvSummaryPanel from './AvSummaryPanel';
 import MarginPanel from './MarginPanel';
 import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
-import type { DbTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
+import type { DbTemplate, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { LocalLineItem, LocalSection } from './EstimateBuilder';
 import TravelPanel from './TravelPanel';
 import AttachmentsPanel from './AttachmentsPanel';
@@ -292,6 +292,45 @@ export default function AvEstimateBuilder({
     imported.forEach((item) => setTimeout(() => handleItemSave(item.id), 0));
   }, [handleItemSave]);
 
+  const handlePopulateFromExtraction = useCallback((data: ExtractedData) => {
+    const avMarkup = markups.find((m) => m.name === 'AV & Production');
+    const staffingMarkup = markups.find((m) => m.name === 'Staffing & Labor');
+
+    const sectionOrders: Partial<Record<LocalSection, number>> = {};
+    function nextOrder(section: LocalSection): number {
+      if (sectionOrders[section] === undefined) {
+        sectionOrders[section] = lineItemsRef.current
+          .filter((li) => li.section === section)
+          .reduce((max, li) => Math.max(max, li.sortOrder), -1) + 1;
+      }
+      const order = sectionOrders[section] as number;
+      sectionOrders[section] = order + 1;
+      return order;
+    }
+
+    const toImport: LocalLineItem[] = (data.equipmentItems ?? []).map((item) => {
+      const isLabor = item.section === 'labor';
+      const section: LocalSection = isLabor ? 'Non-Taxable Staffing' : 'Equipment & Staffing';
+      const markup = isLabor ? staffingMarkup : avMarkup;
+      const taxType: TaxType = isLabor ? 'none' : 'general';
+      return {
+        id: `new-${Date.now()}-${Math.random()}`,
+        section,
+        name: item.name,
+        qty: item.qty,
+        unitPrice: item.unitPrice,
+        categoryId: markup?.id ?? null,
+        defaultMarkupPct: markup?.markup_pct ?? 0.5,
+        categoryMarkupPct: markup?.markup_pct ?? 0.5,
+        taxType,
+        sortOrder: nextOrder(section),
+        isNew: true,
+      };
+    });
+
+    handleImportItems(toImport);
+  }, [markups, handleImportItems]);
+
   // ─── Render ───────────────────────────────────────────────
 
   const fieldClass = 'border border-brand-cream rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper focus:border-brand-brown bg-white text-brand-charcoal w-full';
@@ -384,7 +423,7 @@ export default function AvEstimateBuilder({
           />
 
           {/* Attachments */}
-          <AttachmentsPanel estimateId={estimate.id} />
+          <AttachmentsPanel estimateId={estimate.id} estimateType="av" onPopulateLineItems={handlePopulateFromExtraction} />
         </div>
 
         {/* Right sidebar */}

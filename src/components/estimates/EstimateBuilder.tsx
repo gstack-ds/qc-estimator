@@ -17,7 +17,7 @@ import TravelPanel from './TravelPanel';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
-import type { DbTemplate, ExtractedMenuItem, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
+import type { DbTemplate, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { TravelRefData, DbTrip } from '@/lib/supabase/queries';
 
 // ─── Types ───────────────────────────────────────────────
@@ -358,20 +358,30 @@ export default function EstimateBuilder({
     imported.forEach((item) => setTimeout(() => handleItemSave(item.id), 0));
   }, [handleItemSave]);
 
-  const handlePopulateFromExtraction = useCallback((items: ExtractedMenuItem[]) => {
+  const handlePopulateFromExtraction = useCallback((data: ExtractedData) => {
     const cateringMarkup = markups.find((m) => m.name === 'Catering & F&B');
-    const baseOrder = lineItemsRef.current
-      .filter((li) => li.section === 'F&B')
-      .reduce((max, li) => Math.max(max, li.sortOrder), -1) + 1;
+    const avMarkup = markups.find((m) => m.name === 'AV & Production');
+    const venueMarkup = markups.find((m) => m.name === 'Venues & Room Rentals');
+    const staffingMarkup = markups.find((m) => m.name === 'Staffing & Labor');
 
-    const toImport: LocalLineItem[] = items.map((item, idx) => {
-      const taxType: import('@/types').TaxType =
-        item.category === 'alcohol' ? 'alcohol'
-        : item.category === 'food' ? 'food'
-        : 'none';
-      const tempId = `new-${Date.now()}-${Math.random()}-${idx}`;
-      return {
-        id: tempId,
+    const sectionOrders: Partial<Record<LocalSection, number>> = {};
+    function nextOrder(section: LocalSection): number {
+      if (sectionOrders[section] === undefined) {
+        sectionOrders[section] = lineItemsRef.current
+          .filter((li) => li.section === section)
+          .reduce((max, li) => Math.max(max, li.sortOrder), -1) + 1;
+      }
+      const order = sectionOrders[section] as number;
+      sectionOrders[section] = order + 1;
+      return order;
+    }
+
+    const toImport: LocalLineItem[] = [];
+
+    data.menuItems.forEach((item) => {
+      const taxType: TaxType = item.category === 'alcohol' ? 'alcohol' : item.category === 'food' ? 'food' : 'none';
+      toImport.push({
+        id: `new-${Date.now()}-${Math.random()}`,
         section: 'F&B',
         name: item.name,
         qty: program.guest_count,
@@ -380,10 +390,43 @@ export default function EstimateBuilder({
         defaultMarkupPct: cateringMarkup?.markup_pct ?? 0.55,
         categoryMarkupPct: cateringMarkup?.markup_pct ?? 0.55,
         taxType,
-        sortOrder: baseOrder + idx,
+        sortOrder: nextOrder('F&B'),
         isNew: true,
-      };
+      });
     });
+
+    (data.equipmentItems ?? []).forEach((item) => {
+      let section: LocalSection;
+      let markup: typeof avMarkup;
+      let taxType: TaxType;
+      if (item.section === 'venue_fee') {
+        section = 'Venue Fees';
+        markup = venueMarkup;
+        taxType = 'general';
+      } else if (item.section === 'staffing') {
+        section = 'Non-Taxable Staffing';
+        markup = staffingMarkup;
+        taxType = 'none';
+      } else {
+        section = 'Equipment & Staffing';
+        markup = avMarkup;
+        taxType = 'general';
+      }
+      toImport.push({
+        id: `new-${Date.now()}-${Math.random()}`,
+        section,
+        name: item.name,
+        qty: item.qty,
+        unitPrice: item.unitPrice,
+        categoryId: markup?.id ?? null,
+        defaultMarkupPct: markup?.markup_pct ?? 0.5,
+        categoryMarkupPct: markup?.markup_pct ?? 0.5,
+        taxType,
+        sortOrder: nextOrder(section),
+        isNew: true,
+      });
+    });
+
     handleImportItems(toImport);
   }, [markups, program.guest_count, handleImportItems]);
 

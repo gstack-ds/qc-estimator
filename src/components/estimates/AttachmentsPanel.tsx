@@ -8,12 +8,12 @@ import {
   extractAttachmentData,
   type AttachmentRecord,
   type ExtractedData,
-  type ExtractedMenuItem,
 } from '@/app/(programs)/programs/[id]/estimates/actions';
 
 interface Props {
   estimateId: string;
-  onPopulateLineItems?: (items: ExtractedMenuItem[]) => void;
+  estimateType?: 'venue' | 'av' | 'decor';
+  onPopulateLineItems?: (data: ExtractedData) => void;
   onPopulateEstimateDetails?: (data: ExtractedData) => void;
 }
 
@@ -53,7 +53,7 @@ function buildCanvaCopyText(data: ExtractedData): string {
   return lines.join('\n').trim();
 }
 
-export default function AttachmentsPanel({ estimateId, onPopulateLineItems, onPopulateEstimateDetails }: Props) {
+export default function AttachmentsPanel({ estimateId, estimateType = 'venue', onPopulateLineItems, onPopulateEstimateDetails }: Props) {
   const [records, setRecords] = useState<AttachmentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -115,7 +115,7 @@ export default function AttachmentsPanel({ estimateId, onPopulateLineItems, onPo
 
   async function triggerExtraction(attachmentId: string) {
     setExtractionState((prev) => ({ ...prev, [attachmentId]: { status: 'extracting' } }));
-    const { error: extractErr, data } = await extractAttachmentData(attachmentId);
+    const { error: extractErr, data } = await extractAttachmentData(attachmentId, estimateType);
     if (extractErr || !data) {
       setExtractionState((prev) => ({
         ...prev,
@@ -259,7 +259,7 @@ export default function AttachmentsPanel({ estimateId, onPopulateLineItems, onPo
                         onClick={() => triggerExtraction(rec.id)}
                         className="text-xs text-brand-copper hover:underline"
                       >
-                        Extract menu data
+                        {estimateType === 'av' ? 'Extract AV data' : estimateType === 'decor' ? 'Extract decor data' : 'Extract menu data'}
                       </button>
                     )}
 
@@ -268,7 +268,7 @@ export default function AttachmentsPanel({ estimateId, onPopulateLineItems, onPo
                         attachmentId={rec.id}
                         data={extraction.data}
                         onCopyToCanva={() => handleCopyToCanva(rec.id, extraction.data)}
-                        onPopulateLineItems={onPopulateLineItems ? () => onPopulateLineItems(extraction.data.menuItems) : undefined}
+                        onPopulateLineItems={onPopulateLineItems ? () => onPopulateLineItems(extraction.data) : undefined}
                         onPopulateEstimateDetails={onPopulateEstimateDetails ? () => handlePopulateDetails(rec.id, extraction.data) : undefined}
                         copied={copiedId === rec.id}
                         detailsToast={detailsToast?.id === rec.id ? detailsToast.msg : undefined}
@@ -297,11 +297,12 @@ interface ExtractionResultPanelProps {
 
 function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, onPopulateEstimateDetails, copied, detailsToast }: ExtractionResultPanelProps) {
   const hasItems = data.menuItems.length > 0;
+  const hasEquipment = (data.equipmentItems?.length ?? 0) > 0;
   const hasFees = data.venueFees.length > 0;
   const hasEstimateDetails = hasFees || !!data.venueName || !!data.roomSpace;
 
-  if (!hasItems && !hasFees && !data.venueName && !data.roomSpace) {
-    return <p className="text-xs text-brand-silver">No menu data found in this PDF.</p>;
+  if (!hasItems && !hasEquipment && !hasFees && !data.venueName && !data.roomSpace) {
+    return <p className="text-xs text-brand-silver">No data found in this PDF.</p>;
   }
 
   return (
@@ -314,7 +315,7 @@ function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, onPop
         >
           {copied ? 'Copied!' : 'Copy to Canva'}
         </button>
-        {onPopulateLineItems && hasItems && (
+        {onPopulateLineItems && (hasItems || hasEquipment) && (
           <button
             onClick={onPopulateLineItems}
             className="text-xs px-2 py-0.5 rounded border border-brand-copper/40 bg-brand-copper/5 hover:bg-brand-copper/10 text-brand-copper transition-colors"
@@ -363,6 +364,39 @@ function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, onPop
                   <td className="px-2 py-1 text-brand-silver capitalize">
                     {item.category === 'na_beverage' ? 'NA bev' : item.category}
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Equipment / AV / Decor items */}
+      {hasEquipment && (
+        <div className="rounded border border-brand-cream overflow-hidden">
+          <table className="w-full text-xs">
+            <thead className="bg-brand-offwhite">
+              <tr>
+                <th className="text-left px-2 py-1 text-brand-charcoal/60 font-medium">Item</th>
+                <th className="text-right px-2 py-1 text-brand-charcoal/60 font-medium w-12">Qty</th>
+                <th className="text-right px-2 py-1 text-brand-charcoal/60 font-medium w-20">Unit Price</th>
+                <th className="text-left px-2 py-1 text-brand-charcoal/60 font-medium w-20">Section</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.equipmentItems.map((item, i) => (
+                <tr key={i} className="border-t border-brand-cream/60">
+                  <td className="px-2 py-1">
+                    <span className="font-medium text-brand-charcoal">{item.name}</span>
+                    {item.description && (
+                      <span className="block text-brand-silver truncate max-w-[200px]" title={item.description}>
+                        {item.description}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-2 py-1 text-right text-brand-charcoal tabular-nums">{item.qty}</td>
+                  <td className="px-2 py-1 text-right text-brand-charcoal tabular-nums">${item.unitPrice.toFixed(2)}</td>
+                  <td className="px-2 py-1 text-brand-silver capitalize">{item.section.replace('_', ' ')}</td>
                 </tr>
               ))}
             </tbody>

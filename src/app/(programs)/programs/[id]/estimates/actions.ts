@@ -234,6 +234,14 @@ export interface ExtractedMenuItem {
   category: 'food' | 'alcohol' | 'na_beverage';
 }
 
+export interface ExtractedEquipmentItem {
+  name: string;
+  description?: string;
+  unitPrice: number;
+  qty: number;
+  section: 'equipment' | 'venue_fee' | 'staffing' | 'labor' | 'florals' | 'rentals' | 'lighting' | 'signage' | 'delivery';
+}
+
 export interface ExtractedVenueFee {
   name: string;
   value: number;
@@ -242,6 +250,7 @@ export interface ExtractedVenueFee {
 
 export interface ExtractedData {
   menuItems: ExtractedMenuItem[];
+  equipmentItems: ExtractedEquipmentItem[];
   venueFees: ExtractedVenueFee[];
   venueName?: string;
   roomSpace?: string;
@@ -343,18 +352,43 @@ export async function deleteAttachment(id: string, storagePath: string): Promise
   return { error: null };
 }
 
-const EXTRACTION_PROMPT =
-  'Extract all menu items, prices, and descriptions from this venue menu. ' +
-  'Also extract any venue fees mentioned (service charge, gratuity, admin fee, F&B minimum, room rental), ' +
-  'plus the venue name and room/space name if present. ' +
-  'Return ONLY valid JSON with these fields: ' +
-  'venueName (string, optional), roomSpace (string, optional), ' +
-  'menuItems (array: name, description, pricePerPerson, category: food|alcohol|na_beverage), ' +
-  'venueFees (array: name, value, type: percentage|flat). ' +
-  'No markdown, no explanation — raw JSON only.';
+function getExtractionPrompt(type: 'venue' | 'av' | 'decor'): string {
+  if (type === 'av') {
+    return (
+      'Extract all audio/visual equipment, labor, and production line items from this AV proposal or BEO. ' +
+      'Return ONLY valid JSON with one field: ' +
+      'avItems (array: name, description, unitPrice, qty, section: equipment|labor) ' +
+      'where section=equipment for gear/hardware and section=labor for crew/technician fees. ' +
+      'No markdown, no explanation — raw JSON only.'
+    );
+  }
+  if (type === 'decor') {
+    return (
+      'Extract all decor, floral, rental, and design line items from this proposal or BEO. ' +
+      'Return ONLY valid JSON with one field: ' +
+      'decorItems (array: name, description, unitPrice, qty, section: florals|rentals|lighting|signage|delivery) ' +
+      'where florals=flowers/plants/arrangements, rentals=furniture/chairs/tables/linens, ' +
+      'lighting=uplighting/pin spots/candles, signage=printed/custom signage, delivery=setup/strike/delivery fees. ' +
+      'No markdown, no explanation — raw JSON only.'
+    );
+  }
+  return (
+    'Extract all menu items, prices, equipment, staffing, and fees from this BEO or venue proposal. ' +
+    'Also extract any venue fees mentioned (service charge, gratuity, admin fee, F&B minimum, room rental), ' +
+    'plus the venue name and room/space name if present. ' +
+    'Return ONLY valid JSON with these fields: ' +
+    'venueName (string, optional), roomSpace (string, optional), ' +
+    'menuItems (array: name, description, pricePerPerson, category: food|alcohol|na_beverage), ' +
+    'equipmentItems (array: name, description, unitPrice, qty, section: equipment|venue_fee|staffing) ' +
+    'where equipment=AV/lighting/tech rentals, venue_fee=room rental/facility charges, staffing=banquet staff/setup labor, ' +
+    'venueFees (array: name, value, type: percentage|flat). ' +
+    'No markdown, no explanation — raw JSON only.'
+  );
+}
 
 export async function extractAttachmentData(
   attachmentId: string,
+  estimateType: 'venue' | 'av' | 'decor' = 'venue',
 ): Promise<{ error: string | null; data: ExtractedData | null }> {
   const supabase = await createClient();
 
@@ -380,7 +414,7 @@ export async function extractAttachmentData(
       type: 'document',
       source: { type: 'base64', media_type: 'application/pdf', data: base64 },
     };
-    const textBlock: TextBlockParam = { type: 'text', text: EXTRACTION_PROMPT };
+    const textBlock: TextBlockParam = { type: 'text', text: getExtractionPrompt(estimateType) };
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
@@ -394,9 +428,17 @@ export async function extractAttachmentData(
   let extracted: ExtractedData;
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    extracted = JSON.parse(jsonMatch?.[0] ?? text) as ExtractedData;
-    if (!Array.isArray(extracted.menuItems)) extracted.menuItems = [];
-    if (!Array.isArray(extracted.venueFees)) extracted.venueFees = [];
+    const raw = JSON.parse(jsonMatch?.[0] ?? text) as Record<string, unknown>;
+    extracted = {
+      menuItems: Array.isArray(raw.menuItems) ? raw.menuItems as ExtractedMenuItem[] : [],
+      equipmentItems: Array.isArray(raw.equipmentItems) ? raw.equipmentItems as ExtractedEquipmentItem[]
+        : Array.isArray(raw.avItems) ? raw.avItems as ExtractedEquipmentItem[]
+        : Array.isArray(raw.decorItems) ? raw.decorItems as ExtractedEquipmentItem[]
+        : [],
+      venueFees: Array.isArray(raw.venueFees) ? raw.venueFees as ExtractedVenueFee[] : [],
+      venueName: typeof raw.venueName === 'string' ? raw.venueName : undefined,
+      roomSpace: typeof raw.roomSpace === 'string' ? raw.roomSpace : undefined,
+    };
   } catch {
     return { error: 'Could not parse extraction response', data: null };
   }

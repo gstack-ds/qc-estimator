@@ -11,7 +11,7 @@ import LineItemSection from './LineItemSection';
 import DecorSummaryPanel from './DecorSummaryPanel';
 import MarginPanel from './MarginPanel';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
-import type { DbTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
+import type { DbTemplate, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { LocalLineItem, LocalSection } from './EstimateBuilder';
 import TravelPanel from './TravelPanel';
 import AttachmentsPanel from './AttachmentsPanel';
@@ -336,6 +336,59 @@ export default function DecorEstimateBuilder({
     imported.forEach((item) => setTimeout(() => handleItemSave(item.id), 0));
   }, [handleItemSave]);
 
+  const handlePopulateFromExtraction = useCallback((data: ExtractedData) => {
+    const decorMarkup = markups.find((m) => m.name === 'Décor & Design');
+    const deliveryMarkup = markups.find((m) => m.name === 'Delivery & Logistics');
+
+    const sectionOrders: Partial<Record<LocalSection, number>> = {};
+    function nextOrder(section: LocalSection): number {
+      if (sectionOrders[section] === undefined) {
+        sectionOrders[section] = lineItemsRef.current
+          .filter((li) => li.section === section)
+          .reduce((max, li) => Math.max(max, li.sortOrder), -1) + 1;
+      }
+      const order = sectionOrders[section] as number;
+      sectionOrders[section] = order + 1;
+      return order;
+    }
+
+    const toImport: LocalLineItem[] = (data.equipmentItems ?? []).map((item) => {
+      let section: LocalSection;
+      let markup: typeof decorMarkup;
+      let taxType: TaxType;
+
+      if (item.section === 'delivery') {
+        section = 'Florals - Non-Taxable';
+        markup = deliveryMarkup;
+        taxType = 'none';
+      } else if (item.section === 'rentals') {
+        section = 'Rentals - Rugs & Accessories';
+        markup = decorMarkup;
+        taxType = 'general';
+      } else {
+        section = 'Florals - Taxable';
+        markup = decorMarkup;
+        taxType = 'general';
+      }
+
+      return {
+        id: `new-${Date.now()}-${Math.random()}`,
+        section,
+        name: item.name,
+        qty: item.qty,
+        unitPrice: item.unitPrice,
+        categoryId: markup?.id ?? null,
+        defaultMarkupPct: markup?.markup_pct ?? 0.85,
+        categoryMarkupPct: markup?.markup_pct ?? 0.85,
+        taxType,
+        sortOrder: nextOrder(section),
+        isNew: true,
+      };
+    });
+
+    handleImportItems(toImport);
+  }, [markups, handleImportItems]);
+
   function toggleSection(section: LocalSection) {
     setOpenMap((prev) => ({ ...prev, [section]: !prev[section] }));
   }
@@ -489,7 +542,7 @@ export default function DecorEstimateBuilder({
           />
 
           {/* Attachments */}
-          <AttachmentsPanel estimateId={estimate.id} />
+          <AttachmentsPanel estimateId={estimate.id} estimateType="decor" onPopulateLineItems={handlePopulateFromExtraction} />
         </div>
 
         {/* Right sidebar */}
