@@ -4,54 +4,67 @@
 
 ### Bug 1: Client commission resets to 5% — FIXED
 - Root cause: `parseFloat(clientComm) / 100 || 0.05` — JS treats `0` as falsy, so 0% always saved as 5%.
-- Same bug in `cc_processing_fee` (`|| 0.035`).
 - Fix: replaced `|| fallback` with `isNaN(v) ? fallback : v / 100` in both `onBlur` handlers and `handleCreate` in `ProgramForm.tsx`.
 
 ### Bug 2: Category selections reset to "none" — FIXED
-- Root cause: stale closure in all three builders. The `onChange` inline handler captured `handleItemSave` from the current render (with old `lineItems`). When `setTimeout(() => handleItemSave(id), 0)` fired, it called the stale function which found the item with the old `categoryId: null`.
-- Fix: added `lineItemsRef` pattern to `EstimateBuilder`, `AvEstimateBuilder`, `DecorEstimateBuilder`. All three now use `lineItemsRef.current` inside `handleItemSave`, `handleItemDelete`, and `handleAddItem` instead of the closed-over `lineItems` state. Removed `lineItems` from those `useCallback` deps.
+- Root cause: stale closure in all three builders. Fix: `lineItemsRef` pattern in `EstimateBuilder`, `AvEstimateBuilder`, `DecorEstimateBuilder`.
 
 ### Feature 1: Copy Line Items export — DONE
-- Added `buildLineItemsCopyText()` to `src/lib/utils/export.ts` — outputs tab-separated rows: Item Name / Qty / Unit Price / Total. Client-facing prices only (no internal cost or markup).
-- Added "Copy Line Items" button to `ExportButtons.tsx` (sits between Copy Numbers and Export to Excel).
+- `buildLineItemsCopyText()` in `src/lib/utils/export.ts`. "Copy Line Items" button in `ExportButtons.tsx`.
 
 ### Feature 2: Line Item Templates — DONE
-- Migration `007_line_item_templates.sql`: creates `line_item_templates` table with RLS (authenticated read all; own insert/delete). **NOT YET APPLIED TO SUPABASE.**
-- Server actions in estimates `actions.ts`: `getTemplates()`, `saveTemplate()`, `deleteTemplate()`.
-- `TemplatePickerDropdown.tsx`: lazy-loads templates when opened, searchable, click-to-add, delete (own templates, hover-to-reveal).
-- `LineItemRow.tsx`: added `onSaveAsTemplate` optional prop + star (☆/★) icon in new 9th column. Saves name/category/unit price/tax type.
-- `LineItemSection.tsx`: added `onAddFromTemplate` optional prop + "+ From template" button that opens the picker. Header columns updated to match 9-column layout.
-- All three builders: wired `handleSaveAsTemplate` and `handleAddFromTemplate` callbacks into `LineItemSection`.
+- Migration `007_line_item_templates.sql`. Server actions: `getTemplates()`, `saveTemplate()`, `deleteTemplate()`.
+- `TemplatePickerDropdown.tsx`, star icon in `LineItemRow.tsx`, "+ From template" in `LineItemSection.tsx`.
 
 ### Feature 3: Copy Items From — DONE
-- Server action `getLineItemsForEstimate(estimateId)` in estimates `actions.ts`.
-- `CopyItemsFromButton.tsx`: dropdown of other estimates in same program; hidden when none exist. Selecting one fetches line items and calls `onImport` with converted `LocalLineItem[]`.
-- All three builders: wired `handleImportItems` callback. Button placed in header bar before ExportButtons.
+- `getLineItemsForEstimate()` server action. `CopyItemsFromButton.tsx` dropdown, wired in all three builders.
 
-### Feature 4: Claude API PDF Extraction — DONE
-- `@anthropic-ai/sdk` installed (v0.91.1).
-- Migration `008_extracted_data.sql`: adds `extracted_data JSONB` to `estimate_attachments`. **NOT YET APPLIED TO SUPABASE.**
-- New types in `actions.ts`: `ExtractedMenuItem`, `ExtractedVenueFee`, `ExtractedData`.
-- `AttachmentRecord` updated to include `extracted_data`.
-- Server action `extractAttachmentData(attachmentId)`: downloads PDF from Supabase Storage → base64 → `claude-sonnet-4-6` with document block → parses JSON → stores in DB.
-- `AttachmentsPanel.tsx` fully rewritten: auto-triggers extraction on PDF upload, per-record state (idle/extracting/error/done), seeded from DB on load, "Extract menu data" link for existing PDFs, retry on error, results table (menu items + venue fees), "Copy to Canva" button, "Populate Line Items" button (optional prop).
-- `EstimateBuilder.tsx`: new `handlePopulateFromExtraction` callback — maps extracted items to `LocalLineItem[]` (Catering & F&B markup, `program.guest_count` as qty, food/alcohol/none tax types), wired into `AttachmentsPanel`. AV and Decor builders do not wire this prop (button hidden).
+### Feature 4: Claude API PDF Extraction (Venue Estimates) — DONE
+- Migration `008_extracted_data.sql`: adds `extracted_data JSONB` to `estimate_attachments`.
+- `extractAttachmentData()` server action: downloads PDF → base64 → `claude-sonnet-4-6` → stores JSON in DB.
+- `AttachmentsPanel.tsx`: auto-triggers extraction on PDF upload, seeds results from DB on page load.
+
+### Feature 5: PDF Brief Extraction on New Program Page — DONE
+- Migration `009_program_attachments.sql`: creates `program_attachments` table with `extracted_data JSONB`.
+- `extractProgramBrief()` + `uploadProgramAttachment()` server actions in `programs/actions.ts`.
+- `ProgramForm.tsx`: dropzone at top (create mode only), auto-fills fields, green toast.
+
+### Feature 6: Populate Estimate Details — DONE
+- "Populate Estimate Details" button in `AttachmentsPanel.tsx` fills Estimate Name, Room/Space, F&B Minimum, Service Charge, Gratuity, Admin Fee from extracted PDF data.
+
+### Feature 7: Estimate-Type-Aware PDF Extraction — DONE
+- Three extraction prompts: venue (menuItems + equipmentItems + venueFees), AV (avItems → equipmentItems), Decor (decorItems → equipmentItems).
+- `ExtractedEquipmentItem.section` covers all item types across all three estimate types.
+- `AttachmentsPanel` passes `estimateType` to `extractAttachmentData`; displays equipment/AV/decor table alongside menu items table.
+- `AvEstimateBuilder`: `handlePopulateFromExtraction` maps equipment→Equipment & Staffing/AV markup, labor→Non-Taxable Staffing/Staffing markup.
+- `DecorEstimateBuilder`: maps florals/lighting/signage→Florals-Taxable/Décor markup, rentals→Rentals-Rugs/Décor markup, delivery→Florals-Non-Taxable/Delivery markup.
+- `EstimateBuilder`: handles both menuItems (→F&B) and equipmentItems (→Equipment/Venue Fees/Non-Taxable Staffing).
+
+### Bug 3: Extraction results not persisting across page loads — FIXED
+- Root cause: the seeding code in `load()` was correct, but auto-trigger on upload was overwriting in-memory state before users could verify the flow. Also added "✓ AI extracted" badge so users can see data loaded from DB.
+- Fix: seeding in `load()` always renders stored DB results. Auto-trigger on upload is guarded by `record.extracted_data === null` (always true for new uploads since insert never sets it). Manual "Extract" link remains for attachments without stored data.
+
+### Bug 4: Duplicate populate actions — FIXED
+- `populatedLineItems` and `populatedDetails` Sets track which attachments have been actioned.
+- Buttons switch to "Line Items Added ✓" / "Details Applied ✓" (green, disabled) after first click.
+- Both sets reset when `triggerExtraction` is called for that attachment (re-extraction = fresh state).
 
 ## Current State
-- 74 tests passing (no new tests added — all new logic is UI/integration layer)
+- 74 tests passing (no new tests — all new logic is UI/integration layer)
 - TypeScript: no errors
-- Branch: `fix/commission-and-category-persist` (5 commits ahead of main)
+- Branch: `fix/commission-and-category-persist` (11 commits ahead of main)
 
 ## ⚠️ Migrations Needed — BLOCKING
 Apply in Supabase SQL Editor before testing new features:
 1. `007_line_item_templates.sql` — templates + copy items from
-2. `008_extracted_data.sql` — PDF extraction
+2. `008_extracted_data.sql` — PDF extraction on estimate attachments
+3. `009_program_attachments.sql` — PDF brief upload on New Program page
 
 Also add `ANTHROPIC_API_KEY` to `.env.local` and Vercel env vars.
 
 ## Known Issues / Next Steps
 - **Merge PR** when ready: `fix/commission-and-category-persist`
-- **Apply migrations** 007 and 008 in Supabase
+- **Apply migrations** 007, 008, 009 in Supabase
 - **Add ANTHROPIC_API_KEY** to env
 - **Remaining from PRD**:
   - Validate against 3-5 real historical proposals
