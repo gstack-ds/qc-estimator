@@ -62,6 +62,8 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
   const [extractionState, setExtractionState] = useState<Record<string, ExtractionStatus>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [detailsToast, setDetailsToast] = useState<{ id: string; msg: string } | null>(null);
+  const [populatedLineItems, setPopulatedLineItems] = useState<Set<string>>(new Set());
+  const [populatedDetails, setPopulatedDetails] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -106,14 +108,12 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
 
     if (record) {
       setRecords((prev) => [record, ...prev]);
-
-      if (record.mime_type === 'application/pdf') {
-        triggerExtraction(record.id);
-      }
     }
   }
 
   async function triggerExtraction(attachmentId: string) {
+    setPopulatedLineItems((prev) => { const s = new Set(prev); s.delete(attachmentId); return s; });
+    setPopulatedDetails((prev) => { const s = new Set(prev); s.delete(attachmentId); return s; });
     setExtractionState((prev) => ({ ...prev, [attachmentId]: { status: 'extracting' } }));
     const { error: extractErr, data } = await extractAttachmentData(attachmentId, estimateType);
     if (extractErr || !data) {
@@ -138,8 +138,16 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
         delete next[record.id];
         return next;
       });
+      setPopulatedLineItems((prev) => { const s = new Set(prev); s.delete(record.id); return s; });
+      setPopulatedDetails((prev) => { const s = new Set(prev); s.delete(record.id); return s; });
     }
     setDeletingId(null);
+  }
+
+  function handlePopulateLineItems(attachmentId: string, data: ExtractedData) {
+    if (!onPopulateLineItems) return;
+    onPopulateLineItems(data);
+    setPopulatedLineItems((prev) => new Set([...prev, attachmentId]));
   }
 
   function handlePopulateDetails(attachmentId: string, data: ExtractedData) {
@@ -153,6 +161,7 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
     if (fees.some((f) => f.name.toLowerCase().includes('gratuity'))) count++;
     if (fees.some((f) => f.name.toLowerCase().includes('admin'))) count++;
     onPopulateEstimateDetails(data);
+    setPopulatedDetails((prev) => new Set([...prev, attachmentId]));
     const msg = count > 0
       ? `Populated ${count} estimate field${count !== 1 ? 's' : ''}.`
       : 'No estimate fields found in this PDF.';
@@ -216,6 +225,11 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
                   >
                     {rec.file_name}
                   </a>
+                  {extraction.status === 'done' && (
+                    <span className="text-[10px] font-medium text-green-700 bg-green-50 border border-green-100 rounded px-1.5 py-0.5 flex-shrink-0 whitespace-nowrap">
+                      ✓ AI extracted
+                    </span>
+                  )}
                   <span className="text-xs text-brand-silver flex-shrink-0 whitespace-nowrap">
                     {formatFileSize(rec.file_size)} · {formatDate(rec.created_at)}
                   </span>
@@ -268,10 +282,12 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
                         attachmentId={rec.id}
                         data={extraction.data}
                         onCopyToCanva={() => handleCopyToCanva(rec.id, extraction.data)}
-                        onPopulateLineItems={onPopulateLineItems ? () => onPopulateLineItems(extraction.data) : undefined}
+                        onPopulateLineItems={onPopulateLineItems ? () => handlePopulateLineItems(rec.id, extraction.data) : undefined}
                         onPopulateEstimateDetails={onPopulateEstimateDetails ? () => handlePopulateDetails(rec.id, extraction.data) : undefined}
                         copied={copiedId === rec.id}
                         detailsToast={detailsToast?.id === rec.id ? detailsToast.msg : undefined}
+                        lineItemsPopulated={populatedLineItems.has(rec.id)}
+                        detailsPopulated={populatedDetails.has(rec.id)}
                       />
                     )}
                   </div>
@@ -293,9 +309,11 @@ interface ExtractionResultPanelProps {
   onPopulateEstimateDetails?: () => void;
   copied: boolean;
   detailsToast?: string;
+  lineItemsPopulated: boolean;
+  detailsPopulated: boolean;
 }
 
-function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, onPopulateEstimateDetails, copied, detailsToast }: ExtractionResultPanelProps) {
+function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, onPopulateEstimateDetails, copied, detailsToast, lineItemsPopulated, detailsPopulated }: ExtractionResultPanelProps) {
   const hasItems = data.menuItems.length > 0;
   const hasEquipment = (data.equipmentItems?.length ?? 0) > 0;
   const hasFees = data.venueFees.length > 0;
@@ -317,18 +335,26 @@ function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, onPop
         </button>
         {onPopulateLineItems && (hasItems || hasEquipment) && (
           <button
-            onClick={onPopulateLineItems}
-            className="text-xs px-2 py-0.5 rounded border border-brand-copper/40 bg-brand-copper/5 hover:bg-brand-copper/10 text-brand-copper transition-colors"
+            onClick={lineItemsPopulated ? undefined : onPopulateLineItems}
+            disabled={lineItemsPopulated}
+            className={lineItemsPopulated
+              ? 'text-xs px-2 py-0.5 rounded border border-green-200 bg-green-50 text-green-700 cursor-default'
+              : 'text-xs px-2 py-0.5 rounded border border-brand-copper/40 bg-brand-copper/5 hover:bg-brand-copper/10 text-brand-copper transition-colors'
+            }
           >
-            Populate Line Items
+            {lineItemsPopulated ? 'Line Items Added ✓' : 'Populate Line Items'}
           </button>
         )}
         {onPopulateEstimateDetails && hasEstimateDetails && (
           <button
-            onClick={onPopulateEstimateDetails}
-            className="text-xs px-2 py-0.5 rounded border border-brand-copper/40 bg-brand-copper/5 hover:bg-brand-copper/10 text-brand-copper transition-colors"
+            onClick={detailsPopulated ? undefined : onPopulateEstimateDetails}
+            disabled={detailsPopulated}
+            className={detailsPopulated
+              ? 'text-xs px-2 py-0.5 rounded border border-green-200 bg-green-50 text-green-700 cursor-default'
+              : 'text-xs px-2 py-0.5 rounded border border-brand-copper/40 bg-brand-copper/5 hover:bg-brand-copper/10 text-brand-copper transition-colors'
+            }
           >
-            Populate Estimate Details
+            {detailsPopulated ? 'Details Applied ✓' : 'Populate Estimate Details'}
           </button>
         )}
       </div>
