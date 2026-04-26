@@ -8,12 +8,13 @@ interface Props {
   programId: string;
 }
 
-type EstimateType = 'venue' | 'av' | 'decor';
+type EstimateType = 'venue' | 'av' | 'decor' | 'transportation';
 
 const TYPE_LABELS: Record<EstimateType, string> = {
   venue: 'Venue',
   av: 'AV',
   decor: 'Decor',
+  transportation: 'Transportation',
 };
 
 export default function AddEstimateButton({ programId }: Props) {

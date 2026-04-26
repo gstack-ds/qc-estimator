@@ -36,6 +36,7 @@ export default function ComparisonView({ programId, cards: initialCards }: Props
     { type: 'venue', label: 'Venue Options' },
     { type: 'av', label: 'AV Options' },
     { type: 'decor', label: 'Decor Options' },
+    { type: 'transportation', label: 'Transportation Options' },
   ];
 
   const groups = TYPE_ORDER

@@ -12,7 +12,7 @@ import {
 
 interface Props {
   estimateId: string;
-  estimateType?: 'venue' | 'av' | 'decor';
+  estimateType?: 'venue' | 'av' | 'decor' | 'transportation';
   onPopulateLineItems?: (data: ExtractedData) => void;
   onPopulateEstimateDetails?: (data: ExtractedData) => void;
 }
@@ -283,7 +283,7 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
                         onClick={() => triggerExtraction(rec.id)}
                         className="text-xs text-brand-copper hover:underline"
                       >
-                        {estimateType === 'av' ? 'Extract AV data' : estimateType === 'decor' ? 'Extract decor data' : 'Extract menu data'}
+                        {estimateType === 'av' ? 'Extract AV data' : estimateType === 'decor' ? 'Extract decor data' : estimateType === 'transportation' ? 'Extract transport data' : 'Extract menu data'}
                       </button>
                     )}
 
@@ -298,6 +298,7 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
                         detailsToast={detailsToast?.id === rec.id ? detailsToast.msg : undefined}
                         lineItemsPopulated={populatedLineItems.has(rec.id)}
                         detailsPopulated={populatedDetails.has(rec.id)}
+                        populateLabel={estimateType === 'transportation' ? 'Populate Schedule' : 'Populate Line Items'}
                       />
                     )}
                   </div>
@@ -321,9 +322,10 @@ interface ExtractionResultPanelProps {
   detailsToast?: string;
   lineItemsPopulated: boolean;
   detailsPopulated: boolean;
+  populateLabel?: string;
 }
 
-function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, onPopulateEstimateDetails, copied, detailsToast, lineItemsPopulated, detailsPopulated }: ExtractionResultPanelProps) {
+function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, onPopulateEstimateDetails, copied, detailsToast, lineItemsPopulated, detailsPopulated, populateLabel = 'Populate Line Items' }: ExtractionResultPanelProps) {
   const hasItems = data.menuItems.length > 0;
   const hasEquipment = (data.equipmentItems?.length ?? 0) > 0;
   const hasFees = data.venueFees.length > 0;
@@ -352,7 +354,7 @@ function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, onPop
               : 'text-xs px-2 py-0.5 rounded border border-brand-copper/40 bg-brand-copper/5 hover:bg-brand-copper/10 text-brand-copper transition-colors'
             }
           >
-            {lineItemsPopulated ? 'Line Items Added ✓' : 'Populate Line Items'}
+            {lineItemsPopulated ? `${populateLabel} ✓` : populateLabel}
           </button>
         )}
         {onPopulateEstimateDetails && hasEstimateDetails && (

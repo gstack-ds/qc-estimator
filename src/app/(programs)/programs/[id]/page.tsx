@@ -7,18 +7,21 @@ import {
   getMarkups,
   getTiers,
   getLineItemsForEstimates,
+  getTransportAggregatesForProgram,
   type DbEstimate,
   type DbLineItem,
   type DbMarkup,
   type DbLocation,
   type DbTier,
+  type TransportAggregate,
 } from '@/lib/supabase/queries';
 import ProgramForm from '@/components/estimates/ProgramForm';
 import ComparisonView, { type EstimateCard } from '@/components/estimates/ComparisonView';
 import DeleteProgramButton from '@/components/estimates/DeleteProgramButton';
 import AddEstimateButton from '@/components/estimates/AddEstimateButton';
 import { calculateVenueEstimate, calculateMarginAnalysis } from '@/lib/engine/pricing';
-import type { LineItem, TaxType, ProgramConfig, TeamHoursTier } from '@/types';
+import { calcTransportSummary } from '@/lib/engine/transportation';
+import type { LineItem, TaxType, ProgramConfig, TeamHoursTier, EstimateSummary } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,8 +88,45 @@ function buildEstimateCard(
   items: DbLineItem[],
   markups: DbMarkup[],
   config: ProgramConfig,
-  tiers: TeamHoursTier[]
+  tiers: TeamHoursTier[],
+  transportAggregate?: TransportAggregate,
 ): EstimateCard {
+  if (estimate.type === 'transportation') {
+    const agg = transportAggregate ?? { estimate_id: estimate.id, total_our: 0, total_client: 0 };
+    const transportCommission = estimate.transport_commission ?? 0;
+    const transportSummary = calcTransportSummary(
+      [{ subtotalOur: agg.total_our, subtotalClient: agg.total_client }],
+      config.location.generalTaxRate,
+      config.ccProcessingFee,
+      transportCommission,
+    );
+    const fakeSummary: EstimateSummary = {
+      fbSubtotalOur: 0, fbSubtotalClient: 0, fbFoodSubtotalClient: 0, fbAlcoholSubtotalClient: 0,
+      foodTax: 0, alcoholTax: 0,
+      equipmentSubtotalOur: agg.total_our, equipmentSubtotalClient: agg.total_client, equipmentTax: 0,
+      qcStaffingSubtotalOur: 0, qcStaffingSubtotalClient: 0,
+      venueSubtotalOur: 0, venueSubtotalClient: 0, venueTax: 0,
+      serviceChargeOur: 0, serviceChargeClient: 0, gratuityOur: 0, gratuityClient: 0,
+      adminFeeOur: 0, adminFeeClient: 0,
+      subtotalOur: agg.total_our, subtotalClient: agg.total_client,
+      productionFee: transportSummary.productionFee,
+      totalOur: agg.total_our, totalClient: transportSummary.totalClient,
+      pricePerPerson: 0, fbMinimumMet: true, fbShortfall: 0,
+    };
+    const transportConfig: ProgramConfig = { ...config, clientCommission: transportCommission, gdpCommissionEnabled: false, thirdPartyCommissions: [] };
+    const margin = calculateMarginAnalysis(fakeSummary, transportConfig, tiers);
+    return {
+      id: estimate.id,
+      name: estimate.name,
+      type: estimate.type,
+      total: transportSummary.totalClient,
+      pricePerPerson: config.guestCount > 0 ? Math.ceil(transportSummary.totalClient / config.guestCount) : 0,
+      lineItemCount: 0,
+      includeInBudget: estimate.include_in_budget,
+      qcMarginPct: margin.qcMarginPct,
+    };
+  }
+
   const lineItems = buildLineItems(items, markups);
   const sc = estimate.service_charge_override ?? config.serviceChargeDefault;
   const gr = estimate.gratuity_override ?? config.gratuityDefault;
@@ -141,12 +181,16 @@ export default async function ProgramPage({ params }: Props) {
   if (!program) notFound();
 
   const estimateIds = estimates.map((e) => e.id);
-  const allLineItems = await getLineItemsForEstimates(estimateIds);
+  const [allLineItems, transportAggregates] = await Promise.all([
+    getLineItemsForEstimates(estimateIds),
+    getTransportAggregatesForProgram(id),
+  ]);
   const programConfig = buildProgramConfig(program, program.location);
 
   const cards: EstimateCard[] = estimates.map((est) => {
     const items = allLineItems.filter((li) => li.estimate_id === est.id);
-    return buildEstimateCard(est, items, markups, programConfig, tiers);
+    const transportAgg = transportAggregates.find((a) => a.estimate_id === est.id);
+    return buildEstimateCard(est, items, markups, programConfig, tiers, transportAgg);
   });
 
   return (

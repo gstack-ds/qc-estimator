@@ -352,7 +352,7 @@ export async function deleteAttachment(id: string, storagePath: string): Promise
   return { error: null };
 }
 
-function getExtractionPrompt(type: 'venue' | 'av' | 'decor'): string {
+function getExtractionPrompt(type: 'venue' | 'av' | 'decor' | 'transportation'): string {
   if (type === 'av') {
     return (
       'Extract all audio/visual equipment, labor, and production line items from this AV proposal or BEO. ' +
@@ -372,6 +372,16 @@ function getExtractionPrompt(type: 'venue' | 'av' | 'decor'): string {
       'No markdown, no explanation — raw JSON only.'
     );
   }
+  if (type === 'transportation') {
+    return (
+      'Extract all vehicle types, rates, and daily service plans from this transportation quote or proposal. ' +
+      'Return ONLY valid JSON with two fields: ' +
+      'vehicleRates (array: vehicleType (include capacity e.g. "Suburban (6 pax)"), hourlyRate (number), hourMinimum (number or null)) ' +
+      'and scheduleRows (array: serviceDate (YYYY-MM-DD or null), vehicleType (string matching vehicleRates), ' +
+      'serviceType ("hourly" or "transfer"), startTime (HH:MM 24hr or null), endTime (HH:MM 24hr or null), qty (number), notes (string or null)). ' +
+      'No markdown, no explanation — raw JSON only.'
+    );
+  }
   return (
     'Extract all menu items, prices, equipment, staffing, and fees from this BEO or venue proposal. ' +
     'Also extract any venue fees mentioned (service charge, gratuity, admin fee, F&B minimum, room rental), ' +
@@ -388,7 +398,7 @@ function getExtractionPrompt(type: 'venue' | 'av' | 'decor'): string {
 
 export async function extractAttachmentData(
   attachmentId: string,
-  estimateType: 'venue' | 'av' | 'decor' = 'venue',
+  estimateType: 'venue' | 'av' | 'decor' | 'transportation' = 'venue',
 ): Promise<{ error: string | null; data: ExtractedData | null }> {
   const supabase = await createClient();
 
@@ -524,6 +534,85 @@ export async function saveTemplate(data: {
 export async function deleteTemplate(id: string): Promise<{ error: string | null }> {
   const supabase = await createClient();
   const { error } = await supabase.from('line_item_templates').delete().eq('id', id);
+  if (error) return { error: error.message };
+  return { error: null };
+}
+
+// ─── Transportation CRUD ──────────────────────────────────
+
+export async function upsertTransportVehicleRate(data: {
+  id?: string;
+  estimate_id: string;
+  vehicle_type: string;
+  hourly_rate: number;
+  hour_minimum: number | null;
+  sort_order: number;
+}): Promise<{ error: string | null; id: string | null }> {
+  const supabase = await createClient();
+  if (data.id) {
+    const { error } = await supabase
+      .from('transport_vehicle_rates')
+      .update({ vehicle_type: data.vehicle_type, hourly_rate: data.hourly_rate, hour_minimum: data.hour_minimum, sort_order: data.sort_order })
+      .eq('id', data.id);
+    if (error) return { error: error.message, id: null };
+    return { error: null, id: data.id };
+  }
+  const { data: row, error } = await supabase
+    .from('transport_vehicle_rates')
+    .insert({ estimate_id: data.estimate_id, vehicle_type: data.vehicle_type, hourly_rate: data.hourly_rate, hour_minimum: data.hour_minimum, sort_order: data.sort_order })
+    .select('id')
+    .single();
+  if (error) return { error: error.message, id: null };
+  return { error: null, id: row.id as string };
+}
+
+export async function deleteTransportVehicleRate(id: string): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from('transport_vehicle_rates').delete().eq('id', id);
+  if (error) return { error: error.message };
+  return { error: null };
+}
+
+export async function upsertTransportScheduleRow(data: {
+  id?: string;
+  estimate_id: string;
+  service_date: string | null;
+  vehicle_rate_id: string | null;
+  service_type: string;
+  start_time: string | null;
+  end_time: string | null;
+  qty: number;
+  our_cost: number;
+  client_cost: number;
+  notes: string | null;
+  sort_order: number;
+}): Promise<{ error: string | null; id: string | null }> {
+  const supabase = await createClient();
+  const { id, ...rest } = data;
+  if (id) {
+    const { error } = await supabase.from('transport_schedule_rows').update(rest).eq('id', id);
+    if (error) return { error: error.message, id: null };
+    return { error: null, id };
+  }
+  const { data: row, error } = await supabase
+    .from('transport_schedule_rows')
+    .insert(rest)
+    .select('id')
+    .single();
+  if (error) return { error: error.message, id: null };
+  return { error: null, id: row.id as string };
+}
+
+export async function deleteTransportScheduleRow(id: string): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from('transport_schedule_rows').delete().eq('id', id);
+  if (error) return { error: error.message };
+  return { error: null };
+}
+
+export async function updateTransportCommission(estimateId: string, commission: number): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from('estimates').update({ transport_commission: commission }).eq('id', estimateId);
   if (error) return { error: error.message };
   return { error: null };
 }

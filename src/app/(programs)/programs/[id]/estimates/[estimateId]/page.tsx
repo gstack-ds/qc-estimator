@@ -8,10 +8,13 @@ import {
   getTiers,
   getTravelRefs,
   getTripsForEstimate,
+  getTransportVehicleRates,
+  getTransportScheduleRows,
 } from '@/lib/supabase/queries';
 import EstimateBuilder from '@/components/estimates/EstimateBuilder';
 import AvEstimateBuilder from '@/components/estimates/AvEstimateBuilder';
 import DecorEstimateBuilder from '@/components/estimates/DecorEstimateBuilder';
+import TransportationEstimateBuilder from '@/components/estimates/TransportationEstimateBuilder';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +35,29 @@ export default async function EstimatePage({ params }: Props) {
   ]);
 
   if (!program || !estimate) notFound();
+
+  if (estimate.type === 'transportation') {
+    const [initialTrips, vehicleRates, scheduleRows] = await Promise.all([
+      getTripsForEstimate(estimateId),
+      getTransportVehicleRates(estimateId),
+      getTransportScheduleRows(estimateId),
+    ]);
+    return (
+      <div className="h-[calc(100vh-49px)] flex flex-col">
+        <TransportationEstimateBuilder
+          program={program}
+          location={program.location}
+          allEstimates={allEstimates}
+          estimate={estimate}
+          vehicleRates={vehicleRates}
+          scheduleRows={scheduleRows}
+          travelRefs={travelRefs}
+          initialTrips={initialTrips}
+          tiers={tiers}
+        />
+      </div>
+    );
+  }
 
   const [lineItems, initialTrips] = await Promise.all([
     getLineItemsForEstimate(estimateId),

@@ -71,7 +71,7 @@ export async function updateProgram(id: string, data: Partial<{
 
 // ─── Estimates ────────────────────────────────────────────
 
-export async function createEstimate(programId: string, type: 'venue' | 'av' | 'decor' = 'venue') {
+export async function createEstimate(programId: string, type: 'venue' | 'av' | 'decor' | 'transportation' = 'venue') {
   const supabase = await createClient();
 
   // Count existing estimates to set sort_order
@@ -80,7 +80,10 @@ export async function createEstimate(programId: string, type: 'venue' | 'av' | '
     .select('*', { count: 'exact', head: true })
     .eq('program_id', programId);
 
-  const defaultName = type === 'av' ? 'New AV Estimate' : type === 'decor' ? 'New Decor Estimate' : 'New Estimate';
+  const defaultName = type === 'av' ? 'New AV Estimate'
+    : type === 'decor' ? 'New Decor Estimate'
+    : type === 'transportation' ? 'New Transportation Estimate'
+    : 'New Estimate';
 
   const { data: estimate, error } = await supabase
     .from('estimates')
@@ -95,6 +98,7 @@ export async function createEstimate(programId: string, type: 'venue' | 'av' | '
         gratuity_override: 0,
         admin_fee_override: 0,
       } : {}),
+      ...(type === 'transportation' ? { transport_commission: 0 } : {}),
       sort_order: (count ?? 0),
     })
     .select('id')

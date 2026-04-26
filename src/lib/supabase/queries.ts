@@ -172,15 +172,18 @@ export interface DbEstimate {
   sort_order: number;
   venue_contact: string | null;
   menu_notes: string | null;
+  transport_commission: number | null;
   created_at: string;
   updated_at: string;
 }
+
+const ESTIMATE_FIELDS = 'id, program_id, type, name, room_space, fb_minimum, is_venue_taxable, service_charge_override, gratuity_override, admin_fee_override, include_in_budget, sort_order, venue_contact, menu_notes, transport_commission, created_at, updated_at';
 
 export async function getEstimatesForProgram(programId: string): Promise<DbEstimate[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('estimates')
-    .select('id, program_id, type, name, room_space, fb_minimum, is_venue_taxable, service_charge_override, gratuity_override, admin_fee_override, include_in_budget, sort_order, venue_contact, menu_notes, created_at, updated_at')
+    .select(ESTIMATE_FIELDS)
     .eq('program_id', programId)
     .order('sort_order');
   if (error) throw new Error(error.message);
@@ -191,7 +194,7 @@ export async function getEstimate(id: string): Promise<DbEstimate | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('estimates')
-    .select('id, program_id, type, name, room_space, fb_minimum, is_venue_taxable, service_charge_override, gratuity_override, admin_fee_override, include_in_budget, sort_order, venue_contact, menu_notes, created_at, updated_at')
+    .select(ESTIMATE_FIELDS)
     .eq('id', id)
     .single();
   if (error) return null;
@@ -435,4 +438,85 @@ export async function getTravelRefs(): Promise<TravelRefData> {
       getVehicleRates(),
     ]);
   return { driveRoutes, trainRoutes, flightTypes, hotelRates, perDiemRates, vehicleRates };
+}
+
+// ─── Transportation Estimates ─────────────────────────────
+
+export interface DbTransportVehicleRate {
+  id: string;
+  estimate_id: string;
+  vehicle_type: string;
+  hourly_rate: number;
+  hour_minimum: number | null;
+  sort_order: number;
+}
+
+export interface DbTransportScheduleRow {
+  id: string;
+  estimate_id: string;
+  service_date: string | null;
+  vehicle_rate_id: string | null;
+  service_type: string;
+  start_time: string | null;
+  end_time: string | null;
+  qty: number;
+  our_cost: number;
+  client_cost: number;
+  notes: string | null;
+  sort_order: number;
+}
+
+export async function getTransportVehicleRates(estimateId: string): Promise<DbTransportVehicleRate[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('transport_vehicle_rates')
+    .select('id, estimate_id, vehicle_type, hourly_rate, hour_minimum, sort_order')
+    .eq('estimate_id', estimateId)
+    .order('sort_order');
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function getTransportScheduleRows(estimateId: string): Promise<DbTransportScheduleRow[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('transport_schedule_rows')
+    .select('id, estimate_id, service_date, vehicle_rate_id, service_type, start_time, end_time, qty, our_cost, client_cost, notes, sort_order')
+    .eq('estimate_id', estimateId)
+    .order('sort_order');
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export interface TransportAggregate {
+  estimate_id: string;
+  total_our: number;
+  total_client: number;
+}
+
+export async function getTransportAggregatesForProgram(programId: string): Promise<TransportAggregate[]> {
+  const supabase = await createClient();
+  const { data: estimates } = await supabase
+    .from('estimates')
+    .select('id')
+    .eq('program_id', programId)
+    .eq('type', 'transportation');
+
+  if (!estimates || estimates.length === 0) return [];
+
+  const ids = estimates.map((e) => e.id);
+  const { data, error } = await supabase
+    .from('transport_schedule_rows')
+    .select('estimate_id, our_cost, client_cost')
+    .in('estimate_id', ids);
+
+  if (error || !data) return [];
+
+  const map: Record<string, { total_our: number; total_client: number }> = {};
+  for (const row of data) {
+    if (!map[row.estimate_id]) map[row.estimate_id] = { total_our: 0, total_client: 0 };
+    map[row.estimate_id].total_our += row.our_cost;
+    map[row.estimate_id].total_client += row.client_cost;
+  }
+  return Object.entries(map).map(([estimate_id, v]) => ({ estimate_id, ...v }));
 }
