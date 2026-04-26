@@ -165,6 +165,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-04-03 | Travel Expenses as full-width section below line items | Sidebar (288px) was too narrow for trip fields to be usable. Three trips render in 3-column grid at full width. Sidebar now contains only Summary + Margin Analysis. | Sidebar placement (rejected — unusable), separate travel page |
 | 2026-04-03 | ComparisonView groups cards by type | Lowest/Best Margin badges should only compare within the same category (venue vs venue, AV vs AV). Cross-type comparison is meaningless. | Single flat grid with type badge on each card (rejected — misleading badges) |
 | 2026-04-03 | UserMenu as thin client component receiving email as prop | Layout is a Server Component that already has the user. Passes email as prop to avoid a redundant client-side session fetch. | Client component fetching its own session (extra round trip) |
+| 2026-04-26 | PDF extraction via Claude API server action only | API key must never reach the browser. All extraction logic lives in `extractAttachmentData()` in `actions.ts` — downloads from Storage, sends base64 doc block to `claude-sonnet-4-6`, stores JSON result in `extracted_data` JSONB column. | Client-side API call (rejected — exposes key), separate API route (unnecessary with server actions) |
+| 2026-04-26 | Populate Line Items only wired in venue (EstimateBuilder), not AV/Decor | Menu PDFs are venue artifacts — food/alcohol/NA beverages map to F&B section with Catering & F&B markup. AV and Decor builders don't pass `onPopulateLineItems` so the button is hidden. | Show button in all builders (rejected — no meaningful section mapping for AV/Decor) |
 
 ## Gotchas Log
 
@@ -172,6 +174,9 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 |------|-------|------------|
 | 2026-04-03 | QC monogram PNG is dark — invisible on dark charcoal nav | Added `brightness-0 invert` Tailwind filter classes to the Image in both layouts. No separate white asset needed. |
 | 2026-04-03 | Supabase password reset requires /reset-password in Redirect URLs allowlist | Must add the URL in Supabase dashboard → Auth → URL Configuration, otherwise the reset link is blocked. |
+| 2026-04-26 | JS falsy `\|\|` trap with numeric 0: `parseFloat('0') / 100 \|\| 0.05` evaluates to `0.05` because `0` is falsy | Use `isNaN(v) ? fallback : v / 100` pattern wherever a numeric field has a meaningful zero value (client commission, CC fee, etc.) |
+| 2026-04-26 | Stale closures in `useCallback` + `setTimeout`: category changes weren't saving because `handleItemSave` captured old `lineItems` state | Use a `lineItemsRef` (updated every render via `lineItemsRef.current = lineItems`) and read from `lineItemsRef.current` inside callbacks instead of the closed-over state variable |
+| 2026-04-26 | Git heredoc `$(cat <<'EOF'...)` fails in bash on Windows when run from PowerShell | Use PowerShell's `@'...'@` here-string syntax for multiline git commit messages on this machine |
 
 ## Current TODOs
 
@@ -195,6 +200,14 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Nav: UserMenu with email + Sign Out, white monogram fix
 - [x] ComparisonView: grouped by estimate type, per-type badges
 - [x] ScenarioTabs: typed estimate creation (Venue/AV/Decor) inline, no page navigation needed
+- [x] Claude API PDF extraction — auto-extracts menu items + venue fees from uploaded PDFs; Copy to Canva + Populate Line Items buttons (venue builder only); requires ANTHROPIC_API_KEY in env
+
+### ⚠️ Migrations Pending — Apply Before Using New Features
+Two migrations are written but have NOT been applied to Supabase yet. Features are blocked until these run in the Supabase SQL Editor:
+- `007_line_item_templates.sql` — required for: Line Item Templates, Copy Items From
+- `008_extracted_data.sql` — required for: PDF extraction (adds `extracted_data JSONB` to `estimate_attachments`)
+
+Also add `ANTHROPIC_API_KEY` to `.env.local` (and Vercel env vars) before PDF extraction will work.
 
 ### Remaining
 - [ ] Validate against 3-5 real historical proposals — compare engine output to Excel for same inputs

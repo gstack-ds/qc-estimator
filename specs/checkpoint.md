@@ -16,7 +16,7 @@
 - Added "Copy Line Items" button to `ExportButtons.tsx` (sits between Copy Numbers and Export to Excel).
 
 ### Feature 2: Line Item Templates — DONE
-- Migration `007_line_item_templates.sql`: creates `line_item_templates` table with RLS (authenticated read all; own insert/delete).
+- Migration `007_line_item_templates.sql`: creates `line_item_templates` table with RLS (authenticated read all; own insert/delete). **NOT YET APPLIED TO SUPABASE.**
 - Server actions in estimates `actions.ts`: `getTemplates()`, `saveTemplate()`, `deleteTemplate()`.
 - `TemplatePickerDropdown.tsx`: lazy-loads templates when opened, searchable, click-to-add, delete (own templates, hover-to-reveal).
 - `LineItemRow.tsx`: added `onSaveAsTemplate` optional prop + star (☆/★) icon in new 9th column. Saves name/category/unit price/tax type.
@@ -28,16 +28,31 @@
 - `CopyItemsFromButton.tsx`: dropdown of other estimates in same program; hidden when none exist. Selecting one fetches line items and calls `onImport` with converted `LocalLineItem[]`.
 - All three builders: wired `handleImportItems` callback. Button placed in header bar before ExportButtons.
 
-## Current State
-- 74 tests passing (no new tests added — new logic is UI-layer / integration-layer only)
-- TypeScript: no errors
-- Branch: `fix/commission-and-category-persist` (3 commits ahead of main)
+### Feature 4: Claude API PDF Extraction — DONE
+- `@anthropic-ai/sdk` installed (v0.91.1).
+- Migration `008_extracted_data.sql`: adds `extracted_data JSONB` to `estimate_attachments`. **NOT YET APPLIED TO SUPABASE.**
+- New types in `actions.ts`: `ExtractedMenuItem`, `ExtractedVenueFee`, `ExtractedData`.
+- `AttachmentRecord` updated to include `extracted_data`.
+- Server action `extractAttachmentData(attachmentId)`: downloads PDF from Supabase Storage → base64 → `claude-sonnet-4-6` with document block → parses JSON → stores in DB.
+- `AttachmentsPanel.tsx` fully rewritten: auto-triggers extraction on PDF upload, per-record state (idle/extracting/error/done), seeded from DB on load, "Extract menu data" link for existing PDFs, retry on error, results table (menu items + venue fees), "Copy to Canva" button, "Populate Line Items" button (optional prop).
+- `EstimateBuilder.tsx`: new `handlePopulateFromExtraction` callback — maps extracted items to `LocalLineItem[]` (Catering & F&B markup, `program.guest_count` as qty, food/alcohol/none tax types), wired into `AttachmentsPanel`. AV and Decor builders do not wire this prop (button hidden).
 
-## Migration Needed
-- `007_line_item_templates.sql` must be applied in Supabase before templates work.
+## Current State
+- 74 tests passing (no new tests added — all new logic is UI/integration layer)
+- TypeScript: no errors
+- Branch: `fix/commission-and-category-persist` (5 commits ahead of main)
+
+## ⚠️ Migrations Needed — BLOCKING
+Apply in Supabase SQL Editor before testing new features:
+1. `007_line_item_templates.sql` — templates + copy items from
+2. `008_extracted_data.sql` — PDF extraction
+
+Also add `ANTHROPIC_API_KEY` to `.env.local` and Vercel env vars.
 
 ## Known Issues / Next Steps
 - **Merge PR** when ready: `fix/commission-and-category-persist`
+- **Apply migrations** 007 and 008 in Supabase
+- **Add ANTHROPIC_API_KEY** to env
 - **Remaining from PRD**:
   - Validate against 3-5 real historical proposals
   - PDF/Canva client-facing export
