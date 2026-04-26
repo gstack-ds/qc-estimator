@@ -320,6 +320,68 @@ export async function deleteAttachment(id: string, storagePath: string): Promise
   return { error: null };
 }
 
+// ─── Line Item Templates ──────────────────────────────────
+
+export interface DbTemplate {
+  id: string;
+  name: string;
+  category_id: string | null;
+  category_name: string | null;
+  category_markup_pct: number | null;
+  default_unit_price: number;
+  tax_type: string;
+  created_by: string | null;
+}
+
+export async function getTemplates(): Promise<{ error: string | null; templates: DbTemplate[] }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('line_item_templates')
+    .select('id, name, category_id, default_unit_price, tax_type, created_by, category_markups(name, markup_pct)')
+    .order('name');
+  if (error) return { error: error.message, templates: [] };
+  return {
+    error: null,
+    templates: (data ?? []).map((row) => {
+      const cat = (row.category_markups as unknown) as { name: string; markup_pct: number } | null;
+      return {
+        id: row.id,
+        name: row.name,
+        category_id: row.category_id,
+        category_name: cat?.name ?? null,
+        category_markup_pct: cat?.markup_pct ?? null,
+        default_unit_price: row.default_unit_price,
+        tax_type: row.tax_type,
+        created_by: row.created_by,
+      };
+    }),
+  };
+}
+
+export async function saveTemplate(data: {
+  name: string;
+  category_id: string | null;
+  default_unit_price: number;
+  tax_type: string;
+}): Promise<{ error: string | null; id: string | null }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: row, error } = await supabase
+    .from('line_item_templates')
+    .insert({ ...data, created_by: user?.id ?? null })
+    .select('id')
+    .single();
+  if (error) return { error: error.message, id: null };
+  return { error: null, id: row.id as string };
+}
+
+export async function deleteTemplate(id: string): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from('line_item_templates').delete().eq('id', id);
+  if (error) return { error: error.message };
+  return { error: null };
+}
+
 export async function getExportDataForProgram(programId: string) {
   const supabase = await createClient();
   const { data: estimates, error: estErr } = await supabase

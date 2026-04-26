@@ -79,6 +79,24 @@ export function buildSummaryRows(
   return rows;
 }
 
+export function buildLineItemsCopyText(
+  lineItems: LineItemForExport[],
+  estimateName: string
+): string {
+  const header = `${estimateName.toUpperCase()}\n\nItem Name\tQty\tUnit Price\tTotal`;
+  const rows = lineItems
+    .filter((li) => li.qty > 0 && (li.unitPrice > 0 || (li.categoryId === 'custom' && (li.customClientUnitPrice ?? 0) > 0)))
+    .map((li) => {
+      const clientUnit = li.categoryId === 'custom' && li.customClientUnitPrice !== undefined
+        ? li.customClientUnitPrice
+        : li.unitPrice * (1 + li.categoryMarkupPct);
+      const clientTotal = li.qty * clientUnit;
+      return `${li.name}\t${li.qty}\t${fmtAmt(clientUnit)}\t${fmtAmt(clientTotal)}`;
+    });
+  if (rows.length === 0) return `${estimateName.toUpperCase()}\n\n(no line items)`;
+  return `${header}\n${rows.join('\n')}`;
+}
+
 export function buildCopyText(
   summary: EstimateSummary,
   guestCount: number,

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { EstimateSummary } from '@/types';
 import {
   buildCopyText,
+  buildLineItemsCopyText,
   buildSummaryRows,
   itemClientCost,
   type LineItemForExport,
@@ -36,6 +37,7 @@ export default function ExportButtons({
   markups,
 }: Props) {
   const [copyLabel, setCopyLabel] = useState<'Copy Numbers' | 'Copied!'>('Copy Numbers');
+  const [copyItemsLabel, setCopyItemsLabel] = useState<'Copy Line Items' | 'Copied!'>('Copy Line Items');
   const [exporting, setExporting] = useState(false);
 
   async function handleCopy() {
@@ -43,6 +45,13 @@ export default function ExportButtons({
     await navigator.clipboard.writeText(text);
     setCopyLabel('Copied!');
     setTimeout(() => setCopyLabel('Copy Numbers'), 2000);
+  }
+
+  async function handleCopyLineItems() {
+    const text = buildLineItemsCopyText(lineItems, estimateName);
+    await navigator.clipboard.writeText(text);
+    setCopyItemsLabel('Copied!');
+    setTimeout(() => setCopyItemsLabel('Copy Line Items'), 2000);
   }
 
   async function handleExcel() {
@@ -97,6 +106,9 @@ export default function ExportButtons({
     <div className="flex items-center gap-2">
       <button onClick={handleCopy} className={btnClass}>
         {copyLabel}
+      </button>
+      <button onClick={handleCopyLineItems} className={btnClass}>
+        {copyItemsLabel}
       </button>
       <button onClick={handleExcel} disabled={exporting} className={btnClass + (exporting ? ' opacity-50' : '')}>
         {exporting ? 'Exporting…' : 'Export to Excel'}

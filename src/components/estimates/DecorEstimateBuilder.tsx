@@ -9,7 +9,8 @@ import ScenarioTabs from './ScenarioTabs';
 import LineItemSection from './LineItemSection';
 import DecorSummaryPanel from './DecorSummaryPanel';
 import MarginPanel from './MarginPanel';
-import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal } from '@/app/(programs)/programs/[id]/estimates/actions';
+import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
+import type { DbTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { LocalLineItem, LocalSection } from './EstimateBuilder';
 import TravelPanel from './TravelPanel';
 import AttachmentsPanel from './AttachmentsPanel';
@@ -296,6 +297,39 @@ export default function DecorEstimateBuilder({
     setTimeout(() => handleItemSave(tempId), 0);
   }, [handleItemSave]);
 
+  const handleSaveAsTemplate = useCallback(async (id: string) => {
+    const item = lineItemsRef.current.find((li) => li.id === id);
+    if (!item) return;
+    await saveTemplate({
+      name: item.name || 'Unnamed item',
+      category_id: item.categoryId === 'custom' ? null : (item.categoryId ?? null),
+      default_unit_price: item.unitPrice,
+      tax_type: item.taxType,
+    });
+  }, []);
+
+  const handleAddFromTemplate = useCallback((section: LocalSection, template: DbTemplate) => {
+    const tempId = `new-${Date.now()}-${Math.random()}`;
+    const maxOrder = lineItemsRef.current
+      .filter((li) => li.section === section)
+      .reduce((max, li) => Math.max(max, li.sortOrder), -1);
+    const newItem: LocalLineItem = {
+      id: tempId,
+      section,
+      name: template.name,
+      qty: 1,
+      unitPrice: template.default_unit_price,
+      categoryId: template.category_id,
+      defaultMarkupPct: template.category_markup_pct ?? 0.85,
+      categoryMarkupPct: template.category_markup_pct ?? 0.85,
+      taxType: template.tax_type as TaxType,
+      sortOrder: maxOrder + 1,
+      isNew: true,
+    };
+    setLineItems((prev) => [...prev, newItem]);
+    setTimeout(() => handleItemSave(tempId), 0);
+  }, [handleItemSave]);
+
   function toggleSection(section: LocalSection) {
     setOpenMap((prev) => ({ ...prev, [section]: !prev[section] }));
   }
@@ -352,6 +386,8 @@ export default function DecorEstimateBuilder({
               onBlur={handleItemSave}
               onDelete={handleItemDelete}
               onAdd={handleAddItem}
+              onAddFromTemplate={handleAddFromTemplate}
+              onSaveAsTemplate={handleSaveAsTemplate}
             />
           </div>
         )}

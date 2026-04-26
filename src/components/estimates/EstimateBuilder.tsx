@@ -15,8 +15,8 @@ import MarginPanel from './MarginPanel';
 import TravelPanel from './TravelPanel';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
-import { updateEstimate } from '@/app/(programs)/programs/[id]/estimates/actions';
-import { upsertLineItem, deleteLineItem, cacheEstimateTotal } from '@/app/(programs)/programs/[id]/estimates/actions';
+import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
+import type { DbTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { TravelRefData, DbTrip } from '@/lib/supabase/queries';
 
 // ─── Types ───────────────────────────────────────────────
@@ -319,6 +319,39 @@ export default function EstimateBuilder({
     setTimeout(() => handleItemSave(tempId), 0);
   }, [handleItemSave]);
 
+  const handleSaveAsTemplate = useCallback(async (id: string) => {
+    const item = lineItemsRef.current.find((li) => li.id === id);
+    if (!item) return;
+    await saveTemplate({
+      name: item.name || 'Unnamed item',
+      category_id: item.categoryId === 'custom' ? null : (item.categoryId ?? null),
+      default_unit_price: item.unitPrice,
+      tax_type: item.taxType,
+    });
+  }, []);
+
+  const handleAddFromTemplate = useCallback((section: LocalSection, template: DbTemplate) => {
+    const tempId = `new-${Date.now()}-${Math.random()}`;
+    const maxOrder = lineItemsRef.current
+      .filter((li) => li.section === section)
+      .reduce((max, li) => Math.max(max, li.sortOrder), -1);
+    const newItem: LocalLineItem = {
+      id: tempId,
+      section,
+      name: template.name,
+      qty: 1,
+      unitPrice: template.default_unit_price,
+      categoryId: template.category_id,
+      defaultMarkupPct: template.category_markup_pct ?? 0.5,
+      categoryMarkupPct: template.category_markup_pct ?? 0.5,
+      taxType: template.tax_type as TaxType,
+      sortOrder: maxOrder + 1,
+      isNew: true,
+    };
+    setLineItems((prev) => [...prev, newItem]);
+    setTimeout(() => handleItemSave(tempId), 0);
+  }, [handleItemSave]);
+
   // ─── Fee override helpers ─────────────────────────────────
 
   const defaultSC = program.service_charge_default;
@@ -516,7 +549,6 @@ export default function EstimateBuilder({
                 defaultTaxType={taxType}
                 onChange={(id, patch) => {
                   handleItemChange(id, patch);
-                  // Save immediately on select changes (category, tax type)
                   if (patch.categoryId !== undefined || patch.taxType !== undefined) {
                     setTimeout(() => handleItemSave(id), 0);
                   }
@@ -524,6 +556,8 @@ export default function EstimateBuilder({
                 onBlur={handleItemSave}
                 onDelete={handleItemDelete}
                 onAdd={handleAddItem}
+                onAddFromTemplate={handleAddFromTemplate}
+                onSaveAsTemplate={handleSaveAsTemplate}
               />
             ))}
           </div>

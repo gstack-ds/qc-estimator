@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { TaxType } from '@/types';
 import type { DbMarkup } from '@/lib/supabase/queries';
 import type { LocalLineItem } from './EstimateBuilder';
@@ -11,6 +12,7 @@ interface Props {
   onChange: (id: string, patch: Partial<LocalLineItem>) => void;
   onBlur: (id: string) => void;
   onDelete: (id: string) => void;
+  onSaveAsTemplate?: (id: string) => Promise<void>;
 }
 
 function fmt(val: number) {
@@ -20,7 +22,8 @@ function fmt(val: number) {
 
 const inputClass = 'border border-brand-cream rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper focus:border-brand-brown bg-white text-brand-charcoal w-full';
 
-export default function LineItemRow({ item, markups, showTaxToggle, onChange, onBlur, onDelete }: Props) {
+export default function LineItemRow({ item, markups, showTaxToggle, onChange, onBlur, onDelete, onSaveAsTemplate }: Props) {
+  const [savedTemplate, setSavedTemplate] = useState(false);
   const isCustom = item.categoryId === 'custom';
   const ourCost = item.qty * item.unitPrice;
   const clientCost = isCustom && item.customClientUnitPrice !== undefined
@@ -52,8 +55,15 @@ export default function LineItemRow({ item, markups, showTaxToggle, onChange, on
     onBlur(item.id);
   }
 
+  async function handleSaveAsTemplate() {
+    if (!onSaveAsTemplate) return;
+    await onSaveAsTemplate(item.id);
+    setSavedTemplate(true);
+    setTimeout(() => setSavedTemplate(false), 2000);
+  }
+
   return (
-    <div className="grid items-center gap-2 py-1.5 border-b border-brand-cream/40 last:border-0" style={{ gridTemplateColumns: '2fr 60px 90px 130px 60px 80px 80px 24px' }}>
+    <div className="grid items-center gap-2 py-1.5 border-b border-brand-cream/40 last:border-0" style={{ gridTemplateColumns: '2fr 60px 90px 130px 60px 80px 80px 20px 20px' }}>
       {/* Name */}
       <input
         type="text"
@@ -149,6 +159,19 @@ export default function LineItemRow({ item, markups, showTaxToggle, onChange, on
 
       {/* Client cost */}
       <div className="text-right text-sm font-medium text-brand-charcoal tabular-nums pr-1">{fmt(clientCost)}</div>
+
+      {/* Save as template */}
+      {onSaveAsTemplate ? (
+        <button
+          onClick={handleSaveAsTemplate}
+          className={`text-base leading-none text-center transition-colors ${savedTemplate ? 'text-brand-brown' : 'text-brand-silver/40 hover:text-brand-brown'}`}
+          title={savedTemplate ? 'Saved!' : 'Save as template'}
+        >
+          {savedTemplate ? '★' : '☆'}
+        </button>
+      ) : (
+        <div />
+      )}
 
       {/* Delete */}
       <button
