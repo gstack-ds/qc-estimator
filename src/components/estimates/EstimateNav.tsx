@@ -46,7 +46,7 @@ export default function EstimateNav({ programId, programName, eventName, estimat
         {eventName && (
           <>
             <span className="text-brand-silver/40 flex-shrink-0 mx-0.5">›</span>
-            <span className="text-brand-charcoal/50 truncate max-w-[120px]">{eventName}</span>
+            <Link href={`/programs/${programId}`} className="text-brand-silver hover:text-brand-brown transition-colors truncate max-w-[120px]">{eventName}</Link>
           </>
         )}
         <span className="text-brand-silver/40 flex-shrink-0 mx-0.5">›</span>
