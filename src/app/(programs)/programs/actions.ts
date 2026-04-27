@@ -222,13 +222,9 @@ export async function extractProgramBrief(
 
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const raw = JSON.parse(jsonMatch?.[0] ?? text) as Record<string, unknown>;
-    console.log('[brief] raw keys:', Object.keys(raw));
-    console.log('[brief] raw values:', JSON.stringify(raw));
-    const data = raw as ExtractedProgramBrief;
+    const data = JSON.parse(jsonMatch?.[0] ?? text) as ExtractedProgramBrief;
     return { error: null, data };
   } catch {
-    console.log('[brief] raw text:', text);
     return { error: 'Could not parse extraction response', data: null };
   }
 }
