@@ -177,6 +177,7 @@ export interface ProgramAttachmentRecord {
   mime_type: string;
   created_at: string;
   url: string;
+  extracted_data: ExtractedProgramBrief | null;
 }
 
 const BRIEF_EXTRACTION_PROMPT =
@@ -219,9 +220,13 @@ export async function extractProgramBrief(
 
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const data = JSON.parse(jsonMatch?.[0] ?? text) as ExtractedProgramBrief;
+    const raw = JSON.parse(jsonMatch?.[0] ?? text) as Record<string, unknown>;
+    console.log('[brief] raw keys:', Object.keys(raw));
+    console.log('[brief] raw values:', JSON.stringify(raw));
+    const data = raw as ExtractedProgramBrief;
     return { error: null, data };
   } catch {
+    console.log('[brief] raw text:', text);
     return { error: 'Could not parse extraction response', data: null };
   }
 }
@@ -260,7 +265,7 @@ export async function uploadProgramAttachment(
       uploaded_by: user?.id ?? null,
       extracted_data: extractedData ?? null,
     })
-    .select('id, program_id, file_name, storage_path, file_size, mime_type, created_at')
+    .select('id, program_id, file_name, storage_path, file_size, mime_type, created_at, extracted_data')
     .single();
 
   if (dbError) {
@@ -274,7 +279,45 @@ export async function uploadProgramAttachment(
 
   return {
     error: null,
-    record: { ...record, url: signedData?.signedUrl ?? '' },
+    record: {
+      ...record,
+      url: signedData?.signedUrl ?? '',
+      extracted_data: (record.extracted_data as ExtractedProgramBrief | null) ?? null,
+    },
   };
+}
+
+export async function getProgramAttachments(programId: string): Promise<{ error: string | null; records: ProgramAttachmentRecord[] }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('program_attachments')
+    .select('id, program_id, file_name, storage_path, file_size, mime_type, created_at, extracted_data')
+    .eq('program_id', programId)
+    .order('created_at', { ascending: false });
+
+  if (error) return { error: error.message, records: [] };
+
+  const records = await Promise.all(
+    (data ?? []).map(async (row) => {
+      const { data: signedData } = await supabase.storage
+        .from('estimate-attachments')
+        .createSignedUrl(row.storage_path, 3600);
+      return {
+        ...row,
+        url: signedData?.signedUrl ?? '',
+        extracted_data: (row.extracted_data as ExtractedProgramBrief | null) ?? null,
+      };
+    })
+  );
+
+  return { error: null, records };
+}
+
+export async function deleteProgramAttachment(id: string, storagePath: string): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  await supabase.storage.from('estimate-attachments').remove([storagePath]);
+  const { error } = await supabase.from('program_attachments').delete().eq('id', id);
+  if (error) return { error: error.message };
+  return { error: null };
 }
 

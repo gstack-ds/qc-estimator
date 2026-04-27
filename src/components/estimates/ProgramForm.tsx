@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { DbProgramWithLocation, DbLocation } from '@/lib/supabase/queries';
 import {
@@ -8,7 +8,10 @@ import {
   updateProgram,
   extractProgramBrief,
   uploadProgramAttachment,
+  getProgramAttachments,
+  deleteProgramAttachment,
   type ExtractedProgramBrief,
+  type ProgramAttachmentRecord,
 } from '@/app/(programs)/programs/actions';
 
 interface Props {
@@ -21,6 +24,12 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 const SERVICE_STYLES = ['Family Style', 'Plated', 'Buffet', 'Stations', 'Cocktail Reception'];
 const ALCOHOL_TYPES = ['Full Bar', 'Beer & Wine', 'None'];
+
+function countExtractedFields(data: ExtractedProgramBrief | null): number {
+  if (!data) return 0;
+  const fields: (keyof ExtractedProgramBrief)[] = ['eventName', 'clientName', 'companyName', 'eventDate', 'guestCount', 'serviceStyle', 'alcoholType', 'eventStartTime', 'eventEndTime', 'clientHotel'];
+  return fields.filter((f) => data[f] != null && data[f] !== '').length;
+}
 
 function calcDuration(start: string, end: string): string {
   if (!start || !end) return '';
@@ -59,13 +68,23 @@ export default function ProgramForm({ program, locations, mode }: Props) {
   const [gratuity, setGratuity] = useState(String(parseFloat(((program?.gratuity_default ?? 0.20) * 100).toFixed(4))));
   const [adminFee, setAdminFee] = useState(String(parseFloat(((program?.admin_fee_default ?? 0.05) * 100).toFixed(4))));
 
-  // Brief extraction (create mode only)
+  // Brief extraction
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [pendingExtracted, setPendingExtracted] = useState<ExtractedProgramBrief | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [extractToast, setExtractToast] = useState<string | null>(null);
   const [extractError, setExtractError] = useState<string | null>(null);
   const briefFileRef = useRef<HTMLInputElement>(null);
+
+  // Program attachments (edit mode)
+  const [attachments, setAttachments] = useState<ProgramAttachmentRecord[]>([]);
+  const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (mode === 'edit' && program?.id) {
+      getProgramAttachments(program.id).then(({ records }) => setAttachments(records));
+    }
+  }, [mode, program?.id]);
 
   const save = useCallback(async (patch: Record<string, unknown>) => {
     if (mode === 'create') return;
@@ -87,7 +106,6 @@ export default function ProgramForm({ program, locations, mode }: Props) {
   async function handleBriefFile(file: File) {
     if (file.type !== 'application/pdf') { setExtractError('Only PDF files are supported.'); return; }
     if (file.size > 10 * 1024 * 1024) { setExtractError('File exceeds 10 MB limit.'); return; }
-    setPendingFile(file);
     setExtractError(null);
     setExtracting(true);
     const fd = new FormData();
@@ -95,23 +113,44 @@ export default function ProgramForm({ program, locations, mode }: Props) {
     const { error, data } = await extractProgramBrief(fd);
     setExtracting(false);
     if (error || !data) { setExtractError(error ?? 'Extraction failed.'); return; }
-    setPendingExtracted(data);
+
+    const patch: Record<string, unknown> = {};
     let filled = 0;
-    if (data.eventName) { setName(data.eventName); filled++; }
-    if (data.clientName) { setClientName(data.clientName); filled++; }
-    if (data.companyName) { setCompanyName(data.companyName); filled++; }
-    if (data.eventDate) { setEventDate(data.eventDate); filled++; }
-    if (data.guestCount && data.guestCount > 0) { setGuestCount(String(data.guestCount)); filled++; }
-    if (data.serviceStyle && SERVICE_STYLES.includes(data.serviceStyle)) { setServiceStyle(data.serviceStyle); filled++; }
-    if (data.alcoholType && ALCOHOL_TYPES.includes(data.alcoholType)) { setAlcoholType(data.alcoholType); filled++; }
-    if (data.eventStartTime) { setEventStartTime(data.eventStartTime); filled++; }
-    if (data.eventEndTime) { setEventEndTime(data.eventEndTime); filled++; }
-    if (data.clientHotel) { setClientHotel(data.clientHotel); filled++; }
+    if (data.eventName) { setName(data.eventName); patch.name = data.eventName; filled++; }
+    if (data.clientName) { setClientName(data.clientName); patch.client_name = data.clientName; filled++; }
+    if (data.companyName) { setCompanyName(data.companyName); patch.company_name = data.companyName; filled++; }
+    if (data.eventDate) { setEventDate(data.eventDate); patch.event_date = data.eventDate; filled++; }
+    if (data.guestCount && data.guestCount > 0) { setGuestCount(String(data.guestCount)); patch.guest_count = data.guestCount; filled++; }
+    if (data.serviceStyle && SERVICE_STYLES.includes(data.serviceStyle)) { setServiceStyle(data.serviceStyle); patch.service_style = data.serviceStyle; filled++; }
+    if (data.alcoholType && ALCOHOL_TYPES.includes(data.alcoholType)) { setAlcoholType(data.alcoholType); patch.alcohol_type = data.alcoholType; filled++; }
+    if (data.eventStartTime) { setEventStartTime(data.eventStartTime); patch.event_start_time = data.eventStartTime; filled++; }
+    if (data.eventEndTime) { setEventEndTime(data.eventEndTime); patch.event_end_time = data.eventEndTime; filled++; }
+    if (data.clientHotel) { setClientHotel(data.clientHotel); patch.client_hotel = data.clientHotel; filled++; }
+
+    if (mode === 'create') {
+      setPendingFile(file);
+      setPendingExtracted(data);
+    } else {
+      if (Object.keys(patch).length > 0) save(patch);
+      const fd2 = new FormData();
+      fd2.append('file', file);
+      fd2.append('programId', program!.id);
+      const { record } = await uploadProgramAttachment(fd2, data);
+      if (record) setAttachments((prev) => [record, ...prev]);
+    }
+
     const msg = filled > 0
       ? `Extracted ${filled} field${filled !== 1 ? 's' : ''} from document.`
       : 'No matching fields found in document.';
     setExtractToast(msg);
     setTimeout(() => setExtractToast(null), 5000);
+  }
+
+  async function handleDeleteAttachment(rec: ProgramAttachmentRecord) {
+    setDeletingAttachmentId(rec.id);
+    const { error } = await deleteProgramAttachment(rec.id, rec.storage_path);
+    if (!error) setAttachments((prev) => prev.filter((a) => a.id !== rec.id));
+    setDeletingAttachmentId(null);
   }
 
   async function handleCreate() {
@@ -165,52 +204,92 @@ export default function ProgramForm({ program, locations, mode }: Props) {
         </div>
       )}
 
-      {/* PDF brief dropzone — create mode only */}
-      {mode === 'create' && (
-        <div>
-          <div
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleBriefFile(f); }}
-            onClick={() => !extracting && briefFileRef.current?.click()}
-            className={`border-2 border-dashed rounded-lg px-6 py-7 text-center transition-colors ${extracting ? 'cursor-default border-brand-silver/30 bg-brand-offwhite/30' : 'cursor-pointer border-brand-cream hover:border-brand-copper/50 hover:bg-brand-offwhite/50'}`}
-          >
-            {extracting ? (
-              <p className="text-sm text-brand-silver italic">Extracting details from document…</p>
-            ) : pendingFile ? (
-              <div>
-                <p className="text-sm font-medium text-brand-charcoal/70">{pendingFile.name}</p>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); setPendingFile(null); setPendingExtracted(null); }}
-                  className="text-xs text-brand-silver hover:text-red-500 mt-1"
-                >
-                  Remove
-                </button>
-              </div>
-            ) : (
-              <>
-                <p className="text-sm font-medium text-brand-charcoal/70">Upload an event brief, RFP, or client document to auto-fill details.</p>
-                <p className="text-xs text-brand-silver mt-1">PDF only · Max 10 MB · Click or drag to upload</p>
-              </>
-            )}
-          </div>
-          <input
-            ref={briefFileRef}
-            type="file"
-            accept=".pdf"
-            className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleBriefFile(f); e.target.value = ''; }}
-          />
-          {extractError && (
-            <p className="text-xs text-red-500 mt-2">{extractError}</p>
-          )}
-          {extractToast && (
-            <div className="mt-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded px-3 py-2">
-              {extractToast}
+      {/* PDF brief dropzone */}
+      <div>
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleBriefFile(f); }}
+          onClick={() => !extracting && briefFileRef.current?.click()}
+          className={`border-2 border-dashed rounded-lg px-6 py-7 text-center transition-colors ${extracting ? 'cursor-default border-brand-silver/30 bg-brand-offwhite/30' : 'cursor-pointer border-brand-cream hover:border-brand-copper/50 hover:bg-brand-offwhite/50'}`}
+        >
+          {extracting ? (
+            <p className="text-sm text-brand-silver italic">Extracting details from document…</p>
+          ) : mode === 'create' && pendingFile ? (
+            <div>
+              <p className="text-sm font-medium text-brand-charcoal/70">{pendingFile.name}</p>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setPendingFile(null); setPendingExtracted(null); }}
+                className="text-xs text-brand-silver hover:text-red-500 mt-1"
+              >
+                Remove
+              </button>
             </div>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-brand-charcoal/70">Upload an event brief, RFP, or client document to auto-fill details.</p>
+              <p className="text-xs text-brand-silver mt-1">PDF only · Max 10 MB · Click or drag to upload</p>
+            </>
           )}
         </div>
-      )}
+        <input
+          ref={briefFileRef}
+          type="file"
+          accept=".pdf"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleBriefFile(f); e.target.value = ''; }}
+        />
+        {extractError && (
+          <p className="text-xs text-red-500 mt-2">{extractError}</p>
+        )}
+        {extractToast && (
+          <div className="mt-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded px-3 py-2">
+            {extractToast}
+          </div>
+        )}
+
+        {/* Attachment list — edit mode */}
+        {mode === 'edit' && attachments.length > 0 && (
+          <ul className="mt-3 space-y-1.5">
+            {attachments.map((rec) => {
+              const fieldCount = countExtractedFields(rec.extracted_data);
+              return (
+                <li key={rec.id} className="flex items-center gap-2 text-sm">
+                  <span className="text-brand-silver text-xs w-4 text-center flex-shrink-0">📄</span>
+                  <a
+                    href={rec.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 text-brand-charcoal hover:text-brand-brown truncate text-xs"
+                    title={rec.file_name}
+                  >
+                    {rec.file_name}
+                  </a>
+                  {rec.extracted_data && (
+                    <span className="text-[10px] font-medium text-green-700 bg-green-50 border border-green-100 rounded px-1.5 py-0.5 flex-shrink-0 whitespace-nowrap">
+                      ✓ AI extracted{fieldCount > 0 ? ` (${fieldCount} fields)` : ''}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => handleDeleteAttachment(rec)}
+                    disabled={deletingAttachmentId === rec.id}
+                    className="text-brand-silver/40 hover:text-red-500 transition-colors flex-shrink-0 disabled:opacity-40"
+                    title="Delete"
+                  >
+                    {deletingAttachmentId === rec.id ? (
+                      <span className="text-xs">…</span>
+                    ) : (
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
 
       {/* Event Details */}
       <div>
