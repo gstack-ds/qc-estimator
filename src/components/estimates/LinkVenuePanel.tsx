@@ -70,6 +70,15 @@ export default function LinkVenuePanel({
       startTransition(async () => {
         await linkVenueToEstimate(estimateId, programId, null, null);
       });
+      return;
+    }
+    const venue = venues.find((v) => v.id === venueId);
+    const hasSpaces = spaces.some((s) => s.venue_id === venueId);
+    if (!hasSpaces && venue) {
+      onAutoFill({ roomSpace: venue.name });
+      startTransition(async () => {
+        await linkVenueToEstimate(estimateId, programId, venueId, null);
+      });
     }
   }
 
@@ -141,8 +150,8 @@ export default function LinkVenuePanel({
         </select>
       </div>
 
-      {/* Space dropdown — only when venue selected */}
-      {selectedVenueId && (
+      {/* Space dropdown — only when venue selected and has spaces */}
+      {selectedVenueId && filteredSpaces.length > 0 && (
         <div className="flex items-center gap-2">
           <label className="text-xs text-brand-silver whitespace-nowrap">Space:</label>
           <select
@@ -157,6 +166,9 @@ export default function LinkVenuePanel({
             ))}
           </select>
         </div>
+      )}
+      {selectedVenueId && filteredSpaces.length === 0 && (
+        <span className="text-xs text-brand-silver italic">No spaces added — add them in Venues</span>
       )}
 
       {/* Last priced badge */}
