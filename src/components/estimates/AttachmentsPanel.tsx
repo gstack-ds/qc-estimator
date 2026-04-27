@@ -38,19 +38,26 @@ function formatDate(iso: string): string {
 function buildCanvaCopyText(data: ExtractedData): string {
   const lines: string[] = [];
   if (data.menuItems.length > 0) {
-    lines.push('MENU ITEMS', '');
     for (const item of data.menuItems) {
-      lines.push(item.name);
-      if (item.description) lines.push(item.description);
-      lines.push(`$${(item.pricePerPerson ?? 0).toFixed(2)} per person`, '');
+      const price = `$${(item.pricePerPerson ?? 0).toFixed(0)}/person`;
+      lines.push(`${item.name} — ${price}`);
+      if (item.selections && item.selections.length > 0) {
+        for (const sel of item.selections) {
+          lines.push(`• ${sel}`);
+        }
+      } else if (item.description) {
+        lines.push(`• ${item.description}`);
+      }
+      lines.push('');
     }
   }
   if (data.venueFees.length > 0) {
-    lines.push('VENUE FEES', '');
+    lines.push('Venue Fees');
     for (const fee of data.venueFees) {
-      const val = fee.type === 'percentage' ? `${fee.value ?? 0}%` : `$${(fee.value ?? 0).toFixed(2)}`;
-      lines.push(`${fee.name}: ${val}`);
+      const val = fee.type === 'percentage' ? `${fee.value ?? 0}%` : `$${(fee.value ?? 0).toLocaleString()}`;
+      lines.push(`• ${fee.name}: ${val}`);
     }
+    lines.push('');
   }
   return lines.join('\n').trim();
 }
@@ -138,7 +145,15 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
     setPopulatedDetails((prev) => { const s = new Set(prev); s.delete(attachmentId); return s; });
     resetAttachmentPopulatedFlags(attachmentId);
     setExtractionState((prev) => ({ ...prev, [attachmentId]: { status: 'extracting' } }));
-    const { error: extractErr, data } = await extractAttachmentData(attachmentId, estimateType);
+
+    const timeout = new Promise<{ error: string; data: null }>((resolve) =>
+      setTimeout(() => resolve({ error: 'Extraction timed out', data: null }), 30000)
+    );
+    const { error: extractErr, data } = await Promise.race([
+      extractAttachmentData(attachmentId, estimateType),
+      timeout,
+    ]);
+
     if (extractErr || !data) {
       setExtractionState((prev) => ({
         ...prev,
@@ -465,7 +480,7 @@ function ExtractionResultPanel({ data, estimateType, onCopyToCanva, onPopulateLi
           <table className="w-full text-xs">
             <thead className="bg-brand-offwhite">
               <tr>
-                <th className="text-left px-2 py-1 text-brand-charcoal/60 font-medium">Item</th>
+                <th className="text-left px-2 py-1 text-brand-charcoal/60 font-medium">Package</th>
                 <th className="text-right px-2 py-1 text-brand-charcoal/60 font-medium w-20">$/person</th>
                 <th className="text-left px-2 py-1 text-brand-charcoal/60 font-medium w-20">Type</th>
               </tr>
@@ -475,11 +490,16 @@ function ExtractionResultPanel({ data, estimateType, onCopyToCanva, onPopulateLi
                 <tr key={i} className="border-t border-brand-cream/60">
                   <td className="px-2 py-1">
                     <span className="font-medium text-brand-charcoal">{item.name}</span>
-                    {item.description && (
+                    {item.selections && item.selections.length > 0 ? (
+                      <span className="block text-brand-silver" title={item.selections.join(', ')}>
+                        {item.selections.slice(0, 3).join(', ')}
+                        {item.selections.length > 3 && ` +${item.selections.length - 3} more`}
+                      </span>
+                    ) : item.description ? (
                       <span className="block text-brand-silver truncate max-w-[200px]" title={item.description}>
                         {item.description}
                       </span>
-                    )}
+                    ) : null}
                   </td>
                   <td className="px-2 py-1 text-right text-brand-charcoal tabular-nums">
                     ${(item.pricePerPerson ?? 0).toFixed(2)}

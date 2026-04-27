@@ -232,6 +232,7 @@ export interface ExtractedMenuItem {
   description?: string;
   pricePerPerson: number;
   category: 'food' | 'alcohol' | 'na_beverage';
+  selections?: string[];
 }
 
 export interface ExtractedEquipmentItem {
@@ -420,15 +421,23 @@ function getExtractionPrompt(type: 'venue' | 'av' | 'decor' | 'transportation'):
     );
   }
   return (
-    'Extract all menu items, prices, equipment, staffing, and fees from this BEO or venue proposal. ' +
-    'Also extract any venue fees mentioned (service charge, gratuity, admin fee, F&B minimum, room rental), ' +
-    'plus the venue name and room/space name if present. ' +
-    'Return ONLY valid JSON with these fields: ' +
-    'venueName (string, optional), roomSpace (string, optional), ' +
-    'menuItems (array: name, description, pricePerPerson, category: food|alcohol|na_beverage), ' +
-    'equipmentItems (array: name, description, unitPrice, qty, section: equipment|venue_fee|staffing) ' +
-    'where equipment=AV/lighting/tech rentals, venue_fee=room rental/facility charges, staffing=banquet staff/setup labor, ' +
-    'venueFees (array: name, value, type: percentage|flat). ' +
+    'You are extracting menu data for a corporate event planning team that prices by PACKAGE, not by individual dish. ' +
+    'Return ONLY valid JSON with these fields:\n' +
+    '- venueName (string, optional)\n' +
+    '- roomSpace (string, optional)\n' +
+    '- menuItems: array of PRICING PACKAGES — aim for 5–10 total, not one row per dish. Each package: ' +
+    '{ name (package/course label, e.g. "Plated Dinner", "Cocktail Hour Passed Apps", "Premium Open Bar (3hr)"), ' +
+    'pricePerPerson (number — the per-person price for this package), ' +
+    'category ("food" | "alcohol" | "na_beverage"), ' +
+    'selections (array of strings — the individual dish or item names inside this package, for reference) }\n' +
+    'GROUPING RULES:\n' +
+    '- Prix-fixe or stated per-person course price → one package, list dishes as selections.\n' +
+    '- Individual dishes with no stated package price → group by course (all apps → "Appetizers", all entrees → "Dinner Entrées"), use average price as pricePerPerson.\n' +
+    '- Per-piece passed items (e.g. "skewers $4 each") → group as "Passed Appetizers", pricePerPerson = average per-piece price, selections = item names.\n' +
+    '- Bar packages → one line per tier (e.g. "Premium Open Bar (3hr)"), do NOT list individual spirits as separate items.\n' +
+    '- NA beverages → one "Non-Alcoholic Beverages" package.\n' +
+    '- venueFees (array: { name, value, type: "percentage"|"flat" }) for service charge, gratuity, admin fee, F&B minimum, room rental.\n' +
+    '- equipmentItems: only for AV/staffing/rental line items that are NOT food/beverage.\n' +
     'No markdown, no explanation — raw JSON only.'
   );
 }
