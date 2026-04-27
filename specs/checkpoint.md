@@ -1,73 +1,39 @@
-# Session Checkpoint — 2026-04-26
+# Checkpoint — 2026-04-27
 
 ## What Was Done
+Added an Events layer between Programs and Estimates.
 
-### Bug 1: Client commission resets to 5% — FIXED
-- Root cause: `parseFloat(clientComm) / 100 || 0.05` — JS treats `0` as falsy, so 0% always saved as 5%.
-- Fix: replaced `|| fallback` with `isNaN(v) ? fallback : v / 100` in both `onBlur` handlers and `handleCreate` in `ProgramForm.tsx`.
+**Migration 014 (`supabase/migrations/014_events.sql`) — MUST RUN:**
+- Creates `event_type` PostgreSQL ENUM (logistics, general_session, formal_dinner, experiential, excursion, cocktail_reception, dine_around, breakfast, lunch, custom)
+- Creates `events` table (program_id FK, name, event_date, start_time, end_time, guest_count, event_type, description, sort_order)
+- Adds `event_id` nullable FK to `estimates` (ON DELETE SET NULL)
+- Backfill CTE: creates one "Program Events" default event per program that has estimates, links all existing estimates to it
 
-### Bug 2: Category selections reset to "none" — FIXED
-- Root cause: stale closure in all three builders. Fix: `lineItemsRef` pattern in `EstimateBuilder`, `AvEstimateBuilder`, `DecorEstimateBuilder`.
-
-### Feature 1: Copy Line Items export — DONE
-- `buildLineItemsCopyText()` in `src/lib/utils/export.ts`. "Copy Line Items" button in `ExportButtons.tsx`.
-
-### Feature 2: Line Item Templates — DONE
-- Migration `007_line_item_templates.sql`. Server actions: `getTemplates()`, `saveTemplate()`, `deleteTemplate()`.
-- `TemplatePickerDropdown.tsx`, star icon in `LineItemRow.tsx`, "+ From template" in `LineItemSection.tsx`.
-
-### Feature 3: Copy Items From — DONE
-- `getLineItemsForEstimate()` server action. `CopyItemsFromButton.tsx` dropdown, wired in all three builders.
-
-### Feature 4: Claude API PDF Extraction (Venue Estimates) — DONE
-- Migration `008_extracted_data.sql`: adds `extracted_data JSONB` to `estimate_attachments`.
-- `extractAttachmentData()` server action: downloads PDF → base64 → `claude-sonnet-4-6` → stores JSON in DB.
-- `AttachmentsPanel.tsx`: auto-triggers extraction on PDF upload, seeds results from DB on page load.
-
-### Feature 5: PDF Brief Extraction on New Program Page — DONE
-- Migration `009_program_attachments.sql`: creates `program_attachments` table with `extracted_data JSONB`.
-- `extractProgramBrief()` + `uploadProgramAttachment()` server actions in `programs/actions.ts`.
-- `ProgramForm.tsx`: dropzone at top (create mode only), auto-fills fields, green toast.
-
-### Feature 6: Populate Estimate Details — DONE
-- "Populate Estimate Details" button in `AttachmentsPanel.tsx` fills Estimate Name, Room/Space, F&B Minimum, Service Charge, Gratuity, Admin Fee from extracted PDF data.
-
-### Feature 7: Estimate-Type-Aware PDF Extraction — DONE
-- Three extraction prompts: venue (menuItems + equipmentItems + venueFees), AV (avItems → equipmentItems), Decor (decorItems → equipmentItems).
-- `ExtractedEquipmentItem.section` covers all item types across all three estimate types.
-- `AttachmentsPanel` passes `estimateType` to `extractAttachmentData`; displays equipment/AV/decor table alongside menu items table.
-- `AvEstimateBuilder`: `handlePopulateFromExtraction` maps equipment→Equipment & Staffing/AV markup, labor→Non-Taxable Staffing/Staffing markup.
-- `DecorEstimateBuilder`: maps florals/lighting/signage→Florals-Taxable/Décor markup, rentals→Rentals-Rugs/Décor markup, delivery→Florals-Non-Taxable/Delivery markup.
-- `EstimateBuilder`: handles both menuItems (→F&B) and equipmentItems (→Equipment/Venue Fees/Non-Taxable Staffing).
-
-### Bug 3: Extraction results not persisting across page loads — FIXED
-- Root cause: the seeding code in `load()` was correct, but auto-trigger on upload was overwriting in-memory state before users could verify the flow. Also added "✓ AI extracted" badge so users can see data loaded from DB.
-- Fix: seeding in `load()` always renders stored DB results. Auto-trigger on upload is guarded by `record.extracted_data === null` (always true for new uploads since insert never sets it). Manual "Extract" link remains for attachments without stored data.
-
-### Bug 4: Duplicate populate actions — FIXED
-- `populatedLineItems` and `populatedDetails` Sets track which attachments have been actioned.
-- Buttons switch to "Line Items Added ✓" / "Details Applied ✓" (green, disabled) after first click.
-- Both sets reset when `triggerExtraction` is called for that attachment (re-extraction = fresh state).
+**Code changes (feat/events-layer branch):**
+- `queries.ts`: `DbEvent` interface, `getEventsForProgram()`, `event_id` added to `DbEstimate` and `ESTIMATE_FIELDS`
+- `actions.ts`: `createEvent`, `updateEvent`, `deleteEvent`; `createEstimate` accepts optional `eventId` param
+- `AddEstimateButton`: accepts optional `eventId` prop
+- `AddEventButton`: new inline form component (name, date, start/end time, guest count, event type, description)
+- `EventsView`: new client component — Total Budget banner, event cards with color-coded type badges, estimate mini-cards inside each event, Add Event form, Add Estimate per event, event delete, collapse/expand
+- `programs/[id]/page.tsx`: fetches events alongside estimates, groups estimate cards by `event_id`, passes `EventRow[]` to `EventsView`
 
 ## Current State
-- 74 tests passing (no new tests — all new logic is UI/integration layer)
-- TypeScript: no errors
-- Branch: `fix/commission-and-category-persist` (11 commits ahead of main)
+- All 74 tests passing
+- TypeScript clean
+- Migration file written but **not yet run against Supabase** — must be applied before the UI will work
+- Branch: `feat/events-layer` (not merged to main)
 
-## ⚠️ Migrations Needed — BLOCKING
-Apply in Supabase SQL Editor before testing new features:
-1. `007_line_item_templates.sql` — templates + copy items from
-2. `008_extracted_data.sql` — PDF extraction on estimate attachments
-3. `009_program_attachments.sql` — PDF brief upload on New Program page
+## Known Issues / Gaps
+- **Migration must be run manually** in Supabase dashboard SQL editor (paste contents of 014_events.sql)
+- **No edit UI for events** — users can add and delete events, but cannot edit fields after creation (follow-up)
+- **Guest count is informational only** — event guest_count displays on the card header but does not feed into pricing engine (which still uses program-level guest_count)
+- **Lowest/Best Margin badges** within an event compare across ALL estimate types in that event (not by type). May want to filter by type within EventCard if multi-type events are common.
+- **Sort order for new events** is max(existing) + 1; no drag-to-reorder yet
 
-Also add `ANTHROPIC_API_KEY` to `.env.local` and Vercel env vars.
-
-## Known Issues / Next Steps
-- **Merge PR** when ready: `fix/commission-and-category-persist`
-- **Apply migrations** 007, 008, 009 in Supabase
-- **Add ANTHROPIC_API_KEY** to env
-- **Remaining from PRD**:
-  - Validate against 3-5 real historical proposals
-  - PDF/Canva client-facing export
-  - Mobile polish
-  - Role-based access enforcement in UI
+## Next Steps
+1. **Run migration 014** in Supabase dashboard (paste `supabase/migrations/014_events.sql`)
+2. Test with real program — verify existing estimates appear inside their backfilled event
+3. Merge `feat/events-layer` to main
+4. Optional follow-ups: event edit UI, drag-to-reorder events
+5. Real-proposal validation (compare engine output to Excel)
+6. PDF/Canva export
