@@ -205,7 +205,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] ScenarioTabs: typed estimate creation (Venue/AV/Decor) inline, no page navigation needed
 - [x] Claude API PDF extraction — auto-extracts menu items + venue fees from uploaded PDFs; Copy to Canva + Populate Line Items buttons (venue builder only); requires ANTHROPIC_API_KEY in env
 - [x] PDF extraction type-aware (venue/AV/decor/transportation) — each estimate type has its own extraction prompt and populate handler
-- [x] RFP extraction: eventName → Program Name, eventStartTime/eventEndTime → Start/End Time fields
+- [x] RFP extraction: eventName → Program Name, eventStartTime/eventEndTime → Start/End Time fields (confirmed working)
+- [x] Program attachment list: multiple PDFs per program, per-doc "Populate Fields" button, overwrite confirmation, locationHint fuzzy-match against locations table (location auto-select in progress — debugging token matching)
 - [x] PDF extraction persistence: extracted_data UPDATE was silently rejected (missing RLS UPDATE policy on estimate_attachments — migration 010)
 - [x] Populate button persistence: line_items_populated + details_populated columns on estimate_attachments (migration 012), reset on re-extraction
 - [x] Transportation estimate builder — 4th estimate type with vehicle rate card, daily schedule, per-estimate commission (default 0), general sales tax, margin analysis (migrations 011 + 013)

@@ -189,7 +189,16 @@ export default function ProgramForm({ program, locations, mode }: Props) {
     if (data.eventEndTime) { setEventEndTime(data.eventEndTime); patch.event_end_time = data.eventEndTime; }
     if (data.clientHotel) { setClientHotel(data.clientHotel); patch.client_hotel = data.clientHotel; }
     if (data.locationHint) {
-      const matchId = findLocationMatch(data.locationHint, locations);
+      const tokens = data.locationHint.toLowerCase().split(/[,\s]+/).filter((t) => t.length > 2);
+      console.log('[location] hint:', data.locationHint, '| tokens:', tokens);
+      const matched = locations.filter((loc) => {
+        const n = loc.name.toLowerCase();
+        const hit = tokens.some((t) => n.includes(t));
+        console.log('[location]', hit ? '✓' : '✗', loc.name);
+        return hit;
+      });
+      console.log('[location] matched count:', matched.length, matched.map((l) => l.name));
+      const matchId = matched.length === 1 ? matched[0].id : null;
       if (matchId) { setLocationId(matchId); patch.location_id = matchId; }
     }
 
