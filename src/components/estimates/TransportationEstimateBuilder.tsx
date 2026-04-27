@@ -20,7 +20,7 @@ import {
   updateTransportCommission,
 } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { ExtractedData, ExtractedTransportVehicleRate, ExtractedTransportScheduleRow } from '@/app/(programs)/programs/[id]/estimates/actions';
-import ScenarioTabs from './ScenarioTabs';
+import EstimateNav from './EstimateNav';
 import AttachmentsPanel from './AttachmentsPanel';
 import MarginPanel from './MarginPanel';
 import TravelPanel from './TravelPanel';
@@ -59,6 +59,7 @@ interface Props {
   travelRefs: TravelRefData;
   initialTrips: DbTrip[];
   tiers: DbTier[];
+  eventName?: string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -109,7 +110,7 @@ function dbScheduleRowToLocal(r: DbTransportScheduleRow): LocalScheduleRow {
 // ─── Component ────────────────────────────────────────────
 
 export default function TransportationEstimateBuilder({
-  program, location, allEstimates, estimate, vehicleRates: initRates, scheduleRows: initRows, travelRefs, initialTrips, tiers,
+  program, location, allEstimates, estimate, vehicleRates: initRates, scheduleRows: initRows, travelRefs, initialTrips, tiers, eventName,
 }: Props) {
   const [estimateName, setEstimateName] = useState(estimate.name);
   const [commission, setCommission] = useState(estimate.transport_commission ?? 0);
@@ -366,12 +367,14 @@ export default function TransportationEstimateBuilder({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Scenario tabs */}
-      <div className="border-b border-brand-cream bg-brand-offwhite px-6 pt-3 pb-0">
-        <ScenarioTabs
-          estimates={allEstimates.map((e) => ({ id: e.id, name: e.name }))}
-          currentEstimateId={estimate.id}
+      {/* Header */}
+      <div className="bg-brand-offwhite border-b border-brand-cream px-6 py-2">
+        <EstimateNav
           programId={program.id}
+          programName={program.name}
+          eventName={eventName}
+          estimateId={estimate.id}
+          estimateName={estimateName}
         />
       </div>
 

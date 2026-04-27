@@ -3,6 +3,7 @@ import {
   getProgram,
   getEstimatesForProgram,
   getEstimate,
+  getEvent,
   getLineItemsForEstimate,
   getMarkups,
   getTiers,
@@ -36,6 +37,8 @@ export default async function EstimatePage({ params }: Props) {
 
   if (!program || !estimate) notFound();
 
+  const eventName = estimate.event_id ? (await getEvent(estimate.event_id))?.name ?? null : null;
+
   if (estimate.type === 'transportation') {
     const [initialTrips, vehicleRates, scheduleRows] = await Promise.all([
       getTripsForEstimate(estimateId),
@@ -54,6 +57,7 @@ export default async function EstimatePage({ params }: Props) {
           travelRefs={travelRefs}
           initialTrips={initialTrips}
           tiers={tiers}
+          eventName={eventName}
         />
       </div>
     );
@@ -82,6 +86,7 @@ export default async function EstimatePage({ params }: Props) {
         tiers={tiers}
         travelRefs={travelRefs}
         initialTrips={initialTrips}
+        eventName={eventName}
       />
     </div>
   );

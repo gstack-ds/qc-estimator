@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createEvent } from '@/app/(programs)/programs/actions';
 
@@ -25,6 +25,7 @@ interface Props {
 
 export default function AddEventButton({ programId, defaultGuestCount, nextSortOrder }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState('');
@@ -58,7 +59,7 @@ export default function AddEventButton({ programId, defaultGuestCount, nextSortO
       setGuestCount(defaultGuestCount);
       setEventType('general_session');
       setDescription('');
-      router.refresh();
+      startTransition(() => router.refresh());
     }
     setLoading(false);
   }

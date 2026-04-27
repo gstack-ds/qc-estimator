@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { updateEstimate } from '@/app/(programs)/programs/[id]/estimates/actions';
@@ -436,6 +436,10 @@ export default function EventsView({ programId, events: initialEvents, unassigne
   const router = useRouter();
   const [events, setEvents] = useState(initialEvents);
   const [unassignedCards, setUnassignedCards] = useState(initialUnassigned);
+
+  // Re-sync local state when the server re-renders (e.g., after router.refresh())
+  useEffect(() => { setEvents(initialEvents); }, [initialEvents]);
+  useEffect(() => { setUnassignedCards(initialUnassigned); }, [initialUnassigned]);
 
   // Drag state
   const dragIndexRef = useRef<number | null>(null);

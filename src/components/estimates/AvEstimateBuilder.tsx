@@ -8,7 +8,7 @@ import {
   calculateMarginAnalysis,
 } from '@/lib/engine/pricing';
 import type { ProgramConfig, TeamHoursTier } from '@/types';
-import ScenarioTabs from './ScenarioTabs';
+import EstimateNav from './EstimateNav';
 import CopyItemsFromButton from './CopyItemsFromButton';
 import LineItemSection from './LineItemSection';
 import AvSummaryPanel from './AvSummaryPanel';
@@ -102,6 +102,7 @@ interface Props {
   tiers: DbTier[];
   travelRefs: TravelRefData;
   initialTrips: DbTrip[];
+  eventName?: string | null;
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -113,7 +114,7 @@ const AV_SECTIONS: { name: LocalSection; label: string; taxType: TaxType }[] = [
 ];
 
 export default function AvEstimateBuilder({
-  program, location, allEstimates, estimate, dbLineItems, markups, tiers, travelRefs, initialTrips,
+  program, location, allEstimates, estimate, dbLineItems, markups, tiers, travelRefs, initialTrips, eventName,
 }: Props) {
   const programConfig = useMemo(() => toProgramConfig(program, location), [program, location]);
   const tiersList = useMemo(() => toTiers(tiers), [tiers]);
@@ -338,36 +339,29 @@ export default function AvEstimateBuilder({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Tabs row */}
-      <div className="bg-brand-offwhite border-b border-brand-cream px-6 pt-4">
-        <div className="flex items-center justify-between mb-1">
-          <div className="text-sm text-brand-charcoal/70">
-            <a href={`/programs/${program.id}`} className="hover:text-brand-brown text-brand-silver transition-colors">
-              {program.name}
-            </a>
-            <span className="mx-1 text-brand-silver/40">/</span>
-            <span className="font-medium text-brand-charcoal">Estimates</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <CopyItemsFromButton
-              currentEstimateId={estimate.id}
-              otherEstimates={allEstimates.map((e) => ({ id: e.id, name: e.name }))}
-              markups={markups}
-              onImport={handleImportItems}
-            />
-            <ExportButtons programId={program.id} programName={program.name} estimateName={name} summary={summary} guestCount={program.guest_count} estimateType="av" lineItems={lineItems} markups={markups} />
-            <div className="text-xs">
-              {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
-              {saveState === 'saved' && <span className="text-green-600">Saved</span>}
-              {saveState === 'error' && <span className="text-red-500">{saveError}</span>}
-            </div>
+      {/* Header */}
+      <div className="bg-brand-offwhite border-b border-brand-cream px-6 py-2 flex items-center gap-4">
+        <EstimateNav
+          programId={program.id}
+          programName={program.name}
+          eventName={eventName}
+          estimateId={estimate.id}
+          estimateName={name}
+        />
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <CopyItemsFromButton
+            currentEstimateId={estimate.id}
+            otherEstimates={allEstimates.map((e) => ({ id: e.id, name: e.name }))}
+            markups={markups}
+            onImport={handleImportItems}
+          />
+          <ExportButtons programId={program.id} programName={program.name} estimateName={name} summary={summary} guestCount={program.guest_count} estimateType="av" lineItems={lineItems} markups={markups} />
+          <div className="text-xs">
+            {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
+            {saveState === 'saved' && <span className="text-green-600">Saved</span>}
+            {saveState === 'error' && <span className="text-red-500">{saveError}</span>}
           </div>
         </div>
-        <ScenarioTabs
-          estimates={allEstimates.map((e) => ({ id: e.id, name: e.name }))}
-          currentEstimateId={estimate.id}
-          programId={program.id}
-        />
       </div>
 
       <div className="flex flex-1 overflow-hidden">

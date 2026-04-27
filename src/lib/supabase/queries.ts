@@ -172,6 +172,17 @@ export interface DbEvent {
   updated_at: string;
 }
 
+export async function getEvent(id: string): Promise<DbEvent | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('events')
+    .select('id, program_id, name, event_date, start_time, end_time, guest_count, event_type, description, sort_order, created_at, updated_at')
+    .eq('id', id)
+    .single();
+  if (error) return null;
+  return data as DbEvent;
+}
+
 export async function getEventsForProgram(programId: string): Promise<DbEvent[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
