@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { updateEstimate } from '@/app/(programs)/programs/[id]/estimates/actions';
-import { deleteEvent } from '@/app/(programs)/programs/actions';
+import { deleteEvent, updateEvent, reorderEvents } from '@/app/(programs)/programs/actions';
 import AddEstimateButton from './AddEstimateButton';
 import AddEventButton from './AddEventButton';
 import type { EstimateCard } from './ComparisonView';
@@ -23,6 +23,19 @@ const EVENT_TYPE_CONFIG: Record<string, { label: string; bg: string; text: strin
   lunch:              { label: 'Lunch',               bg: 'bg-teal-100',   text: 'text-teal-700' },
   custom:             { label: 'Custom',              bg: 'bg-stone-100',  text: 'text-stone-600' },
 };
+
+const EVENT_TYPE_OPTIONS = [
+  { value: 'general_session',    label: 'General Session' },
+  { value: 'formal_dinner',      label: 'Formal Dinner' },
+  { value: 'cocktail_reception', label: 'Cocktail Reception' },
+  { value: 'breakfast',          label: 'Breakfast' },
+  { value: 'lunch',              label: 'Lunch' },
+  { value: 'dine_around',        label: 'Dine Around' },
+  { value: 'experiential',       label: 'Experiential' },
+  { value: 'excursion',          label: 'Excursion' },
+  { value: 'logistics',          label: 'Logistics' },
+  { value: 'custom',             label: 'Custom' },
+];
 
 function getEventTypeConfig(type: string) {
   return EVENT_TYPE_CONFIG[type] ?? { label: type, bg: 'bg-gray-100', text: 'text-gray-600' };
@@ -70,6 +83,13 @@ function fmtTime(t: string | null) {
   const ampm = h >= 12 ? 'pm' : 'am';
   const h12 = h % 12 || 12;
   return `${h12}:${mStr} ${ampm}`;
+}
+
+function reorderArray<T>(arr: T[], from: number, to: number): T[] {
+  const result = [...arr];
+  const [item] = result.splice(from, 1);
+  result.splice(to, 0, item);
+  return result;
 }
 
 // ─── Estimate card (mini) ─────────────────────────────────
@@ -157,17 +177,36 @@ function EventCard({
   event,
   programId,
   cards,
+  isDragging,
+  isDropTarget,
   onToggle,
   onDelete,
+  onUpdate,
+  onDragHandleMouseDown,
 }: {
   event: EventRow;
   programId: string;
   cards: EstimateCard[];
+  isDragging: boolean;
+  isDropTarget: boolean;
   onToggle: (id: string, next: boolean) => void;
   onDelete: (id: string) => void;
+  onUpdate: (id: string, data: Partial<EventRow>) => void;
+  onDragHandleMouseDown: () => void;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Edit form state — re-synced from event prop each time edit is opened
+  const [editName, setEditName] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editStartTime, setEditStartTime] = useState('');
+  const [editEndTime, setEditEndTime] = useState('');
+  const [editGuestCount, setEditGuestCount] = useState(0);
+  const [editEventType, setEditEventType] = useState('');
+
   const cfg = getEventTypeConfig(event.event_type);
 
   const withTotal = cards.filter((c) => c.total > 0);
@@ -179,55 +218,183 @@ function EventCard({
   const endStr = fmtTime(event.end_time);
   const timeStr = startStr && endStr ? `${startStr} – ${endStr}` : startStr ?? endStr;
 
+  function handleEditClick() {
+    setEditName(event.name);
+    setEditDate(event.event_date ?? '');
+    setEditStartTime(event.start_time ?? '');
+    setEditEndTime(event.end_time ?? '');
+    setEditGuestCount(event.guest_count);
+    setEditEventType(event.event_type);
+    setIsEditing(true);
+  }
+
+  async function handleSave() {
+    const trimmed = editName.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    const data = {
+      name: trimmed,
+      event_date: editDate || null,
+      start_time: editStartTime || null,
+      end_time: editEndTime || null,
+      guest_count: editGuestCount,
+      event_type: editEventType,
+    };
+    await updateEvent(event.id, programId, data);
+    onUpdate(event.id, data);
+    setIsEditing(false);
+    setSaving(false);
+  }
+
   async function handleDelete() {
     if (!confirm(`Delete "${event.name}" and unlink its ${cards.length} estimate${cards.length !== 1 ? 's' : ''}? The estimates will not be deleted.`)) return;
     setDeleting(true);
     onDelete(event.id);
   }
 
+  const editCfg = getEventTypeConfig(editEventType);
+
   return (
-    <div className="border border-brand-cream rounded-lg overflow-hidden">
+    <div
+      className={`border rounded-lg overflow-hidden transition-opacity ${
+        isDragging ? 'opacity-40' : 'opacity-100'
+      } ${
+        isDropTarget ? 'border-brand-brown border-2' : 'border-brand-cream'
+      }`}
+    >
       {/* Event header */}
-      <div className="bg-brand-cream/40 px-4 py-3 flex items-center gap-3">
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className="text-brand-charcoal/50 hover:text-brand-charcoal transition-colors flex-shrink-0"
-          aria-label={expanded ? 'Collapse' : 'Expand'}
-        >
-          <svg className={`w-4 h-4 transition-transform ${expanded ? '' : '-rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${cfg.bg} ${cfg.text}`}>
-          {cfg.label}
-        </span>
-
-        <div className="flex-1 min-w-0">
-          <span className="font-medium text-brand-charcoal text-sm">{event.name}</span>
-          {(dateStr || timeStr) && (
-            <span className="text-xs text-brand-silver ml-2">
-              {[dateStr, timeStr].filter(Boolean).join(' · ')}
-            </span>
-          )}
+      {isEditing ? (
+        <div className="bg-brand-cream/40 px-4 py-3 space-y-2">
+          {/* Edit row 1: name + type */}
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="flex-1 border border-brand-cream rounded px-2 py-1 text-sm focus:outline-none focus:border-brand-brown min-w-0"
+              placeholder="Event name"
+              autoFocus
+            />
+            <select
+              value={editEventType}
+              onChange={(e) => setEditEventType(e.target.value)}
+              className={`border border-brand-cream rounded px-2 py-1 text-xs focus:outline-none focus:border-brand-brown ${editCfg.bg} ${editCfg.text}`}
+            >
+              {EVENT_TYPE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+          {/* Edit row 2: date, times, guest count, actions */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              type="date"
+              value={editDate}
+              onChange={(e) => setEditDate(e.target.value)}
+              className="border border-brand-cream rounded px-2 py-1 text-xs focus:outline-none focus:border-brand-brown"
+            />
+            <input
+              type="time"
+              value={editStartTime}
+              onChange={(e) => setEditStartTime(e.target.value)}
+              className="border border-brand-cream rounded px-2 py-1 text-xs focus:outline-none focus:border-brand-brown w-28"
+            />
+            <span className="text-xs text-brand-silver">–</span>
+            <input
+              type="time"
+              value={editEndTime}
+              onChange={(e) => setEditEndTime(e.target.value)}
+              className="border border-brand-cream rounded px-2 py-1 text-xs focus:outline-none focus:border-brand-brown w-28"
+            />
+            <input
+              type="number"
+              min={0}
+              value={editGuestCount}
+              onChange={(e) => setEditGuestCount(parseInt(e.target.value) || 0)}
+              className="border border-brand-cream rounded px-2 py-1 text-xs focus:outline-none focus:border-brand-brown w-20"
+              placeholder="Guests"
+            />
+            <div className="flex items-center gap-1 ml-auto">
+              <button
+                onClick={handleSave}
+                disabled={saving || !editName.trim()}
+                className="bg-brand-brown text-white text-xs font-medium px-3 py-1.5 rounded hover:bg-brand-charcoal disabled:opacity-50 transition-colors"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                onClick={() => setIsEditing(false)}
+                className="text-xs text-brand-silver hover:text-brand-charcoal px-2 py-1.5"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
+      ) : (
+        <div className="bg-brand-cream/40 px-4 py-3 flex items-center gap-3">
+          {/* Drag handle */}
+          <div
+            onMouseDown={onDragHandleMouseDown}
+            className="cursor-grab text-brand-silver/40 hover:text-brand-silver/80 transition-colors flex-shrink-0 select-none"
+            title="Drag to reorder"
+          >
+            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M7 4a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm6 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM7 10a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm6 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM7 16a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm6 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0z" />
+            </svg>
+          </div>
 
-        <span className="text-xs text-brand-silver flex-shrink-0">
-          {event.guest_count > 0 ? `${event.guest_count.toLocaleString()} guests` : ''}
-        </span>
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="text-brand-charcoal/50 hover:text-brand-charcoal transition-colors flex-shrink-0"
+            aria-label={expanded ? 'Collapse' : 'Expand'}
+          >
+            <svg className={`w-4 h-4 transition-transform ${expanded ? '' : '-rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
 
-        <button
-          onClick={handleDelete}
-          disabled={deleting}
-          className="text-brand-silver hover:text-red-500 transition-colors flex-shrink-0 text-xs disabled:opacity-40"
-          aria-label="Delete event"
-        >
-          {deleting ? '…' : 'Delete'}
-        </button>
-      </div>
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${cfg.bg} ${cfg.text}`}>
+            {cfg.label}
+          </span>
+
+          <div className="flex-1 min-w-0">
+            <button
+              onClick={handleEditClick}
+              className="font-medium text-brand-charcoal text-sm hover:text-brand-brown transition-colors text-left"
+            >
+              {event.name}
+            </button>
+            {(dateStr || timeStr) && (
+              <span className="text-xs text-brand-silver ml-2">
+                {[dateStr, timeStr].filter(Boolean).join(' · ')}
+              </span>
+            )}
+          </div>
+
+          <span className="text-xs text-brand-silver flex-shrink-0">
+            {event.guest_count > 0 ? `${event.guest_count.toLocaleString()} guests` : ''}
+          </span>
+
+          <button
+            onClick={handleEditClick}
+            className="text-brand-silver hover:text-brand-charcoal transition-colors flex-shrink-0 text-xs"
+          >
+            Edit
+          </button>
+
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="text-brand-silver hover:text-red-500 transition-colors flex-shrink-0 text-xs disabled:opacity-40"
+          >
+            {deleting ? '…' : 'Delete'}
+          </button>
+        </div>
+      )}
 
       {/* Event body */}
-      {expanded && (
+      {!isEditing && expanded && (
         <div className="p-4 space-y-4">
           {event.description && (
             <p className="text-xs text-brand-silver">{event.description}</p>
@@ -270,6 +437,14 @@ export default function EventsView({ programId, events: initialEvents, unassigne
   const [events, setEvents] = useState(initialEvents);
   const [unassignedCards, setUnassignedCards] = useState(initialUnassigned);
 
+  // Drag state
+  const dragIndexRef = useRef<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  // Track which card is currently being dragged for opacity
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  // Controls whether the draggable wrapper is actually draggable (only after handle mousedown)
+  const [draggableIdx, setDraggableIdx] = useState<number | null>(null);
+
   // Flatten all cards for budget calculation
   const allCards = [...events.flatMap((e) => e.cards), ...unassignedCards];
   const budgetTotal = allCards.filter((c) => c.includeInBudget).reduce((sum, c) => sum + c.total, 0);
@@ -290,6 +465,50 @@ export default function EventsView({ programId, events: initialEvents, unassigne
     await deleteEvent(id, programId);
     setEvents((prev) => prev.filter((e) => e.id !== id));
     router.refresh();
+  }
+
+  function handleUpdateEvent(id: string, data: Partial<EventRow>) {
+    setEvents((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, ...data } : e))
+    );
+  }
+
+  // Drag handlers
+  function handleDragStart(idx: number) {
+    dragIndexRef.current = idx;
+    setDraggingIndex(idx);
+  }
+
+  function handleDragOver(e: React.DragEvent, idx: number) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragIndexRef.current !== null && dragIndexRef.current !== idx) {
+      setDropIndex(idx);
+    }
+  }
+
+  function handleDragLeave() {
+    setDropIndex(null);
+  }
+
+  async function handleDrop(idx: number) {
+    const from = dragIndexRef.current;
+    if (from === null || from === idx) {
+      setDropIndex(null);
+      return;
+    }
+    const reordered = reorderArray(events, from, idx).map((e, i) => ({ ...e, sort_order: i }));
+    setEvents(reordered);
+    setDropIndex(null);
+    dragIndexRef.current = null;
+    await reorderEvents(programId, reordered.map((e) => ({ id: e.id, sort_order: e.sort_order })));
+  }
+
+  function handleDragEnd() {
+    dragIndexRef.current = null;
+    setDraggingIndex(null);
+    setDropIndex(null);
+    setDraggableIdx(null);
   }
 
   const nextSortOrder = events.length > 0 ? Math.max(...events.map((e) => e.sort_order)) + 1 : 0;
@@ -316,22 +535,36 @@ export default function EventsView({ programId, events: initialEvents, unassigne
         nextSortOrder={nextSortOrder}
       />
 
-      {/* Event cards */}
+      {/* Empty state */}
       {events.length === 0 && unassignedCards.length === 0 && (
         <div className="text-center py-12 border border-dashed border-brand-cream rounded-lg">
           <p className="text-sm text-brand-silver">No events yet. Add an event to start building estimates.</p>
         </div>
       )}
 
-      {events.map((event) => (
-        <EventCard
+      {/* Event cards — draggable */}
+      {events.map((event, idx) => (
+        <div
           key={event.id}
-          event={event}
-          programId={programId}
-          cards={event.cards}
-          onToggle={handleToggle}
-          onDelete={handleDeleteEvent}
-        />
+          draggable={draggableIdx === idx}
+          onDragStart={() => handleDragStart(idx)}
+          onDragOver={(e) => handleDragOver(e, idx)}
+          onDragLeave={handleDragLeave}
+          onDrop={() => handleDrop(idx)}
+          onDragEnd={handleDragEnd}
+        >
+          <EventCard
+            event={event}
+            programId={programId}
+            cards={event.cards}
+            isDragging={draggingIndex === idx}
+            isDropTarget={dropIndex === idx && draggingIndex !== null && draggingIndex !== idx}
+            onToggle={handleToggle}
+            onDelete={handleDeleteEvent}
+            onUpdate={handleUpdateEvent}
+            onDragHandleMouseDown={() => setDraggableIdx(idx)}
+          />
+        </div>
       ))}
 
       {/* Unassigned estimates (safety net — should be empty after migration) */}

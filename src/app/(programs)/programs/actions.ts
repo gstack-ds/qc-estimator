@@ -118,14 +118,15 @@ export async function createEstimate(programId: string, type: 'venue' | 'av' | '
     const fbMarkup = markups?.find((m) => m.name === 'Catering & F&B');
     const staffingMarkup = markups?.find((m) => m.name === 'Staffing & Labor');
 
-    // Fetch guest count for default quantities
-    const { data: program } = await supabase
-      .from('programs')
-      .select('guest_count')
-      .eq('id', programId)
-      .single();
-
-    const guestCount = program?.guest_count ?? 1;
+    // Prefer event guest count so default quantities match the event, not the program
+    const guestCount = await (async () => {
+      if (eventId) {
+        const { data: ev } = await supabase.from('events').select('guest_count').eq('id', eventId).single();
+        if (ev && ev.guest_count > 0) return ev.guest_count;
+      }
+      const { data: prog } = await supabase.from('programs').select('guest_count').eq('id', programId).single();
+      return prog?.guest_count ?? 1;
+    })();
 
     const defaultItems = [
       { section: 'F&B', name: 'Per Person Food',  qty: guestCount, unit_price: 0, category_id: fbMarkup?.id ?? null, tax_type: 'food',    sort_order: 0 },
@@ -366,5 +367,15 @@ export async function deleteEvent(id: string, programId: string): Promise<{ erro
   if (error) return { error: error.message };
   revalidatePath(`/programs/${programId}`);
   return { error: null };
+}
+
+export async function reorderEvents(programId: string, updates: { id: string; sort_order: number }[]): Promise<void> {
+  const supabase = await createClient();
+  await Promise.all(
+    updates.map(({ id, sort_order }) =>
+      supabase.from('events').update({ sort_order }).eq('id', id)
+    )
+  );
+  revalidatePath(`/programs/${programId}`);
 }
 
