@@ -11,6 +11,8 @@ import {
   getTripsForEstimate,
   getTransportVehicleRates,
   getTransportScheduleRows,
+  getVenues,
+  getAllVenueSpaces,
 } from '@/lib/supabase/queries';
 import EstimateBuilder from '@/components/estimates/EstimateBuilder';
 import AvEstimateBuilder from '@/components/estimates/AvEstimateBuilder';
@@ -26,13 +28,14 @@ interface Props {
 export default async function EstimatePage({ params }: Props) {
   const { id: programId, estimateId } = await params;
 
-  const [program, allEstimates, estimate, markups, tiers, travelRefs] = await Promise.all([
+  const [program, allEstimates, estimate, markups, tiers, travelRefs, venues] = await Promise.all([
     getProgram(programId),
     getEstimatesForProgram(programId),
     getEstimate(estimateId),
     getMarkups(),
     getTiers(),
     getTravelRefs(),
+    getVenues(),
   ]);
 
   if (!program || !estimate) notFound();
@@ -63,16 +66,36 @@ export default async function EstimatePage({ params }: Props) {
     );
   }
 
-  const [lineItems, initialTrips] = await Promise.all([
+  const [lineItems, initialTrips, venueSpaces] = await Promise.all([
     getLineItemsForEstimate(estimateId),
     getTripsForEstimate(estimateId),
+    estimate.type === 'venue' ? getAllVenueSpaces() : Promise.resolve([]),
   ]);
+
+  if (estimate.type === 'venue') {
+    return (
+      <div className="h-[calc(100vh-49px)] flex flex-col">
+        <EstimateBuilder
+          program={program}
+          location={program.location}
+          allEstimates={allEstimates}
+          estimate={estimate}
+          dbLineItems={lineItems}
+          markups={markups}
+          tiers={tiers}
+          travelRefs={travelRefs}
+          initialTrips={initialTrips}
+          eventName={eventName}
+          venues={venues}
+          venueSpaces={venueSpaces}
+        />
+      </div>
+    );
+  }
 
   const Builder = estimate.type === 'av'
     ? AvEstimateBuilder
-    : estimate.type === 'decor'
-    ? DecorEstimateBuilder
-    : EstimateBuilder;
+    : DecorEstimateBuilder;
 
   return (
     <div className="h-[calc(100vh-49px)] flex flex-col">

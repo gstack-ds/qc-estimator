@@ -20,6 +20,7 @@ export default async function ProgramsLayout({
 
   const navLinks = [
     { href: '/programs', label: 'Programs' },
+    { href: '/venues', label: 'Venues' },
     ...(isAdmin ? [{ href: '/admin', label: 'Reference Data' }] : []),
   ];
 

@@ -214,11 +214,13 @@ export interface DbEstimate {
   venue_contact: string | null;
   menu_notes: string | null;
   transport_commission: number | null;
+  venue_id: string | null;
+  venue_space_id: string | null;
   created_at: string;
   updated_at: string;
 }
 
-const ESTIMATE_FIELDS = 'id, program_id, event_id, type, name, room_space, fb_minimum, is_venue_taxable, service_charge_override, gratuity_override, admin_fee_override, include_in_budget, sort_order, venue_contact, menu_notes, transport_commission, created_at, updated_at';
+const ESTIMATE_FIELDS = 'id, program_id, event_id, type, name, room_space, fb_minimum, is_venue_taxable, service_charge_override, gratuity_override, admin_fee_override, include_in_budget, sort_order, venue_contact, menu_notes, transport_commission, venue_id, venue_space_id, created_at, updated_at';
 
 export async function getEstimatesForProgram(programId: string): Promise<DbEstimate[]> {
   const supabase = await createClient();
@@ -560,4 +562,99 @@ export async function getTransportAggregatesForProgram(programId: string): Promi
     map[row.estimate_id].total_client += row.client_cost;
   }
   return Object.entries(map).map(([estimate_id, v]) => ({ estimate_id, ...v }));
+}
+
+// ─── Venues ───────────────────────────────────────────────
+
+export interface DbVenue {
+  id: string;
+  name: string;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  service_styles: string[];
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  website: string | null;
+  notes: string | null;
+  last_used_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbVenueSpace {
+  id: string;
+  venue_id: string;
+  name: string;
+  capacity_seated: number | null;
+  capacity_standing: number | null;
+  fb_minimum: number;
+  room_fee: number;
+  service_charge_default: number | null;
+  gratuity_default: number | null;
+  admin_fee_default: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbVenueWithSpaces extends DbVenue {
+  spaces: DbVenueSpace[];
+}
+
+const VENUE_FIELDS = 'id, name, address, city, state, zip, service_styles, contact_name, contact_email, contact_phone, website, notes, last_used_date, created_at, updated_at';
+
+export async function getVenues(): Promise<DbVenue[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('venues')
+    .select(VENUE_FIELDS)
+    .order('name');
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function getVenue(id: string): Promise<DbVenue | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('venues')
+    .select(VENUE_FIELDS)
+    .eq('id', id)
+    .single();
+  if (error) return null;
+  return data as DbVenue;
+}
+
+export async function getVenueSpaces(venueId: string): Promise<DbVenueSpace[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('venue_spaces')
+    .select('id, venue_id, name, capacity_seated, capacity_standing, fb_minimum, room_fee, service_charge_default, gratuity_default, admin_fee_default, notes, created_at, updated_at')
+    .eq('venue_id', venueId)
+    .order('name');
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function getAllVenueSpaces(): Promise<DbVenueSpace[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('venue_spaces')
+    .select('id, venue_id, name, capacity_seated, capacity_standing, fb_minimum, room_fee, service_charge_default, gratuity_default, admin_fee_default, notes, created_at, updated_at')
+    .order('name');
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function getVenueWithSpaces(id: string): Promise<DbVenueWithSpaces | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('venues')
+    .select(`${VENUE_FIELDS}, spaces:venue_spaces(id, venue_id, name, capacity_seated, capacity_standing, fb_minimum, room_fee, service_charge_default, gratuity_default, admin_fee_default, notes, created_at, updated_at)`)
+    .eq('id', id)
+    .single();
+  if (error) return null;
+  return data as unknown as DbVenueWithSpaces;
 }

@@ -2,13 +2,14 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { TaxType } from '@/types';
-import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation } from '@/lib/supabase/queries';
+import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation, DbVenue, DbVenueSpace } from '@/lib/supabase/queries';
 import {
   calculateVenueEstimate,
   calculateMarginAnalysis,
 } from '@/lib/engine/pricing';
 import type { ProgramConfig, TeamHoursTier, VenueEstimateInput } from '@/types';
 import EstimateNav from './EstimateNav';
+import LinkVenuePanel from './LinkVenuePanel';
 import CopyItemsFromButton from './CopyItemsFromButton';
 import LineItemSection from './LineItemSection';
 import SummaryPanel from './SummaryPanel';
@@ -146,12 +147,15 @@ interface Props {
   travelRefs: TravelRefData;
   initialTrips: DbTrip[];
   eventName?: string | null;
+  venues?: DbVenue[];
+  venueSpaces?: DbVenueSpace[];
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 export default function EstimateBuilder({
   program, location, allEstimates, estimate, dbLineItems, markups, tiers, travelRefs, initialTrips, eventName,
+  venues = [], venueSpaces = [],
 }: Props) {
   const programConfig = useMemo(() => toProgramConfig(program, location), [program, location]);
   const tiersList = useMemo(() => toTiers(tiers), [tiers]);
@@ -178,6 +182,25 @@ export default function EstimateBuilder({
   const [saveError, setSaveError] = useState<string | null>(null);
   const savingRef = useRef(0);
   const [travelExpenses, setTravelExpenses] = useState(0);
+
+  function handleVenueAutoFill(fields: {
+    roomSpace?: string;
+    fbMinimum?: number;
+    serviceChargeOverride?: number | null;
+    gratuityOverride?: number | null;
+    adminFeeOverride?: number | null;
+  }) {
+    const patch: Partial<LocalEstimate> = {};
+    if (fields.roomSpace !== undefined) patch.roomSpace = fields.roomSpace;
+    if (fields.fbMinimum !== undefined) patch.fbMinimum = fields.fbMinimum;
+    if (fields.serviceChargeOverride !== undefined) patch.serviceChargeOverride = fields.serviceChargeOverride;
+    if (fields.gratuityOverride !== undefined) patch.gratuityOverride = fields.gratuityOverride;
+    if (fields.adminFeeOverride !== undefined) patch.adminFeeOverride = fields.adminFeeOverride;
+    if (Object.keys(patch).length > 0) {
+      updateEstField(patch);
+      saveEstimate(patch);
+    }
+  }
 
   // ─── Engine ─────────────────────────────────────────────
 
@@ -514,6 +537,24 @@ export default function EstimateBuilder({
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {/* Estimate header */}
           <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-3">
+            {/* Link Venue */}
+            {venues.length > 0 && (
+              <LinkVenuePanel
+                estimateId={estimate.id}
+                programId={program.id}
+                currentVenueId={estimate.venue_id}
+                currentVenueSpaceId={estimate.venue_space_id}
+                venues={venues}
+                venueSpaces={venueSpaces}
+                estimateName={est.name}
+                roomSpace={est.roomSpace}
+                fbMinimum={est.fbMinimum}
+                serviceChargeOverride={est.serviceChargeOverride}
+                gratuityOverride={est.gratuityOverride}
+                adminFeeOverride={est.adminFeeOverride}
+                onAutoFill={handleVenueAutoFill}
+              />
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Estimate Name</label>
