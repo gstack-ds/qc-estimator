@@ -28,9 +28,13 @@ interface Props {
   }) => void;
 }
 
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
 function formatDate(dateStr: string | null) {
   if (!dateStr) return null;
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  const [, m, ] = dateStr.slice(0, 10).split('-').map(Number);
+  const y = dateStr.slice(0, 4);
+  return `${MONTHS[m - 1]} ${y}`;
 }
 
 export default function LinkVenuePanel({

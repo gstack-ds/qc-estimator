@@ -26,9 +26,12 @@ const ALL_STATES = [
   'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC',
 ];
 
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
 function formatDate(dateStr: string | null) {
   if (!dateStr) return '—';
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const [y, m, d] = dateStr.slice(0, 10).split('-').map(Number);
+  return `${MONTHS[m - 1]} ${d}, ${y}`;
 }
 
 export default function VenuesList({ venues }: Props) {

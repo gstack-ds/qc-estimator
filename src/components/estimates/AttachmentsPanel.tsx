@@ -31,8 +31,11 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  return `${MONTHS[m - 1]} ${d}, ${y}`;
 }
 
 function buildCanvaCopyText(data: ExtractedData): string {
