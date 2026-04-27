@@ -6,13 +6,14 @@ import type { DbProgramWithLocation, DbLocation } from '@/lib/supabase/queries';
 import {
   createProgram,
   updateProgram,
-  extractProgramBrief,
-  uploadProgramAttachment,
+  extractProgramBriefFromPath,
+  registerProgramAttachment,
   getProgramAttachments,
   deleteProgramAttachment,
   type ExtractedProgramBrief,
   type ProgramAttachmentRecord,
 } from '@/app/(programs)/programs/actions';
+import { createClient } from '@/lib/supabase/client';
 
 interface Props {
   program?: DbProgramWithLocation;
@@ -25,6 +26,7 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 interface PendingFile {
   key: string;
   file: File;
+  storagePath: string;
   extracted: ExtractedProgramBrief | null;
   extracting: boolean;
   extractError: string | null;
@@ -126,10 +128,23 @@ export default function ProgramForm({ program, locations, mode }: Props) {
 
     if (mode === 'create') {
       const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      setPendingFiles((prev) => [...prev, { key, file, extracted: null, extracting: true, extractError: null }]);
-      const fd = new FormData();
-      fd.append('file', file);
-      const { error, data } = await extractProgramBrief(fd);
+      const ext = file.name.split('.').pop() ?? '';
+      const storagePath = `temp/${key}.${ext}`;
+      setPendingFiles((prev) => [...prev, { key, file, storagePath, extracted: null, extracting: true, extractError: null }]);
+
+      const supabase = createClient();
+      const { error: storageErr } = await supabase.storage
+        .from('estimate-attachments')
+        .upload(storagePath, file, { contentType: file.type });
+
+      if (storageErr) {
+        setPendingFiles((prev) => prev.map((p) =>
+          p.key === key ? { ...p, extracting: false, extractError: storageErr.message } : p
+        ));
+        return;
+      }
+
+      const { error, data } = await extractProgramBriefFromPath(storagePath);
       setPendingFiles((prev) => prev.map((p) =>
         p.key === key ? { ...p, extracting: false, extracted: data, extractError: error ?? null } : p
       ));
@@ -141,16 +156,33 @@ export default function ProgramForm({ program, locations, mode }: Props) {
         storage_path: '', file_size: file.size, mime_type: file.type,
         created_at: new Date().toISOString(), url: '', extracted_data: null,
       }, ...prev]);
-      const fd = new FormData();
-      fd.append('file', file);
-      const { error: extractErr, data } = await extractProgramBrief(fd);
-      const fd2 = new FormData();
-      fd2.append('file', file);
-      fd2.append('programId', program!.id);
-      const { record, error: uploadErr } = await uploadProgramAttachment(fd2, data ?? undefined);
-      if (uploadErr || extractErr) {
+
+      const ext = file.name.split('.').pop() ?? '';
+      const storagePath = `programs/${program!.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const supabase = createClient();
+      const { error: storageErr } = await supabase.storage
+        .from('estimate-attachments')
+        .upload(storagePath, file, { contentType: file.type });
+
+      if (storageErr) {
         setAttachments((prev) => prev.filter((a) => a.id !== key));
-        setUploadError(uploadErr ?? extractErr ?? 'Upload failed');
+        setUploadError(storageErr.message);
+        return;
+      }
+
+      const { error: extractErr, data } = await extractProgramBriefFromPath(storagePath);
+      const { record, error: regErr } = await registerProgramAttachment({
+        programId: program!.id,
+        storagePath,
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type,
+        extractedData: data ?? null,
+      });
+
+      if (regErr || extractErr) {
+        setAttachments((prev) => prev.filter((a) => a.id !== key));
+        setUploadError(regErr ?? extractErr ?? 'Upload failed');
       } else if (record) {
         setAttachments((prev) => prev.map((a) => a.id === key ? record : a));
       }
@@ -230,14 +262,16 @@ export default function ProgramForm({ program, locations, mode }: Props) {
       setSaveError(result.error ?? 'Failed to create program');
       return;
     }
-    // Upload all pending files
+    // Register all pending files (already uploaded to Storage during drop)
     await Promise.all(
-      pendingFiles.map((pf) => {
-        const fd = new FormData();
-        fd.append('file', pf.file);
-        fd.append('programId', result.id!);
-        return uploadProgramAttachment(fd, pf.extracted ?? undefined);
-      })
+      pendingFiles.map((pf) => registerProgramAttachment({
+        programId: result.id!,
+        storagePath: pf.storagePath,
+        fileName: pf.file.name,
+        fileSize: pf.file.size,
+        mimeType: pf.file.type,
+        extractedData: pf.extracted ?? null,
+      }))
     );
     router.push(`/programs/${result.id}`);
   }
@@ -343,7 +377,10 @@ export default function ProgramForm({ program, locations, mode }: Props) {
                 extracting={pf.extracting}
                 extractError={pf.extractError}
                 onPopulate={pf.extracted ? () => handlePopulate(pf.extracted!) : undefined}
-                onDelete={() => setPendingFiles((prev) => prev.filter((p) => p.key !== pf.key))}
+                onDelete={() => {
+                  createClient().storage.from('estimate-attachments').remove([pf.storagePath]);
+                  setPendingFiles((prev) => prev.filter((p) => p.key !== pf.key));
+                }}
                 deleting={false}
               />
             ))}

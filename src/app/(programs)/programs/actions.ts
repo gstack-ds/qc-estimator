@@ -231,51 +231,37 @@ export async function extractProgramBrief(
   }
 }
 
-export async function uploadProgramAttachment(
-  formData: FormData,
-  extractedData?: ExtractedProgramBrief,
-): Promise<{ error: string | null; record: ProgramAttachmentRecord | null }> {
-  const file = formData.get('file') as File | null;
-  const programId = formData.get('programId') as string | null;
-
-  if (!file || !programId) return { error: 'Missing file or programId', record: null };
-  if (file.size > 10 * 1024 * 1024) return { error: 'File exceeds 10 MB limit', record: null };
-
+// Client uploads directly to Storage; this action only inserts the DB row.
+export async function registerProgramAttachment(data: {
+  programId: string;
+  storagePath: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  extractedData?: ExtractedProgramBrief | null;
+}): Promise<{ error: string | null; record: ProgramAttachmentRecord | null }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-
-  const ext = file.name.split('.').pop() ?? '';
-  const storagePath = `programs/${programId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const { error: uploadError } = await supabase.storage
-    .from('estimate-attachments')
-    .upload(storagePath, buffer, { contentType: file.type });
-
-  if (uploadError) return { error: uploadError.message, record: null };
 
   const { data: record, error: dbError } = await supabase
     .from('program_attachments')
     .insert({
-      program_id: programId,
-      file_name: file.name,
-      storage_path: storagePath,
-      file_size: file.size,
-      mime_type: file.type,
+      program_id: data.programId,
+      file_name: data.fileName,
+      storage_path: data.storagePath,
+      file_size: data.fileSize,
+      mime_type: data.mimeType,
       uploaded_by: user?.id ?? null,
-      extracted_data: extractedData ?? null,
+      extracted_data: data.extractedData ?? null,
     })
     .select('id, program_id, file_name, storage_path, file_size, mime_type, created_at, extracted_data')
     .single();
 
-  if (dbError) {
-    await supabase.storage.from('estimate-attachments').remove([storagePath]);
-    return { error: dbError.message, record: null };
-  }
+  if (dbError) return { error: dbError.message, record: null };
 
   const { data: signedData } = await supabase.storage
     .from('estimate-attachments')
-    .createSignedUrl(storagePath, 3600);
+    .createSignedUrl(data.storagePath, 3600);
 
   return {
     error: null,
@@ -285,6 +271,46 @@ export async function uploadProgramAttachment(
       extracted_data: (record.extracted_data as ExtractedProgramBrief | null) ?? null,
     },
   };
+}
+
+// Extraction counterpart: downloads from Storage (service role), calls Claude, returns brief.
+export async function extractProgramBriefFromPath(
+  storagePath: string,
+): Promise<{ error: string | null; data: ExtractedProgramBrief | null }> {
+  const supabase = await createClient();
+
+  const { data: fileBlob, error: downloadErr } = await supabase.storage
+    .from('estimate-attachments')
+    .download(storagePath);
+  if (downloadErr || !fileBlob) return { error: downloadErr?.message ?? 'Download failed', data: null };
+
+  const base64 = Buffer.from(await fileBlob.arrayBuffer()).toString('base64');
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  let text: string;
+  try {
+    const docBlock: DocumentBlockParam = {
+      type: 'document',
+      source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+    };
+    const textBlock: TextBlockParam = { type: 'text', text: BRIEF_EXTRACTION_PROMPT };
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: [docBlock, textBlock] }],
+    });
+    text = (response.content.find((c) => c.type === 'text') as { type: 'text'; text: string } | undefined)?.text ?? '';
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'API call failed', data: null };
+  }
+
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const data = JSON.parse(jsonMatch?.[0] ?? text) as ExtractedProgramBrief;
+    return { error: null, data };
+  } catch {
+    return { error: 'Could not parse extraction response', data: null };
+  }
 }
 
 export async function getProgramAttachments(programId: string): Promise<{ error: string | null; records: ProgramAttachmentRecord[] }> {

@@ -289,51 +289,35 @@ export interface AttachmentRecord {
   details_populated: boolean;
 }
 
-const ACCEPTED_MIME_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/jpg']);
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
-
-export async function uploadAttachment(formData: FormData): Promise<{ error: string | null; record: AttachmentRecord | null }> {
-  const file = formData.get('file') as File | null;
-  const estimateId = formData.get('estimateId') as string | null;
-
-  if (!file || !estimateId) return { error: 'Missing file or estimateId', record: null };
-  if (file.size > MAX_FILE_SIZE) return { error: 'File exceeds 10 MB limit', record: null };
-  if (!ACCEPTED_MIME_TYPES.has(file.type)) return { error: 'File type not allowed', record: null };
-
+// Client uploads directly to Storage; this action only inserts the DB row.
+export async function registerAttachment(data: {
+  estimateId: string;
+  storagePath: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+}): Promise<{ error: string | null; record: AttachmentRecord | null }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-
-  const ext = file.name.split('.').pop() ?? '';
-  const storagePath = `${estimateId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const { error: uploadError } = await supabase.storage
-    .from('estimate-attachments')
-    .upload(storagePath, buffer, { contentType: file.type });
-
-  if (uploadError) return { error: uploadError.message, record: null };
 
   const { data: record, error: dbError } = await supabase
     .from('estimate_attachments')
     .insert({
-      estimate_id: estimateId,
-      file_name: file.name,
-      storage_path: storagePath,
-      file_size: file.size,
-      mime_type: file.type,
+      estimate_id: data.estimateId,
+      file_name: data.fileName,
+      storage_path: data.storagePath,
+      file_size: data.fileSize,
+      mime_type: data.mimeType,
       uploaded_by: user?.id ?? null,
     })
     .select('id, estimate_id, file_name, storage_path, file_size, mime_type, created_at, extracted_data, line_items_populated, details_populated')
     .single();
 
-  if (dbError) {
-    await supabase.storage.from('estimate-attachments').remove([storagePath]);
-    return { error: dbError.message, record: null };
-  }
+  if (dbError) return { error: dbError.message, record: null };
 
   const { data: signedData } = await supabase.storage
     .from('estimate-attachments')
-    .createSignedUrl(storagePath, 3600);
+    .createSignedUrl(data.storagePath, 3600);
 
   return {
     error: null,

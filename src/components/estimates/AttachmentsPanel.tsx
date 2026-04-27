@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import {
-  uploadAttachment,
+  registerAttachment,
   getAttachmentsForEstimate,
   deleteAttachment,
   extractAttachmentData,
@@ -11,6 +11,7 @@ import {
   type AttachmentRecord,
   type ExtractedData,
 } from '@/app/(programs)/programs/[id]/estimates/actions';
+import { createClient } from '@/lib/supabase/client';
 
 interface Props {
   estimateId: string;
@@ -120,26 +121,46 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
     if (!file) return;
     e.target.value = '';
 
+    if (file.size > 10 * 1024 * 1024) { setError('File exceeds 10 MB limit'); return; }
+    const ACCEPTED = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/jpg']);
+    if (!ACCEPTED.has(file.type)) { setError('File type not allowed'); return; }
+
     setError(null);
     setUploading(true);
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('estimateId', estimateId);
+    const ext = file.name.split('.').pop() ?? '';
+    const storagePath = `${estimateId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
-    const { error: uploadError, record } = await uploadAttachment(formData);
-    setUploading(false);
+    const supabase = createClient();
+    const { error: storageError } = await supabase.storage
+      .from('estimate-attachments')
+      .upload(storagePath, file, { contentType: file.type });
 
-    if (uploadError) {
-      setError(uploadError);
+    if (storageError) {
+      setError(storageError.message);
+      setUploading(false);
       return;
     }
 
-    if (record) {
-      setRecords((prev) => [record, ...prev]);
-      if (record.mime_type === 'application/pdf' && record.extracted_data === null) {
-        triggerExtraction(record.id);
-      }
+    const { error: regError, record } = await registerAttachment({
+      estimateId,
+      storagePath,
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: file.type,
+    });
+
+    setUploading(false);
+
+    if (regError || !record) {
+      supabase.storage.from('estimate-attachments').remove([storagePath]);
+      setError(regError ?? 'Failed to register attachment');
+      return;
+    }
+
+    setRecords((prev) => [record, ...prev]);
+    if (record.mime_type === 'application/pdf' && record.extracted_data === null) {
+      triggerExtraction(record.id);
     }
   }
 
