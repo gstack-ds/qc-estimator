@@ -6,6 +6,7 @@ import { createEstimate } from '@/app/(programs)/programs/actions';
 
 interface Props {
   programId: string;
+  eventId?: string | null;
 }
 
 type EstimateType = 'venue' | 'av' | 'decor' | 'transportation';
@@ -17,14 +18,14 @@ const TYPE_LABELS: Record<EstimateType, string> = {
   transportation: 'Transportation',
 };
 
-export default function AddEstimateButton({ programId }: Props) {
+export default function AddEstimateButton({ programId, eventId }: Props) {
   const router = useRouter();
   const [type, setType] = useState<EstimateType>('venue');
   const [loading, setLoading] = useState(false);
 
   async function handleAdd() {
     setLoading(true);
-    const result = await createEstimate(programId, type);
+    const result = await createEstimate(programId, type, eventId);
     if (result.id) router.push(`/programs/${programId}/estimates/${result.id}`);
     else setLoading(false);
   }

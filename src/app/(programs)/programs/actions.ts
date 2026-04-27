@@ -71,7 +71,7 @@ export async function updateProgram(id: string, data: Partial<{
 
 // ─── Estimates ────────────────────────────────────────────
 
-export async function createEstimate(programId: string, type: 'venue' | 'av' | 'decor' | 'transportation' = 'venue') {
+export async function createEstimate(programId: string, type: 'venue' | 'av' | 'decor' | 'transportation' = 'venue', eventId?: string | null) {
   const supabase = await createClient();
 
   // Count existing estimates to set sort_order
@@ -89,6 +89,7 @@ export async function createEstimate(programId: string, type: 'venue' | 'av' | '
     .from('estimates')
     .insert({
       program_id: programId,
+      event_id: eventId ?? null,
       type,
       name: defaultName,
       fb_minimum: 0,
@@ -316,6 +317,54 @@ export async function deleteProgramAttachment(id: string, storagePath: string): 
   await supabase.storage.from('estimate-attachments').remove([storagePath]);
   const { error } = await supabase.from('program_attachments').delete().eq('id', id);
   if (error) return { error: error.message };
+  return { error: null };
+}
+
+// ─── Events ───────────────────────────────────────────────
+
+export async function createEvent(programId: string, data: {
+  name: string;
+  event_date?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  guest_count: number;
+  event_type: string;
+  description?: string | null;
+  sort_order?: number;
+}): Promise<{ id: string | null; error: string | null }> {
+  const supabase = await createClient();
+  const { data: row, error } = await supabase
+    .from('events')
+    .insert({ program_id: programId, ...data })
+    .select('id')
+    .single();
+  if (error) return { id: null, error: error.message };
+  revalidatePath(`/programs/${programId}`);
+  return { id: row.id as string, error: null };
+}
+
+export async function updateEvent(id: string, programId: string, data: Partial<{
+  name: string;
+  event_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  guest_count: number;
+  event_type: string;
+  description: string | null;
+  sort_order: number;
+}>): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from('events').update(data).eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath(`/programs/${programId}`);
+  return { error: null };
+}
+
+export async function deleteEvent(id: string, programId: string): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from('events').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath(`/programs/${programId}`);
   return { error: null };
 }
 

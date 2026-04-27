@@ -4,6 +4,7 @@ import {
   getProgram,
   getLocations,
   getEstimatesForProgram,
+  getEventsForProgram,
   getMarkups,
   getTiers,
   getLineItemsForEstimates,
@@ -16,9 +17,9 @@ import {
   type TransportAggregate,
 } from '@/lib/supabase/queries';
 import ProgramForm from '@/components/estimates/ProgramForm';
-import ComparisonView, { type EstimateCard } from '@/components/estimates/ComparisonView';
+import EventsView, { type EventRow } from '@/components/estimates/EventsView';
+import { type EstimateCard } from '@/components/estimates/ComparisonView';
 import DeleteProgramButton from '@/components/estimates/DeleteProgramButton';
-import AddEstimateButton from '@/components/estimates/AddEstimateButton';
 import { calculateVenueEstimate, calculateMarginAnalysis } from '@/lib/engine/pricing';
 import { calcTransportSummary } from '@/lib/engine/transportation';
 import type { LineItem, TaxType, ProgramConfig, TeamHoursTier, EstimateSummary } from '@/types';
@@ -164,10 +165,11 @@ function buildEstimateCard(
 export default async function ProgramPage({ params }: Props) {
   const { id } = await params;
 
-  const [program, locations, estimates, markups, dbTiers] = await Promise.all([
+  const [program, locations, estimates, dbEvents, markups, dbTiers] = await Promise.all([
     getProgram(id),
     getLocations(),
     getEstimatesForProgram(id),
+    getEventsForProgram(id),
     getMarkups(),
     getTiers(),
   ]);
@@ -187,11 +189,40 @@ export default async function ProgramPage({ params }: Props) {
   ]);
   const programConfig = buildProgramConfig(program, program.location);
 
-  const cards: EstimateCard[] = estimates.map((est) => {
+  // Build a card for each estimate
+  const cardMap = new Map<string, EstimateCard>();
+  for (const est of estimates) {
     const items = allLineItems.filter((li) => li.estimate_id === est.id);
     const transportAgg = transportAggregates.find((a) => a.estimate_id === est.id);
-    return buildEstimateCard(est, items, markups, programConfig, tiers, transportAgg);
-  });
+    cardMap.set(est.id, buildEstimateCard(est, items, markups, programConfig, tiers, transportAgg));
+  }
+
+  // Group estimates by event_id
+  const eventCardMap = new Map<string, EstimateCard[]>();
+  const unassignedCards: EstimateCard[] = [];
+  for (const est of estimates) {
+    const card = cardMap.get(est.id)!;
+    if (est.event_id) {
+      if (!eventCardMap.has(est.event_id)) eventCardMap.set(est.event_id, []);
+      eventCardMap.get(est.event_id)!.push(card);
+    } else {
+      unassignedCards.push(card);
+    }
+  }
+
+  // Build EventRow[] in sort order
+  const eventRows: EventRow[] = dbEvents.map((ev) => ({
+    id: ev.id,
+    name: ev.name,
+    event_date: ev.event_date,
+    start_time: ev.start_time,
+    end_time: ev.end_time,
+    guest_count: ev.guest_count,
+    event_type: ev.event_type,
+    description: ev.description,
+    sort_order: ev.sort_order,
+    cards: eventCardMap.get(ev.id) ?? [],
+  }));
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-8 space-y-10">
@@ -211,14 +242,15 @@ export default async function ProgramPage({ params }: Props) {
         <ProgramForm program={program} locations={locations} mode="edit" />
       </div>
 
-      {/* Comparison section */}
+      {/* Events + Estimates section */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-serif text-lg font-medium text-brand-charcoal">Estimates</h2>
-          <AddEstimateButton programId={id} />
-        </div>
-
-        <ComparisonView programId={id} cards={cards} />
+        <h2 className="font-serif text-lg font-medium text-brand-charcoal mb-4">Events</h2>
+        <EventsView
+          programId={id}
+          events={eventRows}
+          unassignedCards={unassignedCards}
+          programGuestCount={program.guest_count}
+        />
       </div>
     </div>
   );

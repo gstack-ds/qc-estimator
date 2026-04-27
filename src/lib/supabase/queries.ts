@@ -155,11 +155,41 @@ export async function getProgram(id: string): Promise<DbProgramWithLocation | nu
   return data as unknown as DbProgramWithLocation;
 }
 
+// ─── Events ───────────────────────────────────────────────
+
+export interface DbEvent {
+  id: string;
+  program_id: string;
+  name: string;
+  event_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  guest_count: number;
+  event_type: string;
+  description: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getEventsForProgram(programId: string): Promise<DbEvent[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('events')
+    .select('id, program_id, name, event_date, start_time, end_time, guest_count, event_type, description, sort_order, created_at, updated_at')
+    .eq('program_id', programId)
+    .order('sort_order')
+    .order('event_date', { nullsFirst: true });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
 // ─── Estimates ────────────────────────────────────────────
 
 export interface DbEstimate {
   id: string;
   program_id: string;
+  event_id: string | null;
   type: string;
   name: string;
   room_space: string | null;
@@ -177,7 +207,7 @@ export interface DbEstimate {
   updated_at: string;
 }
 
-const ESTIMATE_FIELDS = 'id, program_id, type, name, room_space, fb_minimum, is_venue_taxable, service_charge_override, gratuity_override, admin_fee_override, include_in_budget, sort_order, venue_contact, menu_notes, transport_commission, created_at, updated_at';
+const ESTIMATE_FIELDS = 'id, program_id, event_id, type, name, room_space, fb_minimum, is_venue_taxable, service_charge_override, gratuity_override, admin_fee_override, include_in_budget, sort_order, venue_contact, menu_notes, transport_commission, created_at, updated_at';
 
 export async function getEstimatesForProgram(programId: string): Promise<DbEstimate[]> {
   const supabase = await createClient();
