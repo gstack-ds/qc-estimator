@@ -4,7 +4,6 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import Anthropic from '@anthropic-ai/sdk';
 import type { DocumentBlockParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
-import { PDFParse } from 'pdf-parse';
 
 // ─── Estimate details ─────────────────────────────────────
 
@@ -446,6 +445,7 @@ export async function detectPdfMode(
   if (downloadErr || !fileBlob) return { error: downloadErr?.message ?? 'Download failed', mode: 'document', extractedText: null };
 
   try {
+    const { PDFParse } = await import('pdf-parse');
     const buffer = Buffer.from(await fileBlob.arrayBuffer());
     const parser = new PDFParse({ data: buffer });
     const result = await parser.getText();
