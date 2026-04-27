@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import Anthropic from '@anthropic-ai/sdk';
 import type { DocumentBlockParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
+import { PDFParse } from 'pdf-parse';
 
 // ─── Estimate details ─────────────────────────────────────
 
@@ -424,6 +425,98 @@ function getExtractionPrompt(type: 'venue' | 'av' | 'decor' | 'transportation'):
     '- equipmentItems: only for AV/staffing/rental line items that are NOT food/beverage.\n' +
     'No markdown, no explanation — raw JSON only.'
   );
+}
+
+export async function detectPdfMode(
+  attachmentId: string,
+): Promise<{ error: string | null; mode: 'text' | 'document'; extractedText: string | null }> {
+  const supabase = await createClient();
+
+  const { data: rec, error: fetchErr } = await supabase
+    .from('estimate_attachments')
+    .select('storage_path, mime_type')
+    .eq('id', attachmentId)
+    .single();
+  if (fetchErr || !rec) return { error: fetchErr?.message ?? 'Attachment not found', mode: 'document', extractedText: null };
+  if (rec.mime_type !== 'application/pdf') return { error: 'Only PDF files can be extracted', mode: 'document', extractedText: null };
+
+  const { data: fileBlob, error: downloadErr } = await supabase.storage
+    .from('estimate-attachments')
+    .download(rec.storage_path);
+  if (downloadErr || !fileBlob) return { error: downloadErr?.message ?? 'Download failed', mode: 'document', extractedText: null };
+
+  try {
+    const buffer = Buffer.from(await fileBlob.arrayBuffer());
+    const parser = new PDFParse({ data: buffer });
+    const result = await parser.getText();
+    const extractedText = result.text?.trim() ?? '';
+    if (extractedText.length > 200) {
+      return { error: null, mode: 'text', extractedText };
+    }
+    return { error: null, mode: 'document', extractedText: null };
+  } catch {
+    return { error: null, mode: 'document', extractedText: null };
+  }
+}
+
+export async function extractFromText(
+  attachmentId: string,
+  pdfText: string,
+  estimateType: 'venue' | 'av' | 'decor' | 'transportation' = 'venue',
+): Promise<{ error: string | null; data: ExtractedData | null }> {
+  const supabase = await createClient();
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  const prompt = `${getExtractionPrompt(estimateType)}\n\nDocument text:\n${pdfText}`;
+
+  let responseText: string;
+  try {
+    const textBlock: TextBlockParam = { type: 'text', text: prompt };
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      messages: [{ role: 'user', content: [textBlock] }],
+    });
+    responseText = (response.content.find((c) => c.type === 'text') as { type: 'text'; text: string } | undefined)?.text ?? '';
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'API call failed', data: null };
+  }
+
+  let extracted: ExtractedData;
+  try {
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    const raw = JSON.parse(jsonMatch?.[0] ?? responseText) as Record<string, unknown>;
+    if (estimateType === 'transportation') {
+      extracted = {
+        menuItems: [],
+        equipmentItems: [],
+        venueFees: [],
+        vehicleRates: Array.isArray(raw.vehicleRates) ? raw.vehicleRates as ExtractedTransportVehicleRate[] : [],
+        scheduleRows: Array.isArray(raw.scheduleRows) ? raw.scheduleRows as ExtractedTransportScheduleRow[] : [],
+      };
+    } else {
+      extracted = {
+        menuItems: Array.isArray(raw.menuItems) ? raw.menuItems as ExtractedMenuItem[] : [],
+        equipmentItems: Array.isArray(raw.equipmentItems) ? raw.equipmentItems as ExtractedEquipmentItem[]
+          : Array.isArray(raw.avItems) ? raw.avItems as ExtractedEquipmentItem[]
+          : Array.isArray(raw.decorItems) ? raw.decorItems as ExtractedEquipmentItem[]
+          : [],
+        venueFees: Array.isArray(raw.venueFees) ? raw.venueFees as ExtractedVenueFee[] : [],
+        venueName: typeof raw.venueName === 'string' ? raw.venueName : undefined,
+        roomSpace: typeof raw.roomSpace === 'string' ? raw.roomSpace : undefined,
+      };
+    }
+  } catch {
+    return { error: 'Could not parse extraction response', data: null };
+  }
+
+  const { error: updateErr } = await supabase
+    .from('estimate_attachments')
+    .update({ extracted_data: extracted })
+    .eq('id', attachmentId);
+
+  if (updateErr) return { error: updateErr.message, data: null };
+  return { error: null, data: extracted };
 }
 
 export async function extractAttachmentData(

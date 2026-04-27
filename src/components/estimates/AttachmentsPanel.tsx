@@ -6,6 +6,8 @@ import {
   getAttachmentsForEstimate,
   deleteAttachment,
   extractAttachmentData,
+  detectPdfMode,
+  extractFromText,
   markAttachmentPopulated,
   resetAttachmentPopulatedFlags,
   type AttachmentRecord,
@@ -22,7 +24,7 @@ interface Props {
 
 type ExtractionStatus =
   | { status: 'idle' }
-  | { status: 'extracting' }
+  | { status: 'extracting'; mode: 'text' | 'document' | null }
   | { status: 'error'; message: string }
   | { status: 'done'; data: ExtractedData };
 
@@ -168,15 +170,27 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
     setPopulatedLineItems((prev) => { const s = new Set(prev); s.delete(attachmentId); return s; });
     setPopulatedDetails((prev) => { const s = new Set(prev); s.delete(attachmentId); return s; });
     resetAttachmentPopulatedFlags(attachmentId);
-    setExtractionState((prev) => ({ ...prev, [attachmentId]: { status: 'extracting' } }));
+    setExtractionState((prev) => ({ ...prev, [attachmentId]: { status: 'extracting', mode: null } }));
 
-    const timeout = new Promise<{ error: string; data: null }>((resolve) =>
-      setTimeout(() => resolve({ error: 'Extraction timed out', data: null }), 30000)
-    );
-    const { error: extractErr, data } = await Promise.race([
-      extractAttachmentData(attachmentId, estimateType),
-      timeout,
-    ]);
+    const timeout60 = <T,>(p: Promise<T>): Promise<T | { error: string; data: null }> =>
+      Promise.race([p, new Promise<{ error: string; data: null }>((resolve) =>
+        setTimeout(() => resolve({ error: 'Extraction timed out', data: null }), 60000)
+      )]);
+
+    const modeResult = await timeout60(detectPdfMode(attachmentId)) as Awaited<ReturnType<typeof detectPdfMode>>;
+    if ('error' in modeResult && modeResult.error && !modeResult.extractedText && modeResult.mode === 'document') {
+      // detectPdfMode returned an error — fall through to document mode below
+    }
+    const mode = modeResult.mode ?? 'document';
+    const extractedText = modeResult.extractedText ?? null;
+
+    setExtractionState((prev) => ({ ...prev, [attachmentId]: { status: 'extracting', mode } }));
+
+    const extractCall = extractedText && mode === 'text'
+      ? extractFromText(attachmentId, extractedText, estimateType)
+      : extractAttachmentData(attachmentId, estimateType);
+
+    const { error: extractErr, data } = await timeout60(extractCall) as { error: string | null; data: ExtractedData | null };
 
     if (extractErr || !data) {
       setExtractionState((prev) => ({
@@ -318,7 +332,13 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
                 {isPdf && (
                   <div className="mt-1.5 ml-7">
                     {extraction.status === 'extracting' && (
-                      <p className="text-xs text-brand-silver italic">Processing with AI…</p>
+                      <p className="text-xs text-brand-silver italic">
+                        {extraction.mode === 'text'
+                          ? 'Processing with AI… (text mode)'
+                          : extraction.mode === 'document'
+                          ? 'Processing with AI… (full document — may take longer)'
+                          : 'Processing with AI…'}
+                      </p>
                     )}
 
                     {extraction.status === 'error' && (
