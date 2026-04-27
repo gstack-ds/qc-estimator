@@ -163,6 +163,7 @@ export interface ExtractedProgramBrief {
   eventStartTime?: string;
   eventEndTime?: string;
   clientHotel?: string;
+  locationHint?: string;
   venueName?: string;
   roomSpace?: string;
   notes?: string;
@@ -186,7 +187,8 @@ const BRIEF_EXTRACTION_PROMPT =
   'clientName, companyName, eventDate (YYYY-MM-DD), guestCount, ' +
   'serviceStyle (Plated/Buffet/Family Style/Stations), alcoholType (Full Bar/Beer & Wine/None), ' +
   'eventStartTime (24hr format HH:MM, e.g. "17:00"), eventEndTime (24hr format HH:MM, e.g. "22:00"), ' +
-  'clientHotel, venueName, roomSpace, notes. ' +
+  'clientHotel, locationHint (city and state of the event, e.g. "Charlotte, NC"), ' +
+  'venueName, roomSpace, notes. ' +
   'Only include fields you can find — omit any that aren\'t in the document. ' +
   'No markdown, no explanation — raw JSON only.';
 

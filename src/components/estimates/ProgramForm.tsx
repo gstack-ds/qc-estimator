@@ -22,12 +22,23 @@ interface Props {
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
+interface PendingFile {
+  key: string;
+  file: File;
+  extracted: ExtractedProgramBrief | null;
+  extracting: boolean;
+  extractError: string | null;
+}
+
 const SERVICE_STYLES = ['Family Style', 'Plated', 'Buffet', 'Stations', 'Cocktail Reception'];
 const ALCOHOL_TYPES = ['Full Bar', 'Beer & Wine', 'None'];
 
 function countExtractedFields(data: ExtractedProgramBrief | null): number {
   if (!data) return 0;
-  const fields: (keyof ExtractedProgramBrief)[] = ['eventName', 'clientName', 'companyName', 'eventDate', 'guestCount', 'serviceStyle', 'alcoholType', 'eventStartTime', 'eventEndTime', 'clientHotel'];
+  const fields: (keyof ExtractedProgramBrief)[] = [
+    'eventName', 'clientName', 'companyName', 'eventDate', 'guestCount',
+    'serviceStyle', 'alcoholType', 'eventStartTime', 'eventEndTime', 'clientHotel', 'locationHint',
+  ];
   return fields.filter((f) => data[f] != null && data[f] !== '').length;
 }
 
@@ -37,11 +48,22 @@ function calcDuration(start: string, end: string): string {
   const [eh, em] = end.split(':').map(Number);
   const startMins = sh * 60 + sm;
   let endMins = eh * 60 + em;
-  if (endMins <= startMins) endMins += 24 * 60; // crosses midnight
+  if (endMins <= startMins) endMins += 24 * 60;
   const diff = endMins - startMins;
   const h = Math.floor(diff / 60);
   const m = diff % 60;
   return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
+}
+
+function findLocationMatch(hint: string, locations: DbLocation[]): string | null {
+  if (!hint) return null;
+  const tokens = hint.toLowerCase().split(/[,\s]+/).filter((t) => t.length > 2);
+  if (tokens.length === 0) return null;
+  const matches = locations.filter((loc) => {
+    const n = loc.name.toLowerCase();
+    return tokens.some((t) => n.includes(t));
+  });
+  return matches.length === 1 ? matches[0].id : null;
 }
 
 export default function ProgramForm({ program, locations, mode }: Props) {
@@ -49,7 +71,7 @@ export default function ProgramForm({ program, locations, mode }: Props) {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Form state — initialized from program or defaults
+  // Form state
   const [name, setName] = useState(program?.name ?? '');
   const [clientName, setClientName] = useState(program?.client_name ?? '');
   const [companyName, setCompanyName] = useState(program?.company_name ?? '');
@@ -68,17 +90,12 @@ export default function ProgramForm({ program, locations, mode }: Props) {
   const [gratuity, setGratuity] = useState(String(parseFloat(((program?.gratuity_default ?? 0.20) * 100).toFixed(4))));
   const [adminFee, setAdminFee] = useState(String(parseFloat(((program?.admin_fee_default ?? 0.05) * 100).toFixed(4))));
 
-  // Brief extraction
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [pendingExtracted, setPendingExtracted] = useState<ExtractedProgramBrief | null>(null);
-  const [extracting, setExtracting] = useState(false);
-  const [extractToast, setExtractToast] = useState<string | null>(null);
-  const [extractError, setExtractError] = useState<string | null>(null);
-  const briefFileRef = useRef<HTMLInputElement>(null);
-
-  // Program attachments (edit mode)
+  // PDF attachments — create mode uses pending array, edit mode uses DB records
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [attachments, setAttachments] = useState<ProgramAttachmentRecord[]>([]);
-  const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const briefFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (mode === 'edit' && program?.id) {
@@ -88,10 +105,8 @@ export default function ProgramForm({ program, locations, mode }: Props) {
 
   const save = useCallback(async (patch: Record<string, unknown>) => {
     if (mode === 'create') return;
-
     setSaveState('saving');
     setSaveError(null);
-
     if (!program?.id) return;
     const result = await updateProgram(program.id, patch as Parameters<typeof updateProgram>[1]);
     if (result.error) {
@@ -103,54 +118,89 @@ export default function ProgramForm({ program, locations, mode }: Props) {
     }
   }, [mode, program?.id]);
 
+  // Drop a new PDF — extract only, don't populate yet
   async function handleBriefFile(file: File) {
-    if (file.type !== 'application/pdf') { setExtractError('Only PDF files are supported.'); return; }
-    if (file.size > 10 * 1024 * 1024) { setExtractError('File exceeds 10 MB limit.'); return; }
-    setExtractError(null);
-    setExtracting(true);
-    const fd = new FormData();
-    fd.append('file', file);
-    const { error, data } = await extractProgramBrief(fd);
-    setExtracting(false);
-    if (error || !data) { setExtractError(error ?? 'Extraction failed.'); return; }
-
-    const patch: Record<string, unknown> = {};
-    let filled = 0;
-    if (data.eventName) { setName(data.eventName); patch.name = data.eventName; filled++; }
-    if (data.clientName) { setClientName(data.clientName); patch.client_name = data.clientName; filled++; }
-    if (data.companyName) { setCompanyName(data.companyName); patch.company_name = data.companyName; filled++; }
-    if (data.eventDate) { setEventDate(data.eventDate); patch.event_date = data.eventDate; filled++; }
-    if (data.guestCount && data.guestCount > 0) { setGuestCount(String(data.guestCount)); patch.guest_count = data.guestCount; filled++; }
-    if (data.serviceStyle && SERVICE_STYLES.includes(data.serviceStyle)) { setServiceStyle(data.serviceStyle); patch.service_style = data.serviceStyle; filled++; }
-    if (data.alcoholType && ALCOHOL_TYPES.includes(data.alcoholType)) { setAlcoholType(data.alcoholType); patch.alcohol_type = data.alcoholType; filled++; }
-    if (data.eventStartTime) { setEventStartTime(data.eventStartTime); patch.event_start_time = data.eventStartTime; filled++; }
-    if (data.eventEndTime) { setEventEndTime(data.eventEndTime); patch.event_end_time = data.eventEndTime; filled++; }
-    if (data.clientHotel) { setClientHotel(data.clientHotel); patch.client_hotel = data.clientHotel; filled++; }
+    if (file.type !== 'application/pdf') { setUploadError('Only PDF files are supported.'); return; }
+    if (file.size > 10 * 1024 * 1024) { setUploadError('File exceeds 10 MB limit.'); return; }
+    setUploadError(null);
 
     if (mode === 'create') {
-      setPendingFile(file);
-      setPendingExtracted(data);
+      const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      setPendingFiles((prev) => [...prev, { key, file, extracted: null, extracting: true, extractError: null }]);
+      const fd = new FormData();
+      fd.append('file', file);
+      const { error, data } = await extractProgramBrief(fd);
+      setPendingFiles((prev) => prev.map((p) =>
+        p.key === key ? { ...p, extracting: false, extracted: data, extractError: error ?? null } : p
+      ));
     } else {
-      if (Object.keys(patch).length > 0) save(patch);
+      // Edit mode: upload immediately, show in attachments list
+      const key = `uploading-${Date.now()}`;
+      setAttachments((prev) => [{
+        id: key, program_id: program!.id, file_name: file.name,
+        storage_path: '', file_size: file.size, mime_type: file.type,
+        created_at: new Date().toISOString(), url: '', extracted_data: null,
+      }, ...prev]);
+      const fd = new FormData();
+      fd.append('file', file);
+      const { error: extractErr, data } = await extractProgramBrief(fd);
       const fd2 = new FormData();
       fd2.append('file', file);
       fd2.append('programId', program!.id);
-      const { record } = await uploadProgramAttachment(fd2, data);
-      if (record) setAttachments((prev) => [record, ...prev]);
+      const { record, error: uploadErr } = await uploadProgramAttachment(fd2, data ?? undefined);
+      if (uploadErr || extractErr) {
+        setAttachments((prev) => prev.filter((a) => a.id !== key));
+        setUploadError(uploadErr ?? extractErr ?? 'Upload failed');
+      } else if (record) {
+        setAttachments((prev) => prev.map((a) => a.id === key ? record : a));
+      }
+    }
+  }
+
+  // Apply one PDF's extracted data to form fields, with confirmation if overwriting
+  function handlePopulate(data: ExtractedProgramBrief) {
+    const overwrites: string[] = [];
+    if (data.eventName && name.trim()) overwrites.push('Program Name');
+    if (data.clientName && clientName.trim()) overwrites.push('Client Name');
+    if (data.companyName && companyName.trim()) overwrites.push('Company Name');
+    if (data.eventDate && eventDate) overwrites.push('Event Date');
+    if (data.guestCount && guestCount && parseInt(guestCount) > 0) overwrites.push('Guest Count');
+    if (data.serviceStyle && SERVICE_STYLES.includes(data.serviceStyle) && serviceStyle) overwrites.push('Service Style');
+    if (data.alcoholType && ALCOHOL_TYPES.includes(data.alcoholType) && alcoholType) overwrites.push('Alcohol Type');
+    if (data.eventStartTime && eventStartTime) overwrites.push('Start Time');
+    if (data.eventEndTime && eventEndTime) overwrites.push('End Time');
+    if (data.clientHotel && clientHotel.trim()) overwrites.push('Client Hotel');
+    if (data.locationHint && findLocationMatch(data.locationHint, locations) && locationId) overwrites.push('Location');
+
+    if (overwrites.length > 0) {
+      const ok = window.confirm(`This will overwrite: ${overwrites.join(', ')}. Continue?`);
+      if (!ok) return;
     }
 
-    const msg = filled > 0
-      ? `Extracted ${filled} field${filled !== 1 ? 's' : ''} from document.`
-      : 'No matching fields found in document.';
-    setExtractToast(msg);
-    setTimeout(() => setExtractToast(null), 5000);
+    const patch: Record<string, unknown> = {};
+    if (data.eventName) { setName(data.eventName); patch.name = data.eventName; }
+    if (data.clientName) { setClientName(data.clientName); patch.client_name = data.clientName; }
+    if (data.companyName) { setCompanyName(data.companyName); patch.company_name = data.companyName; }
+    if (data.eventDate) { setEventDate(data.eventDate); patch.event_date = data.eventDate; }
+    if (data.guestCount && data.guestCount > 0) { setGuestCount(String(data.guestCount)); patch.guest_count = data.guestCount; }
+    if (data.serviceStyle && SERVICE_STYLES.includes(data.serviceStyle)) { setServiceStyle(data.serviceStyle); patch.service_style = data.serviceStyle; }
+    if (data.alcoholType && ALCOHOL_TYPES.includes(data.alcoholType)) { setAlcoholType(data.alcoholType); patch.alcohol_type = data.alcoholType; }
+    if (data.eventStartTime) { setEventStartTime(data.eventStartTime); patch.event_start_time = data.eventStartTime; }
+    if (data.eventEndTime) { setEventEndTime(data.eventEndTime); patch.event_end_time = data.eventEndTime; }
+    if (data.clientHotel) { setClientHotel(data.clientHotel); patch.client_hotel = data.clientHotel; }
+    if (data.locationHint) {
+      const matchId = findLocationMatch(data.locationHint, locations);
+      if (matchId) { setLocationId(matchId); patch.location_id = matchId; }
+    }
+
+    if (mode === 'edit' && Object.keys(patch).length > 0) save(patch);
   }
 
   async function handleDeleteAttachment(rec: ProgramAttachmentRecord) {
-    setDeletingAttachmentId(rec.id);
+    setDeletingId(rec.id);
     const { error } = await deleteProgramAttachment(rec.id, rec.storage_path);
     if (!error) setAttachments((prev) => prev.filter((a) => a.id !== rec.id));
-    setDeletingAttachmentId(null);
+    setDeletingId(null);
   }
 
   async function handleCreate() {
@@ -180,18 +230,75 @@ export default function ProgramForm({ program, locations, mode }: Props) {
       setSaveError(result.error ?? 'Failed to create program');
       return;
     }
-    if (pendingFile) {
-      const fd = new FormData();
-      fd.append('file', pendingFile);
-      fd.append('programId', result.id);
-      await uploadProgramAttachment(fd, pendingExtracted ?? undefined);
-    }
+    // Upload all pending files
+    await Promise.all(
+      pendingFiles.map((pf) => {
+        const fd = new FormData();
+        fd.append('file', pf.file);
+        fd.append('programId', result.id!);
+        return uploadProgramAttachment(fd, pf.extracted ?? undefined);
+      })
+    );
     router.push(`/programs/${result.id}`);
   }
 
   const fieldClass = 'w-full border border-brand-cream rounded px-3 py-2 text-sm text-brand-charcoal bg-white focus:outline-none focus:ring-2 focus:ring-brand-copper focus:border-brand-brown transition-colors';
   const labelClass = 'block text-xs font-medium text-brand-charcoal/60 tracking-wide mb-1';
   const sectionClass = 'grid grid-cols-2 gap-4';
+
+  // Shared attachment row renderer
+  function AttachmentRow({
+    fileName, url, fieldCount, extracted, extracting, extractError, onPopulate, onDelete, deleting,
+  }: {
+    fileName: string; url: string; fieldCount: number;
+    extracted: ExtractedProgramBrief | null; extracting: boolean; extractError: string | null;
+    onPopulate?: () => void; onDelete: () => void; deleting: boolean;
+  }) {
+    return (
+      <li className="flex items-center gap-2 py-1 border-b border-brand-cream/50 last:border-0">
+        <span className="text-brand-silver text-xs w-4 text-center flex-shrink-0">📄</span>
+        {url ? (
+          <a href={url} target="_blank" rel="noopener noreferrer"
+            className="flex-1 text-xs text-brand-charcoal hover:text-brand-brown truncate" title={fileName}>
+            {fileName}
+          </a>
+        ) : (
+          <span className="flex-1 text-xs text-brand-charcoal/60 truncate">{fileName}</span>
+        )}
+        {extracting && <span className="text-[10px] text-brand-silver italic flex-shrink-0">Extracting…</span>}
+        {extractError && <span className="text-[10px] text-red-500 flex-shrink-0">{extractError}</span>}
+        {extracted && !extracting && (
+          <>
+            <span className="text-[10px] font-medium text-green-700 bg-green-50 border border-green-100 rounded px-1.5 py-0.5 flex-shrink-0 whitespace-nowrap">
+              ✓ {fieldCount} fields
+            </span>
+            {onPopulate && (
+              <button
+                onClick={onPopulate}
+                className="text-[10px] px-2 py-0.5 rounded border border-brand-copper/40 bg-brand-copper/5 hover:bg-brand-copper/10 text-brand-copper transition-colors flex-shrink-0 whitespace-nowrap"
+              >
+                Populate Fields
+              </button>
+            )}
+          </>
+        )}
+        <button
+          onClick={onDelete}
+          disabled={deleting}
+          className="text-brand-silver/40 hover:text-red-500 transition-colors flex-shrink-0 disabled:opacity-40"
+          title="Remove"
+        >
+          {deleting ? <span className="text-xs">…</span> : (
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          )}
+        </button>
+      </li>
+    );
+  }
+
+  const hasDocs = mode === 'create' ? pendingFiles.length > 0 : attachments.length > 0;
 
   return (
     <div className="space-y-6">
@@ -204,33 +311,16 @@ export default function ProgramForm({ program, locations, mode }: Props) {
         </div>
       )}
 
-      {/* PDF brief dropzone */}
+      {/* PDF dropzone + document list */}
       <div>
         <div
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleBriefFile(f); }}
-          onClick={() => !extracting && briefFileRef.current?.click()}
-          className={`border-2 border-dashed rounded-lg px-6 py-7 text-center transition-colors ${extracting ? 'cursor-default border-brand-silver/30 bg-brand-offwhite/30' : 'cursor-pointer border-brand-cream hover:border-brand-copper/50 hover:bg-brand-offwhite/50'}`}
+          onClick={() => briefFileRef.current?.click()}
+          className="border-2 border-dashed rounded-lg px-6 py-7 text-center cursor-pointer border-brand-cream hover:border-brand-copper/50 hover:bg-brand-offwhite/50 transition-colors"
         >
-          {extracting ? (
-            <p className="text-sm text-brand-silver italic">Extracting details from document…</p>
-          ) : mode === 'create' && pendingFile ? (
-            <div>
-              <p className="text-sm font-medium text-brand-charcoal/70">{pendingFile.name}</p>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setPendingFile(null); setPendingExtracted(null); }}
-                className="text-xs text-brand-silver hover:text-red-500 mt-1"
-              >
-                Remove
-              </button>
-            </div>
-          ) : (
-            <>
-              <p className="text-sm font-medium text-brand-charcoal/70">Upload an event brief, RFP, or client document to auto-fill details.</p>
-              <p className="text-xs text-brand-silver mt-1">PDF only · Max 10 MB · Click or drag to upload</p>
-            </>
-          )}
+          <p className="text-sm font-medium text-brand-charcoal/70">Upload an event brief, RFP, or client document to auto-fill details.</p>
+          <p className="text-xs text-brand-silver mt-1">PDF only · Max 10 MB · Click or drag · Multiple files supported</p>
         </div>
         <input
           ref={briefFileRef}
@@ -239,54 +329,38 @@ export default function ProgramForm({ program, locations, mode }: Props) {
           className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handleBriefFile(f); e.target.value = ''; }}
         />
-        {extractError && (
-          <p className="text-xs text-red-500 mt-2">{extractError}</p>
-        )}
-        {extractToast && (
-          <div className="mt-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded px-3 py-2">
-            {extractToast}
-          </div>
-        )}
+        {uploadError && <p className="text-xs text-red-500 mt-2">{uploadError}</p>}
 
-        {/* Attachment list — edit mode */}
-        {mode === 'edit' && attachments.length > 0 && (
-          <ul className="mt-3 space-y-1.5">
-            {attachments.map((rec) => {
-              const fieldCount = countExtractedFields(rec.extracted_data);
-              return (
-                <li key={rec.id} className="flex items-center gap-2 text-sm">
-                  <span className="text-brand-silver text-xs w-4 text-center flex-shrink-0">📄</span>
-                  <a
-                    href={rec.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 text-brand-charcoal hover:text-brand-brown truncate text-xs"
-                    title={rec.file_name}
-                  >
-                    {rec.file_name}
-                  </a>
-                  {rec.extracted_data && (
-                    <span className="text-[10px] font-medium text-green-700 bg-green-50 border border-green-100 rounded px-1.5 py-0.5 flex-shrink-0 whitespace-nowrap">
-                      ✓ AI extracted{fieldCount > 0 ? ` (${fieldCount} fields)` : ''}
-                    </span>
-                  )}
-                  <button
-                    onClick={() => handleDeleteAttachment(rec)}
-                    disabled={deletingAttachmentId === rec.id}
-                    className="text-brand-silver/40 hover:text-red-500 transition-colors flex-shrink-0 disabled:opacity-40"
-                    title="Delete"
-                  >
-                    {deletingAttachmentId === rec.id ? (
-                      <span className="text-xs">…</span>
-                    ) : (
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
+        {hasDocs && (
+          <ul className="mt-3">
+            {mode === 'create' && pendingFiles.map((pf) => (
+              <AttachmentRow
+                key={pf.key}
+                fileName={pf.file.name}
+                url=""
+                fieldCount={countExtractedFields(pf.extracted)}
+                extracted={pf.extracted}
+                extracting={pf.extracting}
+                extractError={pf.extractError}
+                onPopulate={pf.extracted ? () => handlePopulate(pf.extracted!) : undefined}
+                onDelete={() => setPendingFiles((prev) => prev.filter((p) => p.key !== pf.key))}
+                deleting={false}
+              />
+            ))}
+            {mode === 'edit' && attachments.map((rec) => (
+              <AttachmentRow
+                key={rec.id}
+                fileName={rec.file_name}
+                url={rec.url}
+                fieldCount={countExtractedFields(rec.extracted_data)}
+                extracted={rec.extracted_data}
+                extracting={rec.storage_path === ''}
+                extractError={null}
+                onPopulate={rec.extracted_data ? () => handlePopulate(rec.extracted_data!) : undefined}
+                onDelete={() => handleDeleteAttachment(rec)}
+                deleting={deletingId === rec.id}
+              />
+            ))}
           </ul>
         )}
       </div>
