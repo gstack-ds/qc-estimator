@@ -307,6 +307,7 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
                       <ExtractionResultPanel
                         attachmentId={rec.id}
                         data={extraction.data}
+                        estimateType={estimateType}
                         onCopyToCanva={() => handleCopyToCanva(rec.id, extraction.data)}
                         onPopulateLineItems={onPopulateLineItems ? () => handlePopulateLineItems(rec.id, extraction.data) : undefined}
                         onPopulateEstimateDetails={onPopulateEstimateDetails ? () => handlePopulateDetails(rec.id, extraction.data) : undefined}
@@ -331,6 +332,7 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
 interface ExtractionResultPanelProps {
   attachmentId: string;
   data: ExtractedData;
+  estimateType: 'venue' | 'av' | 'decor' | 'transportation';
   onCopyToCanva: () => void;
   onPopulateLineItems?: () => void;
   onPopulateEstimateDetails?: () => void;
@@ -341,13 +343,18 @@ interface ExtractionResultPanelProps {
   populateLabel?: string;
 }
 
-function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, onPopulateEstimateDetails, copied, detailsToast, lineItemsPopulated, detailsPopulated, populateLabel = 'Populate Line Items' }: ExtractionResultPanelProps) {
+function ExtractionResultPanel({ data, estimateType, onCopyToCanva, onPopulateLineItems, onPopulateEstimateDetails, copied, detailsToast, lineItemsPopulated, detailsPopulated, populateLabel = 'Populate Line Items' }: ExtractionResultPanelProps) {
   const hasItems = data.menuItems.length > 0;
   const hasEquipment = (data.equipmentItems?.length ?? 0) > 0;
   const hasFees = data.venueFees.length > 0;
   const hasEstimateDetails = hasFees || !!data.venueName || !!data.roomSpace;
+  const hasVehicleRates = (data.vehicleRates?.length ?? 0) > 0;
+  const hasScheduleRows = (data.scheduleRows?.length ?? 0) > 0;
+  const hasTransportData = hasVehicleRates || hasScheduleRows;
 
-  if (!hasItems && !hasEquipment && !hasFees && !data.venueName && !data.roomSpace) {
+  const isTransport = estimateType === 'transportation';
+
+  if (isTransport ? !hasTransportData : (!hasItems && !hasEquipment && !hasFees && !data.venueName && !data.roomSpace)) {
     return <p className="text-xs text-brand-silver">No data found in this PDF.</p>;
   }
 
@@ -355,13 +362,15 @@ function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, onPop
     <div className="space-y-2">
       {/* Action buttons */}
       <div className="flex items-center flex-wrap gap-2">
-        <button
-          onClick={onCopyToCanva}
-          className="text-xs px-2 py-0.5 rounded border border-brand-cream bg-white hover:bg-brand-offwhite text-brand-charcoal/70 hover:text-brand-charcoal transition-colors"
-        >
-          {copied ? 'Copied!' : 'Copy to Canva'}
-        </button>
-        {onPopulateLineItems && (hasItems || hasEquipment) && (
+        {!isTransport && (
+          <button
+            onClick={onCopyToCanva}
+            className="text-xs px-2 py-0.5 rounded border border-brand-cream bg-white hover:bg-brand-offwhite text-brand-charcoal/70 hover:text-brand-charcoal transition-colors"
+          >
+            {copied ? 'Copied!' : 'Copy to Canva'}
+          </button>
+        )}
+        {onPopulateLineItems && (isTransport ? hasTransportData : (hasItems || hasEquipment)) && (
           <button
             onClick={lineItemsPopulated ? undefined : onPopulateLineItems}
             disabled={lineItemsPopulated}
@@ -390,8 +399,64 @@ function ExtractionResultPanel({ data, onCopyToCanva, onPopulateLineItems, onPop
         <p className="text-xs text-green-700">{detailsToast}</p>
       )}
 
-      {!hasItems && !hasEquipment && (
+      {!isTransport && !hasItems && !hasEquipment && (
         <p className="text-xs text-brand-silver italic">No pricing items found in this document.</p>
+      )}
+
+      {/* Vehicle rate card (transportation) */}
+      {hasVehicleRates && (
+        <div className="rounded border border-brand-cream overflow-hidden">
+          <table className="w-full text-xs">
+            <thead className="bg-brand-offwhite">
+              <tr>
+                <th className="text-left px-2 py-1 text-brand-charcoal/60 font-medium">Vehicle Type</th>
+                <th className="text-right px-2 py-1 text-brand-charcoal/60 font-medium w-24">Hourly Rate</th>
+                <th className="text-right px-2 py-1 text-brand-charcoal/60 font-medium w-24">Hr Min</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.vehicleRates!.map((rate, i) => (
+                <tr key={i} className="border-t border-brand-cream/60">
+                  <td className="px-2 py-1 font-medium text-brand-charcoal">{rate.vehicleType}</td>
+                  <td className="px-2 py-1 text-right text-brand-charcoal tabular-nums">${(rate.hourlyRate ?? 0).toFixed(2)}</td>
+                  <td className="px-2 py-1 text-right text-brand-silver tabular-nums">
+                    {rate.hourMinimum != null ? `${rate.hourMinimum}h` : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Schedule rows (transportation) */}
+      {hasScheduleRows && (
+        <div className="rounded border border-brand-cream overflow-hidden">
+          <table className="w-full text-xs">
+            <thead className="bg-brand-offwhite">
+              <tr>
+                <th className="text-left px-2 py-1 text-brand-charcoal/60 font-medium">Date</th>
+                <th className="text-left px-2 py-1 text-brand-charcoal/60 font-medium">Vehicle</th>
+                <th className="text-left px-2 py-1 text-brand-charcoal/60 font-medium w-16">Type</th>
+                <th className="text-right px-2 py-1 text-brand-charcoal/60 font-medium w-10">Qty</th>
+                <th className="text-left px-2 py-1 text-brand-charcoal/60 font-medium">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.scheduleRows!.map((row, i) => (
+                <tr key={i} className="border-t border-brand-cream/60">
+                  <td className="px-2 py-1 text-brand-silver whitespace-nowrap">{row.serviceDate ?? '—'}</td>
+                  <td className="px-2 py-1 text-brand-charcoal">{row.vehicleType}</td>
+                  <td className="px-2 py-1 text-brand-silver capitalize">{row.serviceType}</td>
+                  <td className="px-2 py-1 text-right text-brand-charcoal tabular-nums">{row.qty ?? 1}</td>
+                  <td className="px-2 py-1 text-brand-silver truncate max-w-[160px]" title={row.notes ?? undefined}>
+                    {row.notes ?? '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* Menu items table */}
