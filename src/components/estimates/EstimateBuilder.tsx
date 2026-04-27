@@ -196,16 +196,30 @@ export default function EstimateBuilder({
   }
 
   async function triggerAutoLink() {
-    if (linkedVenueId) return;
+    console.log('[triggerAutoLink] fired — linkedVenueId:', linkedVenueId, '| name:', est.name.trim());
+    if (linkedVenueId) {
+      console.log('[triggerAutoLink] skipping — already linked');
+      return;
+    }
     const name = est.name.trim();
-    if (!name) return;
-    const result = await autoLinkOrCreateVenue(estimate.id, program.id, name, {
-      spaceName: est.roomSpace.trim() || name,
-      fbMinimum: est.fbMinimum,
-      serviceChargeDefault: est.serviceChargeOverride,
-      gratuityDefault: est.gratuityOverride,
-      adminFeeDefault: est.adminFeeOverride,
-    });
+    if (!name) {
+      console.log('[triggerAutoLink] skipping — empty name');
+      return;
+    }
+    let result: Awaited<ReturnType<typeof autoLinkOrCreateVenue>>;
+    try {
+      result = await autoLinkOrCreateVenue(estimate.id, program.id, name, {
+        spaceName: est.roomSpace.trim() || name,
+        fbMinimum: est.fbMinimum,
+        serviceChargeDefault: est.serviceChargeOverride,
+        gratuityDefault: est.gratuityOverride,
+        adminFeeDefault: est.adminFeeOverride,
+      });
+    } catch (e) {
+      console.error('[triggerAutoLink] server action threw:', e);
+      return;
+    }
+    console.log('[triggerAutoLink] result:', result);
     if (result.action === 'linked') {
       setLinkedVenueId(result.venueId);
       setLinkedSpaceId(result.venueSpaceId);
@@ -605,7 +619,7 @@ export default function EstimateBuilder({
                   type="text"
                   value={est.name}
                   onChange={(e) => updateEstField({ name: e.target.value })}
-                  onBlur={() => { saveEstimate({ name: est.name }); triggerAutoLink(); }}
+                  onBlur={() => { console.log('[onBlur name] fired, est.name=', est.name); saveEstimate({ name: est.name }); triggerAutoLink(); }}
                   className={fieldClass}
                   placeholder="e.g., The Belmond — Ballroom"
                 />

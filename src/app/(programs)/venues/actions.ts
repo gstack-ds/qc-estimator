@@ -156,14 +156,17 @@ export async function autoLinkOrCreateVenue(
   },
 ): Promise<{ action: 'linked' | 'created' | 'skipped'; venueId: string | null; venueSpaceId: string | null; error?: string }> {
   const supabase = await createClient();
+  console.log('[autoLinkOrCreateVenue] called — estimateId:', estimateId, '| name:', estimateName);
 
   // Fetch the estimate to check if already linked
-  const { data: est } = await supabase
+  const { data: est, error: fetchErr } = await supabase
     .from('estimates')
     .select('venue_id, venue_space_id')
     .eq('id', estimateId)
     .single();
+  console.log('[autoLinkOrCreateVenue] estimate fetch — data:', est, '| error:', fetchErr?.message);
   if (est?.venue_id) {
+    console.log('[autoLinkOrCreateVenue] already linked, skipping');
     return { action: 'skipped', venueId: est.venue_id, venueSpaceId: est.venue_space_id };
   }
 
@@ -171,12 +174,13 @@ export async function autoLinkOrCreateVenue(
   if (!name) return { action: 'skipped', venueId: null, venueSpaceId: null };
 
   // Look for an exact name match (case-insensitive)
-  const { data: existing } = await supabase
+  const { data: existing, error: searchErr } = await supabase
     .from('venues')
     .select('id')
     .ilike('name', name)
     .limit(1)
     .maybeSingle();
+  console.log('[autoLinkOrCreateVenue] venue search — existing:', existing, '| error:', searchErr?.message);
 
   let venueId: string;
   let venueSpaceId: string | null = null;
@@ -189,6 +193,7 @@ export async function autoLinkOrCreateVenue(
       .from('estimates')
       .update({ venue_id: venueId, venue_space_id: null, updated_at: new Date().toISOString() })
       .eq('id', estimateId);
+    console.log('[autoLinkOrCreateVenue] link existing venue — error:', le?.message);
     if (le) return { action: 'skipped', venueId: null, venueSpaceId: null, error: le.message };
 
     await supabase
@@ -207,6 +212,7 @@ export async function autoLinkOrCreateVenue(
     .insert({ name, service_styles: [], last_used_date: new Date().toISOString().slice(0, 10) })
     .select('id')
     .single();
+  console.log('[autoLinkOrCreateVenue] create venue — data:', venue, '| error:', ve?.message);
   if (ve || !venue) return { action: 'skipped', venueId: null, venueSpaceId: null, error: ve?.message };
   venueId = venue.id;
 
