@@ -248,12 +248,30 @@ export interface ExtractedVenueFee {
   type: 'percentage' | 'flat';
 }
 
+export interface ExtractedTransportVehicleRate {
+  vehicleType: string;
+  hourlyRate: number;
+  hourMinimum: number | null;
+}
+
+export interface ExtractedTransportScheduleRow {
+  serviceDate: string | null;
+  vehicleType: string;
+  serviceType: 'hourly' | 'transfer';
+  startTime: string | null;
+  endTime: string | null;
+  qty: number;
+  notes: string | null;
+}
+
 export interface ExtractedData {
   menuItems: ExtractedMenuItem[];
   equipmentItems: ExtractedEquipmentItem[];
   venueFees: ExtractedVenueFee[];
   venueName?: string;
   roomSpace?: string;
+  vehicleRates?: ExtractedTransportVehicleRate[];
+  scheduleRows?: ExtractedTransportScheduleRow[];
 }
 
 export interface AttachmentRecord {
@@ -389,11 +407,15 @@ function getExtractionPrompt(type: 'venue' | 'av' | 'decor' | 'transportation'):
   }
   if (type === 'transportation') {
     return (
-      'Extract all vehicle types, rates, and daily service plans from this transportation quote or proposal. ' +
-      'Return ONLY valid JSON with two fields: ' +
-      'vehicleRates (array: vehicleType (include capacity e.g. "Suburban (6 pax)"), hourlyRate (number), hourMinimum (number or null)) ' +
-      'and scheduleRows (array: serviceDate (YYYY-MM-DD or null), vehicleType (string matching vehicleRates), ' +
-      'serviceType ("hourly" or "transfer"), startTime (HH:MM 24hr or null), endTime (HH:MM 24hr or null), qty (number), notes (string or null)). ' +
+      'Extract all vehicle types, rates, and service schedule from this transportation quote or proposal. ' +
+      'Return ONLY valid JSON with two fields: vehicleRates and scheduleRows. ' +
+      'vehicleRates: array of { vehicleType (string, include capacity e.g. "Suburban (6 pax)"), hourlyRate (number, the vendor hourly rate), hourMinimum (number or null) }. ' +
+      'If a vehicle has a separate flat airport-transfer rate, add a SECOND entry for that vehicle with vehicleType appended with " - Transfer" (e.g. "Suburban - Transfer"), hourlyRate = the flat transfer rate, hourMinimum = null. ' +
+      'scheduleRows: array of { serviceDate (YYYY-MM-DD or null if not specified), vehicleType (must match an entry in vehicleRates exactly), ' +
+      'serviceType ("hourly" for time-based runs or "transfer" for flat-rate airport/point-to-point runs), ' +
+      'startTime (HH:MM 24hr or null), endTime (HH:MM 24hr or null), qty (number of vehicles, default 1), notes (origin→destination or description, or null) }. ' +
+      'Extract every planned run or day in the service schedule as a separate row. ' +
+      'Omit gratuity and fuel surcharge — those are not schedule rows. ' +
       'No markdown, no explanation — raw JSON only.'
     );
   }
@@ -454,16 +476,26 @@ export async function extractAttachmentData(
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const raw = JSON.parse(jsonMatch?.[0] ?? text) as Record<string, unknown>;
-    extracted = {
-      menuItems: Array.isArray(raw.menuItems) ? raw.menuItems as ExtractedMenuItem[] : [],
-      equipmentItems: Array.isArray(raw.equipmentItems) ? raw.equipmentItems as ExtractedEquipmentItem[]
-        : Array.isArray(raw.avItems) ? raw.avItems as ExtractedEquipmentItem[]
-        : Array.isArray(raw.decorItems) ? raw.decorItems as ExtractedEquipmentItem[]
-        : [],
-      venueFees: Array.isArray(raw.venueFees) ? raw.venueFees as ExtractedVenueFee[] : [],
-      venueName: typeof raw.venueName === 'string' ? raw.venueName : undefined,
-      roomSpace: typeof raw.roomSpace === 'string' ? raw.roomSpace : undefined,
-    };
+    if (estimateType === 'transportation') {
+      extracted = {
+        menuItems: [],
+        equipmentItems: [],
+        venueFees: [],
+        vehicleRates: Array.isArray(raw.vehicleRates) ? raw.vehicleRates as ExtractedTransportVehicleRate[] : [],
+        scheduleRows: Array.isArray(raw.scheduleRows) ? raw.scheduleRows as ExtractedTransportScheduleRow[] : [],
+      };
+    } else {
+      extracted = {
+        menuItems: Array.isArray(raw.menuItems) ? raw.menuItems as ExtractedMenuItem[] : [],
+        equipmentItems: Array.isArray(raw.equipmentItems) ? raw.equipmentItems as ExtractedEquipmentItem[]
+          : Array.isArray(raw.avItems) ? raw.avItems as ExtractedEquipmentItem[]
+          : Array.isArray(raw.decorItems) ? raw.decorItems as ExtractedEquipmentItem[]
+          : [],
+        venueFees: Array.isArray(raw.venueFees) ? raw.venueFees as ExtractedVenueFee[] : [],
+        venueName: typeof raw.venueName === 'string' ? raw.venueName : undefined,
+        roomSpace: typeof raw.roomSpace === 'string' ? raw.roomSpace : undefined,
+      };
+    }
   } catch {
     return { error: 'Could not parse extraction response', data: null };
   }

@@ -19,7 +19,7 @@ import {
   deleteTransportScheduleRow,
   updateTransportCommission,
 } from '@/app/(programs)/programs/[id]/estimates/actions';
-import type { ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
+import type { ExtractedData, ExtractedTransportVehicleRate, ExtractedTransportScheduleRow } from '@/app/(programs)/programs/[id]/estimates/actions';
 import ScenarioTabs from './ScenarioTabs';
 import AttachmentsPanel from './AttachmentsPanel';
 import MarginPanel from './MarginPanel';
@@ -291,13 +291,8 @@ export default function TransportationEstimateBuilder({
   // ─── PDF extraction populate ──────────────────────────────
 
   const handlePopulateFromExtraction = useCallback((data: ExtractedData) => {
-    const raw = data as unknown as {
-      vehicleRates?: Array<{ vehicleType: string; hourlyRate: number; hourMinimum: number | null }>;
-      scheduleRows?: Array<{ serviceDate: string | null; vehicleType: string; serviceType: string; startTime: string | null; endTime: string | null; qty: number; notes: string | null }>;
-    };
-
-    const extractedRates = raw.vehicleRates ?? [];
-    const extractedRows = raw.scheduleRows ?? [];
+    const extractedRates: ExtractedTransportVehicleRate[] = data.vehicleRates ?? [];
+    const extractedRows: ExtractedTransportScheduleRow[] = data.scheduleRows ?? [];
 
     // Add vehicle rates
     let newRatesPromise = Promise.resolve<LocalVehicleRate[]>([]);
