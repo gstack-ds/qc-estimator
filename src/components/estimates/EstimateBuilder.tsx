@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import type { TaxType } from '@/types';
 import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation, DbVenue, DbVenueSpace } from '@/lib/supabase/queries';
 import {
@@ -18,6 +19,7 @@ import TravelPanel from './TravelPanel';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
+import { autoLinkOrCreateVenue, syncVenueSpaceDefaults } from '@/app/(programs)/venues/actions';
 import type { DbTemplate, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { TravelRefData, DbTrip } from '@/lib/supabase/queries';
 
@@ -157,6 +159,7 @@ export default function EstimateBuilder({
   program, location, allEstimates, estimate, dbLineItems, markups, tiers, travelRefs, initialTrips, eventName,
   venues = [], venueSpaces = [],
 }: Props) {
+  const router = useRouter();
   const programConfig = useMemo(() => toProgramConfig(program, location), [program, location]);
   const tiersList = useMemo(() => toTiers(tiers), [tiers]);
 
@@ -182,6 +185,49 @@ export default function EstimateBuilder({
   const [saveError, setSaveError] = useState<string | null>(null);
   const savingRef = useRef(0);
   const [travelExpenses, setTravelExpenses] = useState(0);
+
+  const [linkedVenueId, setLinkedVenueId] = useState<string | null>(estimate.venue_id);
+  const [linkedSpaceId, setLinkedSpaceId] = useState<string | null>(estimate.venue_space_id);
+  const [venueToast, setVenueToast] = useState<string | null>(null);
+
+  function showVenueToast(msg: string) {
+    setVenueToast(msg);
+    setTimeout(() => setVenueToast((t) => t === msg ? null : t), 3000);
+  }
+
+  async function triggerAutoLink() {
+    if (linkedVenueId) return;
+    const name = est.name.trim();
+    if (!name) return;
+    const result = await autoLinkOrCreateVenue(estimate.id, program.id, name, {
+      spaceName: est.roomSpace.trim() || name,
+      fbMinimum: est.fbMinimum,
+      serviceChargeDefault: est.serviceChargeOverride,
+      gratuityDefault: est.gratuityOverride,
+      adminFeeDefault: est.adminFeeOverride,
+    });
+    if (result.action === 'linked') {
+      setLinkedVenueId(result.venueId);
+      setLinkedSpaceId(result.venueSpaceId);
+      showVenueToast('Linked to existing venue');
+      router.refresh();
+    } else if (result.action === 'created') {
+      setLinkedVenueId(result.venueId);
+      setLinkedSpaceId(result.venueSpaceId);
+      showVenueToast('Added to venues database');
+      router.refresh();
+    }
+  }
+
+  async function syncSpaceOnBlur() {
+    if (!linkedSpaceId || !linkedVenueId) return;
+    syncVenueSpaceDefaults(linkedSpaceId, linkedVenueId, {
+      fbMinimum: est.fbMinimum,
+      serviceChargeDefault: est.serviceChargeOverride,
+      gratuityDefault: est.gratuityOverride,
+      adminFeeDefault: est.adminFeeOverride,
+    });
+  }
 
   function handleVenueAutoFill(fields: {
     roomSpace?: string;
@@ -524,7 +570,8 @@ export default function EstimateBuilder({
             onImport={handleImportItems}
           />
           <ExportButtons programId={program.id} programName={program.name} estimateName={est.name} summary={summary} guestCount={program.guest_count} lineItems={lineItems} markups={markups} />
-          <div className="text-xs">
+          <div className="text-xs flex items-center gap-3">
+            {venueToast && <span className="text-brand-brown">{venueToast}</span>}
             {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
             {saveState === 'saved' && <span className="text-green-600">Saved</span>}
             {saveState === 'error' && <span className="text-red-500">{saveError}</span>}
@@ -538,23 +585,19 @@ export default function EstimateBuilder({
           {/* Estimate header */}
           <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-3">
             {/* Link Venue */}
-            {venues.length > 0 && (
-              <LinkVenuePanel
-                estimateId={estimate.id}
-                programId={program.id}
-                currentVenueId={estimate.venue_id}
-                currentVenueSpaceId={estimate.venue_space_id}
-                venues={venues}
-                venueSpaces={venueSpaces}
-                estimateName={est.name}
-                roomSpace={est.roomSpace}
-                fbMinimum={est.fbMinimum}
-                serviceChargeOverride={est.serviceChargeOverride}
-                gratuityOverride={est.gratuityOverride}
-                adminFeeOverride={est.adminFeeOverride}
-                onAutoFill={handleVenueAutoFill}
-              />
-            )}
+            <LinkVenuePanel
+              estimateId={estimate.id}
+              programId={program.id}
+              currentVenueId={linkedVenueId}
+              currentVenueSpaceId={linkedSpaceId}
+              venues={venues}
+              venueSpaces={venueSpaces}
+              onAutoFill={handleVenueAutoFill}
+              onLinkChange={(venueId, spaceId) => {
+                setLinkedVenueId(venueId);
+                setLinkedSpaceId(spaceId);
+              }}
+            />
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Estimate Name</label>
@@ -562,7 +605,7 @@ export default function EstimateBuilder({
                   type="text"
                   value={est.name}
                   onChange={(e) => updateEstField({ name: e.target.value })}
-                  onBlur={() => saveEstimate({ name: est.name })}
+                  onBlur={() => { saveEstimate({ name: est.name }); triggerAutoLink(); }}
                   className={fieldClass}
                   placeholder="e.g., The Belmond — Ballroom"
                 />
@@ -590,7 +633,7 @@ export default function EstimateBuilder({
                     min="0"
                     value={est.fbMinimum === 0 ? '' : est.fbMinimum}
                     onChange={(e) => updateEstField({ fbMinimum: parseFloat(e.target.value) || 0 })}
-                    onBlur={() => saveEstimate({ fbMinimum: est.fbMinimum })}
+                    onBlur={() => { saveEstimate({ fbMinimum: est.fbMinimum }); syncSpaceOnBlur(); }}
                     className={fieldClass + ' pl-5'}
                     placeholder="0.00"
                   />
@@ -629,7 +672,7 @@ export default function EstimateBuilder({
                         const val = e.target.value === '' ? null : parseFloat(e.target.value) / 100;
                         updateEstField({ serviceChargeOverride: val });
                       }}
-                      onBlur={() => saveEstimate({ serviceChargeOverride: est.serviceChargeOverride })}
+                      onBlur={() => { saveEstimate({ serviceChargeOverride: est.serviceChargeOverride }); syncSpaceOnBlur(); }}
                       className={feeInputClass(est.serviceChargeOverride, defaultSC)}
                     />
                     <span className="absolute right-2 top-1.5 text-brand-silver text-xs pointer-events-none">%</span>
@@ -649,7 +692,7 @@ export default function EstimateBuilder({
                         const val = e.target.value === '' ? null : parseFloat(e.target.value) / 100;
                         updateEstField({ gratuityOverride: val });
                       }}
-                      onBlur={() => saveEstimate({ gratuityOverride: est.gratuityOverride })}
+                      onBlur={() => { saveEstimate({ gratuityOverride: est.gratuityOverride }); syncSpaceOnBlur(); }}
                       className={feeInputClass(est.gratuityOverride, defaultGrat)}
                     />
                     <span className="absolute right-2 top-1.5 text-brand-silver text-xs pointer-events-none">%</span>
@@ -669,7 +712,7 @@ export default function EstimateBuilder({
                         const val = e.target.value === '' ? null : parseFloat(e.target.value) / 100;
                         updateEstField({ adminFeeOverride: val });
                       }}
-                      onBlur={() => saveEstimate({ adminFeeOverride: est.adminFeeOverride })}
+                      onBlur={() => { saveEstimate({ adminFeeOverride: est.adminFeeOverride }); syncSpaceOnBlur(); }}
                       className={feeInputClass(est.adminFeeOverride, defaultAdmin)}
                     />
                     <span className="absolute right-2 top-1.5 text-brand-silver text-xs pointer-events-none">%</span>
