@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import type { TaxType } from '@/types';
 import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation, DbVenue, DbVenueSpace } from '@/lib/supabase/queries';
 import {
@@ -188,24 +189,12 @@ export default function EstimateBuilder({
 
   const [linkedVenueId, setLinkedVenueId] = useState<string | null>(estimate.venue_id);
   const [linkedSpaceId, setLinkedSpaceId] = useState<string | null>(estimate.venue_space_id);
-  const [venueToast, setVenueToast] = useState<string | null>(null);
-
-  function showVenueToast(msg: string) {
-    setVenueToast(msg);
-    setTimeout(() => setVenueToast((t) => t === msg ? null : t), 3000);
-  }
+  const [venueBanner, setVenueBanner] = useState<{ message: string; venueId: string } | null>(null);
 
   async function triggerAutoLink() {
-    console.log('[triggerAutoLink] fired — linkedVenueId:', linkedVenueId, '| name:', est.name.trim());
-    if (linkedVenueId) {
-      console.log('[triggerAutoLink] skipping — already linked');
-      return;
-    }
+    if (linkedVenueId) return;
     const name = est.name.trim();
-    if (!name) {
-      console.log('[triggerAutoLink] skipping — empty name');
-      return;
-    }
+    if (!name) return;
     let result: Awaited<ReturnType<typeof autoLinkOrCreateVenue>>;
     try {
       result = await autoLinkOrCreateVenue(estimate.id, program.id, name, {
@@ -215,20 +204,18 @@ export default function EstimateBuilder({
         gratuityDefault: est.gratuityOverride,
         adminFeeDefault: est.adminFeeOverride,
       });
-    } catch (e) {
-      console.error('[triggerAutoLink] server action threw:', e);
+    } catch {
       return;
     }
-    console.log('[triggerAutoLink] result:', result);
-    if (result.action === 'linked') {
+    if (result.action === 'linked' && result.venueId) {
       setLinkedVenueId(result.venueId);
       setLinkedSpaceId(result.venueSpaceId);
-      showVenueToast('Linked to existing venue');
+      setVenueBanner({ message: 'Linked to existing venue', venueId: result.venueId });
       router.refresh();
-    } else if (result.action === 'created') {
+    } else if (result.action === 'created' && result.venueId) {
       setLinkedVenueId(result.venueId);
       setLinkedSpaceId(result.venueSpaceId);
-      showVenueToast('Added to venues database');
+      setVenueBanner({ message: 'Added to Venues', venueId: result.venueId });
       router.refresh();
     }
   }
@@ -585,7 +572,6 @@ export default function EstimateBuilder({
           />
           <ExportButtons programId={program.id} programName={program.name} estimateName={est.name} summary={summary} guestCount={program.guest_count} lineItems={lineItems} markups={markups} />
           <div className="text-xs flex items-center gap-3">
-            {venueToast && <span className="text-brand-brown">{venueToast}</span>}
             {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
             {saveState === 'saved' && <span className="text-green-600">Saved</span>}
             {saveState === 'error' && <span className="text-red-500">{saveError}</span>}
@@ -619,7 +605,7 @@ export default function EstimateBuilder({
                   type="text"
                   value={est.name}
                   onChange={(e) => updateEstField({ name: e.target.value })}
-                  onBlur={() => { console.log('[onBlur name] fired, est.name=', est.name); saveEstimate({ name: est.name }); triggerAutoLink(); }}
+                  onBlur={() => { saveEstimate({ name: est.name }); triggerAutoLink(); }}
                   className={fieldClass}
                   placeholder="e.g., The Belmond — Ballroom"
                 />
@@ -636,6 +622,26 @@ export default function EstimateBuilder({
                 />
               </div>
             </div>
+
+            {/* Venue link banner */}
+            {venueBanner && (
+              <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-md px-3 py-2 text-sm text-green-800">
+                <span className="font-medium">&#10003; {venueBanner.message}</span>
+                <Link
+                  href={`/venues/${venueBanner.venueId}`}
+                  className="underline hover:text-green-900 text-green-700"
+                >
+                  View venue &rarr;
+                </Link>
+                <button
+                  onClick={() => setVenueBanner(null)}
+                  className="ml-auto text-green-600 hover:text-green-900 text-base leading-none"
+                  aria-label="Dismiss"
+                >
+                  &times;
+                </button>
+              </div>
+            )}
 
             <div className="grid grid-cols-3 gap-3">
               <div>
