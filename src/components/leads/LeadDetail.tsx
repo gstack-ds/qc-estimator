@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import type React from 'react';
 import { useRouter } from 'next/navigation';
 import type { DbLead, LeadStatus } from '@/lib/supabase/queries';
 import LeadStatusBadge from './LeadStatusBadge';
@@ -17,34 +18,54 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
 };
 const OWNERS = ['Alex', 'Lindsey', 'Lydia'];
 
-// ─── Field components ──────────────────────────────────────
+// ─── Shared styles ─────────────────────────────────────────
 
 const inputCls = 'w-full border border-brand-cream rounded px-2.5 py-1.5 text-sm bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper';
 const labelCls = 'block text-[10px] font-medium text-brand-charcoal/50 uppercase tracking-wide mb-0.5';
 const sectionCls = 'bg-white border border-brand-cream rounded-lg p-5 space-y-4';
 const sectionHeadCls = 'font-serif text-sm font-medium text-brand-charcoal mb-3';
+const viewCls = 'min-h-[28px] px-2.5 py-1.5 text-sm rounded cursor-text hover:bg-brand-offwhite border border-transparent hover:border-brand-cream transition-colors text-brand-charcoal';
 
+// ─── Field components ──────────────────────────────────────
+
+// type='percent': stored as decimal (0.065), displayed/edited as percentage (6.5)
 function Field({ label, value, field, type = 'text', onSave }:
   { label: string; value: string | number | null; field: keyof LeadInput; type?: string; onSave: (f: keyof LeadInput, v: string | number | boolean | null) => void }
 ) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(String(value ?? ''));
+  const [draft, setDraft] = useState('');
+
+  function initDraft() {
+    if (type === 'percent') {
+      setDraft(value != null ? String(Math.round(Number(value) * 10000) / 100) : '');
+    } else {
+      setDraft(String(value ?? ''));
+    }
+  }
 
   function commit() {
     setEditing(false);
-    const parsed = type === 'number' ? (draft === '' ? null : parseFloat(draft)) : (draft || null);
-    onSave(field, parsed);
+    if (type === 'number') {
+      onSave(field, draft === '' ? null : parseFloat(draft));
+    } else if (type === 'percent') {
+      onSave(field, draft === '' ? null : parseFloat(draft) / 100);
+    } else {
+      onSave(field, draft || null);
+    }
+  }
+
+  function displayValue(): React.ReactNode {
+    if (value == null || value === '') return <span className="text-brand-silver">—</span>;
+    if (type === 'percent') return `${(Math.round(Number(value) * 10000) / 100)}%`;
+    return String(value);
   }
 
   if (!editing) {
     return (
       <div>
         <label className={labelCls}>{label}</label>
-        <div
-          onClick={() => { setDraft(String(value ?? '')); setEditing(true); }}
-          className="min-h-[28px] px-2.5 py-1.5 text-sm rounded cursor-text hover:bg-brand-offwhite border border-transparent hover:border-brand-cream transition-colors text-brand-charcoal"
-        >
-          {value != null && value !== '' ? String(value) : <span className="text-brand-silver">—</span>}
+        <div onClick={() => { initDraft(); setEditing(true); }} className={viewCls}>
+          {displayValue()}
         </div>
       </div>
     );
@@ -55,7 +76,8 @@ function Field({ label, value, field, type = 'text', onSave }:
       <label className={labelCls}>{label}</label>
       <input
         autoFocus
-        type={type}
+        type={type === 'percent' ? 'number' : type}
+        step={type === 'percent' ? '0.1' : undefined}
         className={inputCls}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -70,7 +92,7 @@ function TextAreaField({ label, value, field, onSave }:
   { label: string; value: string | null; field: keyof LeadInput; onSave: (f: keyof LeadInput, v: string | number | boolean | null) => void }
 ) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value ?? '');
+  const [draft, setDraft] = useState('');
 
   function commit() {
     setEditing(false);
@@ -102,6 +124,48 @@ function TextAreaField({ label, value, field, onSave }:
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
       />
+    </div>
+  );
+}
+
+function SelectField({ label, value, field, options, onSave }: {
+  label: string;
+  value: string | null;
+  field: keyof LeadInput;
+  options: { value: string; label: string }[];
+  onSave: (f: keyof LeadInput, v: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const display = options.find((o) => o.value === (value ?? ''))?.label ?? null;
+
+  if (!editing) {
+    return (
+      <div>
+        <label className={labelCls}>{label}</label>
+        <div onClick={() => setEditing(true)} className={viewCls + ' cursor-pointer'}>
+          {display && value ? display : <span className="text-brand-silver">—</span>}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <label className={labelCls}>{label}</label>
+      <select
+        autoFocus
+        defaultValue={value ?? ''}
+        onChange={(e) => {
+          onSave(field, e.target.value || null);
+          setEditing(false);
+        }}
+        onBlur={() => setEditing(false)}
+        className={inputCls}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -270,18 +334,17 @@ export default function LeadDetail({ lead: initialLead, linkedProgram }: Props) 
           {f('contact_role', 'Contact Role')}
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={labelCls}>Returning Client</label>
-            <select
-              value={lead.returning_client == null ? '' : String(lead.returning_client)}
-              onChange={(e) => save('returning_client', e.target.value === '' ? null : e.target.value === 'true')}
-              className={inputCls}
-            >
-              <option value="">Unknown</option>
-              <option value="true">Yes</option>
-              <option value="false">No</option>
-            </select>
-          </div>
+          <SelectField
+            label="Returning Client"
+            value={lead.returning_client == null ? '' : String(lead.returning_client)}
+            field="returning_client"
+            options={[
+              { value: '', label: 'Unknown' },
+              { value: 'true', label: 'Yes' },
+              { value: 'false', label: 'No' },
+            ]}
+            onSave={(f, v) => save(f, v === '' || v == null ? null : v === 'true')}
+          />
         </div>
       </div>
 
@@ -328,10 +391,10 @@ export default function LeadDetail({ lead: initialLead, linkedProgram }: Props) 
           {f('lead_source', 'Lead Source')}
           {f('source_advisor', 'Source Advisor')}
           {f('source_coordinator', 'Source Coordinator')}
-          {f('source_commission', 'Source Commission %', 'number')}
+          {f('source_commission', 'Source Commission %', 'percent')}
           {f('third_party_company', 'Third-Party Company')}
           {f('third_party_contact', 'Third-Party Contact')}
-          {f('third_party_commission', 'Third-Party Commission %', 'number')}
+          {f('third_party_commission', 'Third-Party Commission %', 'percent')}
         </div>
         {tf('third_party_comm_notes', 'Third-Party Commission Notes')}
         {tf('commission_notes', 'Commission Notes')}
