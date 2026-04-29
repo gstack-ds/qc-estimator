@@ -19,6 +19,7 @@ export default async function ProgramsLayout({
   const isAdmin = profile?.role === 'admin';
 
   const navLinks = [
+    { href: '/leads', label: 'Leads' },
     { href: '/programs', label: 'Programs' },
     { href: '/venues', label: 'Venues' },
     ...(isAdmin ? [{ href: '/admin', label: 'Reference Data' }] : []),
