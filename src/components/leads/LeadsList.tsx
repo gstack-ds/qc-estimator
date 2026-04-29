@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import type { DbLead, LeadStatus } from '@/lib/supabase/queries';
 import LeadStatusBadge from './LeadStatusBadge';
-import { createLead, type LeadInput } from '@/app/(programs)/leads/actions';
+import { createLead, updateLead, archiveLead, type LeadInput } from '@/app/(programs)/leads/actions';
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -15,7 +15,7 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
   archived: 'Archived',
 };
 
-const OWNERS = ['Alex', 'Lindsey', 'Lydia'];
+const STATUSES: LeadStatus[] = ['new_lead', 'proposal', 'under_contract', 'archived'];
 
 function fmt(iso: string | null): string {
   if (!iso) return '—';
@@ -29,6 +29,42 @@ function isToday(iso: string): boolean {
 
 type SortKey = 'client_name' | 'program_name' | 'region' | 'guest_count' | 'start_date' | 'assigned_to' | 'status' | 'created_at';
 
+// ─── DateCell ─────────────────────────────────────────────
+
+function DateCell({ leadId, value, onSave }: {
+  leadId: string;
+  value: string | null;
+  onSave: (id: string, v: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        type="date"
+        defaultValue={value ?? ''}
+        className="border border-brand-copper rounded px-1.5 py-0.5 text-xs w-28 text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
+        onBlur={(e) => { onSave(leadId, e.target.value || null); setEditing(false); }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Escape') setEditing(false);
+        }}
+      />
+    );
+  }
+
+  return (
+    <span
+      onClick={() => setEditing(true)}
+      className="whitespace-nowrap cursor-text hover:text-brand-brown transition-colors"
+      title="Click to edit"
+    >
+      {fmt(value)}
+    </span>
+  );
+}
+
 // ─── Add Lead Form ─────────────────────────────────────────
 
 const EMPTY: LeadInput = {
@@ -39,7 +75,11 @@ const EMPTY: LeadInput = {
   assigned_to: null, special_instructions: '', status: 'new_lead',
 };
 
-function AddLeadPanel({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+function AddLeadPanel({ teamMembers, onClose, onCreated }: {
+  teamMembers: string[];
+  onClose: () => void;
+  onCreated: (id: string) => void;
+}) {
   const [form, setForm] = useState<LeadInput>(EMPTY);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -140,7 +180,7 @@ function AddLeadPanel({ onClose, onCreated }: { onClose: () => void; onCreated: 
               <label className={labelCls}>Assigned To</label>
               <select className={inputCls} value={form.assigned_to ?? ''} onChange={(e) => set('assigned_to', e.target.value || null)}>
                 <option value="">— Unassigned —</option>
-                {OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
+                {teamMembers.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
             </div>
           </div>
@@ -169,9 +209,10 @@ function AddLeadPanel({ onClose, onCreated }: { onClose: () => void; onCreated: 
 interface Props {
   leads: DbLead[];
   counts: Record<LeadStatus | 'all', number>;
+  teamMembers: string[];
 }
 
-export default function LeadsList({ leads, counts }: Props) {
+export default function LeadsList({ leads, counts, teamMembers }: Props) {
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
   const [ownerFilter, setOwnerFilter] = useState<string>('');
@@ -179,8 +220,29 @@ export default function LeadsList({ leads, counts }: Props) {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [showAdd, setShowAdd] = useState(false);
 
+  // Local overrides for cells edited inline — avoids full page refresh on each change
+  const [localEdits, setLocalEdits] = useState<Map<string, Partial<DbLead>>>(new Map());
+
+  const effectiveLeads = useMemo(
+    () => leads.map((l) => { const e = localEdits.get(l.id); return e ? { ...l, ...e } : l; }),
+    [leads, localEdits],
+  );
+
+  async function saveCellChange(leadId: string, field: 'status' | 'assigned_to' | 'start_date', value: string | null) {
+    setLocalEdits((prev) => {
+      const next = new Map(prev);
+      next.set(leadId, { ...(next.get(leadId) ?? {}), [field]: value });
+      return next;
+    });
+    if (field === 'status' && value === 'archived') {
+      await archiveLead(leadId);
+    } else {
+      await updateLead(leadId, { [field]: value } as LeadInput);
+    }
+  }
+
   const filtered = useMemo(() => {
-    let rows = leads;
+    let rows = effectiveLeads;
     if (statusFilter !== 'all') rows = rows.filter((l) => l.status === statusFilter);
     if (ownerFilter) rows = rows.filter((l) => (l.assigned_to ?? l.suggested_owner) === ownerFilter);
     return [...rows].sort((a, b) => {
@@ -189,7 +251,7 @@ export default function LeadsList({ leads, counts }: Props) {
       const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [leads, statusFilter, ownerFilter, sortKey, sortDir]);
+  }, [effectiveLeads, statusFilter, ownerFilter, sortKey, sortDir]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) { setSortDir((d) => d === 'asc' ? 'desc' : 'asc'); }
@@ -201,17 +263,19 @@ export default function LeadsList({ leads, counts }: Props) {
     return <span className="text-brand-copper ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>;
   }
 
-  const allOwners = Array.from(new Set(leads.map((l) => l.assigned_to ?? l.suggested_owner).filter(Boolean))) as string[];
+  const allOwners = Array.from(new Set(effectiveLeads.map((l) => l.assigned_to ?? l.suggested_owner).filter(Boolean))) as string[];
 
   const STATUS_TABS: (LeadStatus | 'all')[] = ['all', 'new_lead', 'proposal', 'under_contract', 'archived'];
   const TAB_LABELS: Record<LeadStatus | 'all', string> = { all: 'All', ...STATUS_LABELS };
 
   const thCls = 'px-3 py-2 text-left text-[10px] font-medium text-brand-charcoal/50 uppercase tracking-wide whitespace-nowrap cursor-pointer hover:text-brand-charcoal select-none';
+  const cellSelectCls = 'text-xs border border-brand-cream rounded px-1.5 py-1 bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper';
 
   return (
     <>
       {showAdd && (
         <AddLeadPanel
+          teamMembers={teamMembers}
           onClose={() => setShowAdd(false)}
           onCreated={() => { setShowAdd(false); router.refresh(); }}
         />
@@ -280,7 +344,6 @@ export default function LeadsList({ leads, counts }: Props) {
             <tbody className="divide-y divide-brand-cream/60">
               {filtered.map((lead) => {
                 const today = isToday(lead.created_at);
-                const owner = lead.assigned_to ?? lead.suggested_owner;
                 return (
                   <tr
                     key={lead.id}
@@ -300,9 +363,39 @@ export default function LeadsList({ leads, counts }: Props) {
                     <td className="px-3 py-2.5 text-right tabular-nums text-brand-charcoal/70">
                       {lead.guest_count ?? '—'}
                     </td>
-                    <td className="px-3 py-2.5 text-brand-charcoal/70 whitespace-nowrap">{fmt(lead.start_date)}</td>
-                    <td className="px-3 py-2.5 text-brand-charcoal/70">{owner ?? <span className="text-brand-silver">—</span>}</td>
-                    <td className="px-3 py-2.5"><LeadStatusBadge status={lead.status} /></td>
+
+                    {/* Start date — click to edit */}
+                    <td className="px-3 py-2.5 text-brand-charcoal/70" onClick={(e) => e.stopPropagation()}>
+                      <DateCell
+                        leadId={lead.id}
+                        value={lead.start_date}
+                        onSave={(id, v) => saveCellChange(id, 'start_date', v)}
+                      />
+                    </td>
+
+                    {/* Owner — inline select */}
+                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                      <select
+                        value={lead.assigned_to ?? ''}
+                        onChange={(e) => saveCellChange(lead.id, 'assigned_to', e.target.value || null)}
+                        className={cellSelectCls}
+                      >
+                        <option value="">— Unassigned —</option>
+                        {teamMembers.map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </td>
+
+                    {/* Status — inline select */}
+                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                      <select
+                        value={lead.status}
+                        onChange={(e) => saveCellChange(lead.id, 'status', e.target.value)}
+                        className={cellSelectCls}
+                      >
+                        {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+                      </select>
+                    </td>
+
                     <td className="px-3 py-2.5 text-brand-silver whitespace-nowrap text-xs">{fmt(lead.created_at.slice(0, 10))}</td>
                   </tr>
                 );

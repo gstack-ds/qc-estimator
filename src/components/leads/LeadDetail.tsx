@@ -16,7 +16,6 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
   under_contract: 'Under Contract',
   archived: 'Archived',
 };
-const OWNERS = ['Alex', 'Lindsey', 'Lydia'];
 
 // ─── Shared styles ─────────────────────────────────────────
 
@@ -175,9 +174,10 @@ function SelectField({ label, value, field, options, onSave }: {
 interface Props {
   lead: DbLead;
   linkedProgram: { id: string; name: string } | null;
+  teamMembers: string[];
 }
 
-export default function LeadDetail({ lead: initialLead, linkedProgram }: Props) {
+export default function LeadDetail({ lead: initialLead, linkedProgram, teamMembers }: Props) {
   const router = useRouter();
   const [lead, setLead] = useState(initialLead);
   const [creatingProgram, setCreatingProgram] = useState(false);
@@ -281,7 +281,7 @@ export default function LeadDetail({ lead: initialLead, linkedProgram }: Props) 
             className="border border-brand-cream rounded px-2.5 py-1.5 text-sm bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
           >
             <option value="">— Unassigned —</option>
-            {OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
+            {teamMembers.map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
           {lead.suggested_owner && lead.suggested_owner !== lead.assigned_to && (
             <p className="text-[10px] text-brand-silver mt-0.5">Suggested: {lead.suggested_owner}</p>
