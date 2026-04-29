@@ -170,6 +170,10 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-04-26 | Transportation stored our_cost/client_cost in schedule rows | Comparison view needs aggregates without a complex JOIN+math query. Decouples quoted costs from future rate card edits. | Compute from JOIN at query time (complex), denormalized total on estimates (drifts) |
 | 2026-04-26 | Transportation uses fake EstimateSummary to reuse calculateMarginAnalysis | Avoids a separate margin engine for transportation. Sets equipmentSubtotalClient = subtotalClient, uses transportCommission as clientCommission, gdpCommissionEnabled=false. | Duplicate margin logic (maintenance burden) |
 | 2026-04-26 | Program-level PDFs: extraction is automatic on drop; population is manual per-doc | Users need to review extracted fields before applying them. Overwrite confirmation lists exact fields that would change. Location auto-selects only if exactly 1 location name fuzzy-matches the locationHint tokens. | Auto-populate on extraction (rejected — no overwrite visibility) |
+| 2026-04-29 | Gmail scanner: long-running daemon + node-cron, not PM2 cron_restart | PM2 cron_restart restarts the full process on schedule; long-running + cron.schedule() keeps the process alive and fires scans. Simpler. | PM2 cron_restart (rejected — process overhead), Vercel cron (not suitable for daemon with OAuth tokens) |
+| 2026-04-29 | Scanner uses relative imports only, not @/ path aliases | tsx runs scripts outside Next.js build context — tsconfig `moduleResolution: "bundler"` causes resolution failures with @/ aliases. All scanner files use relative imports (../../src/lib/...) | @/ aliases (rejected — tsx resolution failures at runtime) |
+| 2026-04-29 | Leads table inline editing uses a local edit overlay (Map) not useState copy of rows | A useState copy of rows needs useEffect to re-sync when props update (after AddLeadPanel refresh). The overlay pattern applies edits on top of the server-fetched props without blocking prop updates. | useState copy with useEffect sync (rejected — race condition risk) |
+| 2026-04-29 | Team members sourced from auth.admin.listUsers() not a profiles table | Avoids a separate profiles table and a migration. Display name = user_metadata.full_name || capitalized email prefix. Requires SUPABASE_SERVICE_ROLE_KEY, called server-side only. | profiles table (more setup), hardcoded list (brittle) |
 
 ## Gotchas Log
 
@@ -184,6 +188,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-04-26 | Transportation PDF extraction returned no data despite API call succeeding | `ExtractedData` didn't include `vehicleRates`/`scheduleRows` fields; normalizer silently discarded them. Added types + branched normalizer on estimateType. |
 | 2026-04-26 | AttachmentsPanel showed "No data found" for transportation even with 7 vehicleRates in DB | `ExtractionResultPanel` only checked `menuItems`/`equipmentItems` for the no-data guard. Added `estimateType` prop and branched all checks. |
 | 2026-04-26 | Program attachment uploaded on create was invisible after redirect | `uploadProgramAttachment` select didn't include `extracted_data`; no URL was generated. Updated select + added `getProgramAttachments` / `deleteProgramAttachment` actions. |
+| 2026-04-29 | `returning_client` regex in parseWithRegex tested if the *value* contained "returning" | The regex `/returning\|repeat/i.test(extractField(...))` tested the field value ("Yes") not the field label. Fix: pass the raw string to Zod schema which handles `yes\|true\|y\|1` transform. Always let Zod transforms handle boolean coercion, not pre-processing regexes. |
+| 2026-04-29 | Scanner committed to feat/scanner-phase2; subsequent UI work committed to main | Session started on main (gitStatus showed main, clean). Scanner work was on feat/scanner-phase2. LeadDetail and leads-UI commits landed on main before feat/scanner-phase2 was merged. Merge feat/scanner-phase2 to main before deploying scanner. |
 
 ## Current TODOs
 
@@ -215,12 +221,22 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Populate button persistence: line_items_populated + details_populated columns on estimate_attachments (migration 012), reset on re-extraction
 - [x] Transportation estimate builder — 4th estimate type with vehicle rate card, daily schedule, per-estimate commission (default 0), general sales tax, margin analysis (migrations 011 + 013)
 
+### Completed ✓ (continued)
+- [x] Leads Pipeline Phase 1: leads table migration (017_add_leads.sql), leads list page, lead detail page, create-program-from-lead action
+- [x] Leads Pipeline Phase 2: Gmail scanner daemon (src/lib/scanner/), OAuth auth script, PM2 ecosystem config, parser/router/writer/notify/dedup modules, 48 new unit tests (parser + router)
+- [x] LeadDetail inline editing: Field (text/number/date/percent), TextAreaField, SelectField — click-to-edit on all fields, commission % shown as "6.5%" not "0.065"
+- [x] Leads list inline editing: status dropdown, owner dropdown, start date click-to-edit — all save on change without navigating away from the list
+- [x] Team members from auth.users: getTeamMembers() via admin API, display name from user_metadata.full_name or capitalized email prefix; replaces hardcoded OWNERS array in both list and detail pages
+
 ### Remaining
+- [ ] Merge feat/scanner-phase2 to main (scanner files not yet on main — see Gotchas)
+- [ ] Set up Gmail OAuth credentials + run `npm run auth` to get refresh token for scanner
 - [ ] Validate against 3-5 real historical proposals — compare engine output to Excel for same inputs
 - [ ] PDF/Canva export — format for client-facing proposals
 - [ ] Mobile polish — currently optimized for desktop/tablet only
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- All extraction and program-attachment features are complete and working
-- Good entry point: real-proposal validation (compare engine output to Excel for known programs) or PDF/Canva export
+- Scanner (feat/scanner-phase2) is complete and needs to be merged to main, then deployed to a Mac with PM2. All env vars needed: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, NOTIFY_EMAIL, SUPABASE_SERVICE_ROLE_KEY.
+- Run `npm run auth` once to generate GMAIL_REFRESH_TOKEN — opens browser, user authorizes, prints token to console.
+- After scanner is deployed: real-proposal validation is the best next step (compare engine output to Excel for known proposals).
