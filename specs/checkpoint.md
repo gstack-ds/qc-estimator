@@ -1,39 +1,34 @@
-# Checkpoint — 2026-04-27
+# Checkpoint — 2026-04-29
 
 ## What Was Done
-Added an Events layer between Programs and Estimates.
+Built the Leads Pipeline Phase 1a + 1b on branch `feat/leads-pipeline`.
 
-**Migration 014 (`supabase/migrations/014_events.sql`) — MUST RUN:**
-- Creates `event_type` PostgreSQL ENUM (logistics, general_session, formal_dinner, experiential, excursion, cocktail_reception, dine_around, breakfast, lunch, custom)
-- Creates `events` table (program_id FK, name, event_date, start_time, end_time, guest_count, event_type, description, sort_order)
-- Adds `event_id` nullable FK to `estimates` (ON DELETE SET NULL)
-- Backfill CTE: creates one "Program Events" default event per program that has estimates, links all existing estimates to it
+**Phase 1a — Migration `017_add_leads.sql`:**
+- `lead_status` ENUM: `new_lead`, `proposal`, `under_contract`, `archived`
+- `leads` table with all 30+ GDP fields, system/scanner metadata fields, RLS policies, updated_at trigger
+- `programs.lead_id` nullable UUID FK referencing leads
 
-**Code changes (feat/events-layer branch):**
-- `queries.ts`: `DbEvent` interface, `getEventsForProgram()`, `event_id` added to `DbEstimate` and `ESTIMATE_FIELDS`
-- `actions.ts`: `createEvent`, `updateEvent`, `deleteEvent`; `createEstimate` accepts optional `eventId` param
-- `AddEstimateButton`: accepts optional `eventId` prop
-- `AddEventButton`: new inline form component (name, date, start/end time, guest count, event type, description)
-- `EventsView`: new client component — Total Budget banner, event cards with color-coded type badges, estimate mini-cards inside each event, Add Event form, Add Estimate per event, event delete, collapse/expand
-- `programs/[id]/page.tsx`: fetches events alongside estimates, groups estimate cards by `event_id`, passes `EventRow[]` to `EventsView`
+**Phase 1b — UI:**
+- `DbLead` interface + `getLeads`, `getLead`, `getLeadCounts`, `getProgramForLead` queries
+- `src/app/(programs)/leads/actions.ts`: `createLead`, `updateLead`, `deleteLead`, `archiveLead`, `createProgramFromLead`
+- `LeadStatusBadge`, `LeadsList` (sortable/filterable + Add Lead modal), `LeadDetail` (all fields inline-editable)
+- `/leads` list page and `/leads/[id]` detail page inside `(programs)` route group
+- "Leads" added as first nav link in header
+- `createProgramFromLead`: pre-fills program from lead, moves lead to Proposal, redirects to new program
 
 ## Current State
-- All 74 tests passing
-- TypeScript clean
-- Migration file written but **not yet run against Supabase** — must be applied before the UI will work
-- Branch: `feat/events-layer` (not merged to main)
+- All 74 tests passing, TypeScript clean
+- Branch: `feat/leads-pipeline` (not merged to main)
+- **Migration 017 must be run** in Supabase SQL editor before the Leads UI works
 
 ## Known Issues / Gaps
-- **Migration must be run manually** in Supabase dashboard SQL editor (paste contents of 014_events.sql)
-- **No edit UI for events** — users can add and delete events, but cannot edit fields after creation (follow-up)
-- **Guest count is informational only** — event guest_count displays on the card header but does not feed into pricing engine (which still uses program-level guest_count)
-- **Lowest/Best Margin badges** within an event compare across ALL estimate types in that event (not by type). May want to filter by type within EventCard if multi-type events are common.
-- **Sort order for new events** is max(existing) + 1; no drag-to-reorder yet
+- `assigned_to` is plain text (name) for Phase 1 — becomes a UUID FK to auth.users in Phase 2 with the scanner
+- `createProgramFromLead` does a fuzzy city → location_id lookup; leaves null if no match
+- Migration 016 (transport spot_time) should also be run if not already done
 
-## Next Steps
-1. **Run migration 014** in Supabase dashboard (paste `supabase/migrations/014_events.sql`)
-2. Test with real program — verify existing estimates appear inside their backfilled event
-3. Merge `feat/events-layer` to main
-4. Optional follow-ups: event edit UI, drag-to-reorder events
-5. Real-proposal validation (compare engine output to Excel)
-6. PDF/Canva export
+## Next Steps (from PRD build order)
+1. Run migration `017_add_leads.sql` in Supabase SQL editor
+2. Merge `feat/leads-pipeline` to main
+3. **Phase 1c** — Lead-to-program link visible from the program view (programs/[id] shows a "← Source Lead" link when `lead_id` is set)
+4. **Phase 1d** — Region router config (`src/lib/scanner/router.ts`) — maps region strings to owner names
+5. **Phase 2a–2f** — Gmail scanner, Claude parser, Supabase writer, notifications, PM2 deployment
