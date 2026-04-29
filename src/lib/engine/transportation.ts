@@ -62,8 +62,9 @@ export function calcTransportSummary(
   const subtotalClient = rows.reduce((s, r) => s + r.subtotalClient, 0);
   const markupRevenue = subtotalClient - subtotalOur;
   const tax = subtotalClient * taxRate;
+  // productionFee is an internal QC cost; not added to the client-facing total
   const productionFee = subtotalClient * ccFee + markupRevenue * transportCommission;
-  const totalClient = subtotalClient + tax + productionFee;
+  const totalClient = subtotalClient + tax;
   const qcRevenue = markupRevenue - productionFee;
   const qcMarginPct = totalClient > 0 ? qcRevenue / totalClient : 0;
   return { subtotalOur, subtotalClient, markupRevenue, tax, productionFee, totalClient, qcRevenue, qcMarginPct };

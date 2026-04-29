@@ -500,6 +500,7 @@ export interface DbTransportScheduleRow {
   service_date: string | null;
   vehicle_rate_id: string | null;
   service_type: string;
+  spot_time: string | null;
   start_time: string | null;
   end_time: string | null;
   qty: number;
@@ -524,7 +525,7 @@ export async function getTransportScheduleRows(estimateId: string): Promise<DbTr
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('transport_schedule_rows')
-    .select('id, estimate_id, service_date, vehicle_rate_id, service_type, start_time, end_time, qty, our_cost, client_cost, notes, sort_order')
+    .select('id, estimate_id, service_date, vehicle_rate_id, service_type, spot_time, start_time, end_time, qty, our_cost, client_cost, notes, sort_order')
     .eq('estimate_id', estimateId)
     .order('sort_order');
   if (error) throw new Error(error.message);

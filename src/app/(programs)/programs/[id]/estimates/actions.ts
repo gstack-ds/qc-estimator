@@ -712,6 +712,7 @@ export async function upsertTransportScheduleRow(data: {
   service_date: string | null;
   vehicle_rate_id: string | null;
   service_type: string;
+  spot_time?: string | null;
   start_time: string | null;
   end_time: string | null;
   qty: number;

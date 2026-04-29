@@ -40,7 +40,12 @@ export default async function EstimatePage({ params }: Props) {
 
   if (!program || !estimate) notFound();
 
-  const eventName = estimate.event_id ? (await getEvent(estimate.event_id))?.name ?? null : null;
+  const event = estimate.event_id ? await getEvent(estimate.event_id) : null;
+  const eventName = event?.name ?? null;
+  // Override program guest count with the event's guest count when set
+  const effectiveProgram = event?.guest_count
+    ? { ...program, guest_count: event.guest_count }
+    : program;
 
   if (estimate.type === 'transportation') {
     const [initialTrips, vehicleRates, scheduleRows] = await Promise.all([
@@ -51,7 +56,7 @@ export default async function EstimatePage({ params }: Props) {
     return (
       <div className="h-[calc(100vh-49px)] flex flex-col">
         <TransportationEstimateBuilder
-          program={program}
+          program={effectiveProgram}
           location={program.location}
           allEstimates={allEstimates}
           estimate={estimate}
@@ -76,7 +81,7 @@ export default async function EstimatePage({ params }: Props) {
     return (
       <div className="h-[calc(100vh-49px)] flex flex-col">
         <EstimateBuilder
-          program={program}
+          program={effectiveProgram}
           location={program.location}
           allEstimates={allEstimates}
           estimate={estimate}
@@ -100,7 +105,7 @@ export default async function EstimatePage({ params }: Props) {
   return (
     <div className="h-[calc(100vh-49px)] flex flex-col">
       <Builder
-        program={program}
+        program={effectiveProgram}
         location={program.location}
         allEstimates={allEstimates}
         estimate={estimate}

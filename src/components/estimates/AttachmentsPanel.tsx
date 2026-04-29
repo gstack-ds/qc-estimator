@@ -73,6 +73,7 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [extractionState, setExtractionState] = useState<Record<string, ExtractionStatus>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -127,19 +128,36 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
     const ACCEPTED = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/jpg']);
     if (!ACCEPTED.has(file.type)) { setError('File type not allowed'); return; }
 
+    if (file.type === 'application/pdf') {
+      setPendingFile(file);
+    } else {
+      await doUpload(file, false);
+    }
+  }
+
+  async function doUpload(file: File, withExtraction: boolean) {
     setError(null);
     setUploading(true);
+    setPendingFile(null);
 
     const ext = file.name.split('.').pop() ?? '';
     const storagePath = `${estimateId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
     const supabase = createClient();
-    const { error: storageError } = await supabase.storage
-      .from('estimate-attachments')
-      .upload(storagePath, file, { contentType: file.type });
+    let storageError: { message: string } | null = null;
+    try {
+      const result = await supabase.storage
+        .from('estimate-attachments')
+        .upload(storagePath, file, { contentType: file.type });
+      console.log('[AttachmentsPanel] storage upload result:', result);
+      storageError = result.error;
+    } catch (err) {
+      console.error('[AttachmentsPanel] storage upload threw:', err);
+      storageError = { message: err instanceof Error ? err.message : 'Upload failed' };
+    }
 
     if (storageError) {
-      setError(storageError.message);
+      setError(`Upload failed: ${storageError.message}`);
       setUploading(false);
       return;
     }
@@ -161,7 +179,7 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
     }
 
     setRecords((prev) => [record, ...prev]);
-    if (record.mime_type === 'application/pdf' && record.extracted_data === null) {
+    if (withExtraction && record.mime_type === 'application/pdf') {
       triggerExtraction(record.id);
     }
   }
@@ -263,7 +281,7 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
         <span className={labelClass}>Attachments</span>
         <button
           onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
+          disabled={uploading || !!pendingFile}
           className="text-xs px-2.5 py-1 rounded border border-brand-cream bg-white hover:bg-brand-offwhite text-brand-charcoal/70 hover:text-brand-charcoal transition-colors disabled:opacity-50"
         >
           {uploading ? 'Uploading…' : '+ Upload File'}
@@ -278,6 +296,33 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
       </div>
 
       {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
+
+      {pendingFile && (
+        <div className="mb-3 p-3 rounded-lg bg-brand-offwhite border border-brand-cream text-xs">
+          <p className="font-medium text-brand-charcoal mb-2 truncate">{pendingFile.name}</p>
+          <p className="text-brand-charcoal/60 mb-2">What do you want to do with this PDF?</p>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => doUpload(pendingFile, false)}
+              className="px-2.5 py-1 rounded border border-brand-cream bg-white hover:bg-brand-offwhite text-brand-charcoal/70 hover:text-brand-charcoal transition-colors"
+            >
+              Store for reference
+            </button>
+            <button
+              onClick={() => doUpload(pendingFile, true)}
+              className="px-2.5 py-1 rounded border border-brand-copper/40 bg-brand-copper/5 hover:bg-brand-copper/10 text-brand-copper transition-colors"
+            >
+              Extract &amp; import data
+            </button>
+            <button
+              onClick={() => setPendingFile(null)}
+              className="px-2.5 py-1 rounded border border-brand-cream bg-white text-brand-silver hover:text-brand-charcoal transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <p className="text-xs text-brand-silver py-2">Loading…</p>

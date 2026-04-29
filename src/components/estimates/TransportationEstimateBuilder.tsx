@@ -40,6 +40,7 @@ interface LocalScheduleRow {
   serviceDate: string;
   vehicleRateId: string | null;
   serviceType: 'hourly' | 'transfer';
+  spotTime: string;
   startTime: string;
   endTime: string;
   qty: number;
@@ -99,6 +100,7 @@ function dbScheduleRowToLocal(r: DbTransportScheduleRow): LocalScheduleRow {
     serviceDate: r.service_date ?? '',
     vehicleRateId: r.vehicle_rate_id,
     serviceType: r.service_type as 'hourly' | 'transfer',
+    spotTime: r.spot_time ?? '',
     startTime: r.start_time ?? '',
     endTime: r.end_time ?? '',
     qty: r.qty,
@@ -235,13 +237,14 @@ export default function TransportationEstimateBuilder({
 
   function addScheduleRow() {
     const sortOrder = scheduleRowsRef.current.length;
-    const local: LocalScheduleRow = { id: null, serviceDate: '', vehicleRateId: vehicleRatesRef.current[0]?.id ?? null, serviceType: 'hourly', startTime: '', endTime: '', qty: 1, notes: '', sortOrder };
+    const local: LocalScheduleRow = { id: null, serviceDate: '', vehicleRateId: vehicleRatesRef.current[0]?.id ?? null, serviceType: 'hourly', spotTime: '', startTime: '', endTime: '', qty: 1, notes: '', sortOrder };
     setScheduleRows((prev) => [...prev, local]);
     upsertTransportScheduleRow({
       estimate_id: estimate.id,
       service_date: null,
       vehicle_rate_id: local.vehicleRateId,
       service_type: local.serviceType,
+      spot_time: null,
       start_time: null,
       end_time: null,
       qty: 1,
@@ -270,6 +273,7 @@ export default function TransportationEstimateBuilder({
           service_date: row.serviceDate || null,
           vehicle_rate_id: row.vehicleRateId,
           service_type: row.serviceType,
+          spot_time: row.spotTime || null,
           start_time: row.startTime || null,
           end_time: row.endTime || null,
           qty: row.qty,
@@ -337,6 +341,7 @@ export default function TransportationEstimateBuilder({
               service_date: er.serviceDate || null,
               vehicle_rate_id: matchedRate?.id ?? null,
               service_type: serviceType,
+              spot_time: null,
               start_time: er.startTime || null,
               end_time: er.endTime || null,
               qty: er.qty ?? 1,
@@ -347,7 +352,7 @@ export default function TransportationEstimateBuilder({
             });
             return {
               id: id ?? null, serviceDate: er.serviceDate ?? '', vehicleRateId: matchedRate?.id ?? null,
-              serviceType, startTime: er.startTime ?? '', endTime: er.endTime ?? '',
+              serviceType, spotTime: '', startTime: er.startTime ?? '', endTime: er.endTime ?? '',
               qty: er.qty ?? 1, notes: er.notes ?? '', sortOrder,
             } as LocalScheduleRow;
           })
@@ -474,10 +479,11 @@ export default function TransportationEstimateBuilder({
                 <button onClick={addScheduleRow} className="text-xs text-brand-brown hover:text-brand-charcoal font-medium transition-colors">+ Add run</button>
               </div>
               <div className="rounded-lg border border-brand-cream overflow-x-auto">
-                <table className="text-sm" style={{ minWidth: '900px', width: '100%' }}>
+                <table className="text-sm" style={{ minWidth: '1010px', width: '100%' }}>
                   <thead className="bg-brand-offwhite border-b border-brand-cream">
                     <tr>
                       <th className={thCls}>Date</th>
+                      <th className={thCls}>Spot Time</th>
                       <th className={thCls}>Vehicle</th>
                       <th className={thCls}>Type</th>
                       <th className={thCls}>Start</th>
@@ -492,7 +498,7 @@ export default function TransportationEstimateBuilder({
                   </thead>
                   <tbody className="divide-y divide-brand-cream/60">
                     {scheduleRows.length === 0 && (
-                      <tr><td colSpan={11} className="px-3 py-4 text-xs text-brand-silver text-center">No runs added yet. Add a vehicle to the rate card first.</td></tr>
+                      <tr><td colSpan={12} className="px-3 py-4 text-xs text-brand-silver text-center">No runs added yet. Add a vehicle to the rate card first.</td></tr>
                     )}
                     {computedRows.map((row, idx) => (
                       <tr key={row.id ?? idx} className="hover:bg-brand-offwhite transition-colors">
@@ -501,6 +507,14 @@ export default function TransportationEstimateBuilder({
                             type="date"
                             value={row.serviceDate}
                             onChange={(e) => saveScheduleRow(idx, { serviceDate: e.target.value })}
+                            className={inputCls}
+                          />
+                        </td>
+                        <td className={tdCls} style={{ minWidth: '100px' }}>
+                          <input
+                            type="time"
+                            value={row.spotTime}
+                            onChange={(e) => saveScheduleRow(idx, { spotTime: e.target.value })}
                             className={inputCls}
                           />
                         </td>
@@ -579,7 +593,7 @@ export default function TransportationEstimateBuilder({
                   {scheduleRows.length > 0 && (
                     <tfoot className="border-t border-brand-copper/20 bg-brand-offwhite">
                       <tr>
-                        <td colSpan={7} className="px-2 py-2 text-xs font-semibold text-brand-charcoal/60 uppercase tracking-wide">Total</td>
+                        <td colSpan={8} className="px-2 py-2 text-xs font-semibold text-brand-charcoal/60 uppercase tracking-wide">Total</td>
                         <td className="px-2 py-2 text-right text-sm font-semibold text-brand-charcoal tabular-nums">{fmt(summary.subtotalOur)}</td>
                         <td className="px-2 py-2 text-right text-sm font-semibold text-brand-charcoal tabular-nums">{fmt(summary.subtotalClient)}</td>
                         <td colSpan={2}></td>
@@ -630,10 +644,6 @@ export default function TransportationEstimateBuilder({
                 <div className="flex justify-between text-brand-charcoal/70">
                   <span>Tax ({((generalTaxRate) * 100).toFixed(3)}%)</span>
                   <span className="tabular-nums">{fmt(summary.tax)}</span>
-                </div>
-                <div className="flex justify-between text-brand-charcoal/70">
-                  <span>Production Fee</span>
-                  <span className="tabular-nums">{fmt(summary.productionFee)}</span>
                 </div>
                 <div className="flex justify-between font-semibold text-brand-charcoal border-t border-brand-cream pt-2 mt-1">
                   <span>Total</span>
