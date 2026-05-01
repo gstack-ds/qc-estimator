@@ -252,6 +252,7 @@ export interface DbLineItem {
   estimate_id: string;
   section: string;
   name: string;
+  label: string | null;
   qty: number;
   unit_price: number;
   category_id: string | null;
@@ -264,7 +265,7 @@ export interface DbLineItem {
   updated_at: string;
 }
 
-const LINE_ITEM_FIELDS = 'id, estimate_id, section, name, qty, unit_price, category_id, tax_type, custom_client_unit_price, markup_override, notes, sort_order, created_at, updated_at';
+const LINE_ITEM_FIELDS = 'id, estimate_id, section, name, label, qty, unit_price, category_id, tax_type, custom_client_unit_price, markup_override, notes, sort_order, created_at, updated_at';
 
 export async function getLineItemsForEstimate(estimateId: string): Promise<DbLineItem[]> {
   const supabase = await createClient();

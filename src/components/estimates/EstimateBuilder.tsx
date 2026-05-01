@@ -43,6 +43,7 @@ export interface LocalLineItem {
   id: string;
   section: LocalSection;
   name: string;
+  label?: string;
   qty: number;
   unitPrice: number;
   categoryId: string | 'custom' | null;
@@ -122,6 +123,7 @@ function dbItemToLocal(item: DbLineItem, markups: DbMarkup[]): LocalLineItem {
     id: item.id,
     section: item.section as LocalSection,
     name: item.name,
+    label: item.label ?? undefined,
     qty: item.qty,
     unitPrice: item.unit_price,
     categoryId: isCustom ? 'custom' : (item.category_id ?? null),
@@ -319,15 +321,18 @@ export default function EstimateBuilder({
   // ─── Line item mutations ──────────────────────────────────
 
   const handleItemChange = useCallback((id: string, patch: Partial<LocalLineItem>) => {
-    setLineItems((prev) => prev.map((item) => {
-      if (item.id !== id) return item;
-      // When category changes, reset markup to new category's default
-      if (patch.categoryId !== undefined && patch.categoryId !== item.categoryId) {
-        const newDefault = patch.defaultMarkupPct ?? item.defaultMarkupPct;
-        return { ...item, ...patch, categoryMarkupPct: newDefault };
-      }
-      return { ...item, ...patch };
-    }));
+    setLineItems((prev) => {
+      const next = prev.map((item) => {
+        if (item.id !== id) return item;
+        if (patch.categoryId !== undefined && patch.categoryId !== item.categoryId) {
+          const newDefault = patch.defaultMarkupPct ?? item.defaultMarkupPct;
+          return { ...item, ...patch, categoryMarkupPct: newDefault };
+        }
+        return { ...item, ...patch };
+      });
+      lineItemsRef.current = next;
+      return next;
+    });
   }, []);
 
   const handleItemSave = useCallback(async (id: string) => {
@@ -340,6 +345,7 @@ export default function EstimateBuilder({
       estimate_id: estimate.id,
       section: item.section,
       name: item.name || 'Item',
+      label: item.label ?? null,
       qty: item.qty,
       unit_price: item.unitPrice,
       category_id: item.categoryId === 'custom' ? null : (item.categoryId ?? null),
@@ -349,7 +355,6 @@ export default function EstimateBuilder({
       sort_order: item.sortOrder,
     }));
 
-    // If it was a new item, replace the temp id with the real DB id
     if (item.isNew && result.id) {
       setLineItems((prev) =>
         prev.map((li) => li.id === id ? { ...li, id: result.id!, isNew: false } : li)

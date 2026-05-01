@@ -79,6 +79,7 @@ function dbItemToLocal(item: DbLineItem, markups: DbMarkup[]): LocalLineItem {
     id: item.id,
     section: item.section as LocalSection,
     name: item.name,
+    label: item.label ?? undefined,
     qty: item.qty,
     unitPrice: item.unit_price,
     categoryId: isCustom ? 'custom' : (item.category_id ?? null),
@@ -187,14 +188,18 @@ export default function AvEstimateBuilder({
   // ─── Line item mutations ──────────────────────────────────
 
   const handleItemChange = useCallback((id: string, patch: Partial<LocalLineItem>) => {
-    setLineItems((prev) => prev.map((item) => {
-      if (item.id !== id) return item;
-      if (patch.categoryId !== undefined && patch.categoryId !== item.categoryId) {
-        const newDefault = patch.defaultMarkupPct ?? item.defaultMarkupPct;
-        return { ...item, ...patch, categoryMarkupPct: newDefault };
-      }
-      return { ...item, ...patch };
-    }));
+    setLineItems((prev) => {
+      const next = prev.map((item) => {
+        if (item.id !== id) return item;
+        if (patch.categoryId !== undefined && patch.categoryId !== item.categoryId) {
+          const newDefault = patch.defaultMarkupPct ?? item.defaultMarkupPct;
+          return { ...item, ...patch, categoryMarkupPct: newDefault };
+        }
+        return { ...item, ...patch };
+      });
+      lineItemsRef.current = next;
+      return next;
+    });
   }, []);
 
   const handleItemSave = useCallback(async (id: string) => {
@@ -207,6 +212,7 @@ export default function AvEstimateBuilder({
       estimate_id: estimate.id,
       section: item.section,
       name: item.name || 'Item',
+      label: item.label ?? null,
       qty: item.qty,
       unit_price: item.unitPrice,
       category_id: item.categoryId === 'custom' ? null : (item.categoryId ?? null),

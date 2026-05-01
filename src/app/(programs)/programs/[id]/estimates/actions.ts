@@ -112,6 +112,7 @@ export async function upsertLineItem(data: {
   estimate_id: string;
   section: string;
   name: string;
+  label?: string | null;
   qty: number;
   unit_price: number;
   category_id: string | null;
@@ -128,6 +129,7 @@ export async function upsertLineItem(data: {
       .update({
         section: data.section,
         name: data.name,
+        label: data.label ?? null,
         qty: data.qty,
         unit_price: data.unit_price,
         category_id: data.category_id,
@@ -146,6 +148,7 @@ export async function upsertLineItem(data: {
         estimate_id: data.estimate_id,
         section: data.section,
         name: data.name,
+        label: data.label ?? null,
         qty: data.qty,
         unit_price: data.unit_price,
         category_id: data.category_id,
@@ -237,6 +240,7 @@ export interface ExtractedMenuItem {
 
 export interface ExtractedEquipmentItem {
   name: string;
+  label?: string;
   description?: string;
   unitPrice: number;
   qty: number;
@@ -384,9 +388,16 @@ function getExtractionPrompt(type: 'venue' | 'av' | 'decor' | 'transportation'):
     return (
       'Extract all decor, floral, rental, and design line items from this proposal or BEO. ' +
       'Return ONLY valid JSON with one field: ' +
-      'decorItems (array: name, description, unitPrice, qty, section: florals|rentals|lighting|signage|delivery) ' +
-      'where florals=flowers/plants/arrangements, rentals=furniture/chairs/tables/linens, ' +
-      'lighting=uplighting/pin spots/candles, signage=printed/custom signage, delivery=setup/strike/delivery fees. ' +
+      'decorItems (array: name, label, description, unitPrice, qty, section: florals|rentals|delivery) ' +
+      'SECTION RULES — use exactly these values:\n' +
+      '  florals = any decorative design element: floral arrangements, centerpieces, entrance installations, ' +
+      'arches, backdrops, garlands, wreaths, candles, uplighting, pin spots, signage, props, accent pieces, rugs placed for design, ' +
+      'lounge furniture used decoratively. When in doubt, use florals.\n' +
+      '  rentals = ONLY physical rental items that are pure furniture/equipment: chairs, barstools, sofas, cocktail tables, ' +
+      'dining tables, benches, linens, pipe-and-drape, tenting, staging. Do NOT use rentals for anything decorative.\n' +
+      '  delivery = delivery fees, setup fees, strike fees, installation labor, transportation charges.\n' +
+      'LABEL RULE: set label to a short team-friendly internal descriptor (e.g. "Centerpieces", "Entrance Arch", ' +
+      '"Seating - Chiavari Chairs", "Linens - 60in Round"). Keep it concise (2-5 words).\n' +
       'No markdown, no explanation — raw JSON only.'
     );
   }
@@ -602,7 +613,7 @@ export async function getLineItemsForEstimate(estimateId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('estimate_line_items')
-    .select('id, section, name, qty, unit_price, category_id, tax_type, custom_client_unit_price, markup_override, sort_order')
+    .select('id, section, name, label, qty, unit_price, category_id, tax_type, custom_client_unit_price, markup_override, sort_order')
     .eq('estimate_id', estimateId)
     .order('sort_order');
   if (error) return { error: error.message, items: [] };

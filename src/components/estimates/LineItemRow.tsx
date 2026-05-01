@@ -64,15 +64,25 @@ export default function LineItemRow({ item, markups, showTaxToggle, onChange, on
 
   return (
     <div className="grid items-center gap-2 py-1.5 border-b border-brand-cream/40 last:border-0" style={{ gridTemplateColumns: '2fr 60px 90px 130px 60px 80px 80px 20px 20px' }}>
-      {/* Name */}
-      <input
-        type="text"
-        value={item.name}
-        onChange={(e) => onChange(item.id, { name: e.target.value })}
-        onBlur={() => onBlur(item.id)}
-        className={inputClass}
-        placeholder="Item name"
-      />
+      {/* Name + Label */}
+      <div className="flex flex-col gap-0.5">
+        <input
+          type="text"
+          value={item.name}
+          onChange={(e) => onChange(item.id, { name: e.target.value })}
+          onBlur={() => onBlur(item.id)}
+          className={inputClass}
+          placeholder="Item name"
+        />
+        <input
+          type="text"
+          value={item.label ?? ''}
+          onChange={(e) => onChange(item.id, { label: e.target.value })}
+          onBlur={() => onBlur(item.id)}
+          className="border border-brand-cream/60 rounded px-2 py-0.5 text-xs text-brand-silver/80 focus:outline-none focus:ring-1 focus:ring-brand-copper/50 bg-transparent w-full placeholder:text-brand-silver/40"
+          placeholder="Label (internal)"
+        />
+      </div>
 
       {/* Qty */}
       <input

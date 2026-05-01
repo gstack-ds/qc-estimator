@@ -76,6 +76,7 @@ function dbItemToLocal(item: DbLineItem, markups: DbMarkup[]): LocalLineItem {
     id: item.id,
     section: item.section as LocalSection,
     name: item.name,
+    label: item.label ?? undefined,
     qty: item.qty,
     unitPrice: item.unit_price,
     categoryId: isCustom ? 'custom' : (item.category_id ?? null),
@@ -231,14 +232,18 @@ export default function DecorEstimateBuilder({
   // ─── Line item mutations ──────────────────────────────────
 
   const handleItemChange = useCallback((id: string, patch: Partial<LocalLineItem>) => {
-    setLineItems((prev) => prev.map((item) => {
-      if (item.id !== id) return item;
-      if (patch.categoryId !== undefined && patch.categoryId !== item.categoryId) {
-        const newDefault = patch.defaultMarkupPct ?? item.defaultMarkupPct;
-        return { ...item, ...patch, categoryMarkupPct: newDefault };
-      }
-      return { ...item, ...patch };
-    }));
+    setLineItems((prev) => {
+      const next = prev.map((item) => {
+        if (item.id !== id) return item;
+        if (patch.categoryId !== undefined && patch.categoryId !== item.categoryId) {
+          const newDefault = patch.defaultMarkupPct ?? item.defaultMarkupPct;
+          return { ...item, ...patch, categoryMarkupPct: newDefault };
+        }
+        return { ...item, ...patch };
+      });
+      lineItemsRef.current = next;
+      return next;
+    });
   }, []);
 
   const handleItemSave = useCallback(async (id: string) => {
@@ -251,6 +256,7 @@ export default function DecorEstimateBuilder({
       estimate_id: estimate.id,
       section: item.section,
       name: item.name || 'Item',
+      label: item.label ?? null,
       qty: item.qty,
       unit_price: item.unitPrice,
       category_id: item.categoryId === 'custom' ? null : (item.categoryId ?? null),
@@ -367,6 +373,7 @@ export default function DecorEstimateBuilder({
         markup = decorMarkup;
         taxType = 'general';
       } else {
+        // florals, lighting, signage, or any unrecognized section → Florals - Taxable
         section = 'Florals - Taxable';
         markup = decorMarkup;
         taxType = 'general';
@@ -376,6 +383,7 @@ export default function DecorEstimateBuilder({
         id: `new-${Date.now()}-${Math.random()}`,
         section,
         name: item.name,
+        label: item.label ?? undefined,
         qty: item.qty ?? 1,
         unitPrice: item.unitPrice ?? 0,
         categoryId: markup?.id ?? null,

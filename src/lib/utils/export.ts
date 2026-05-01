@@ -5,6 +5,7 @@ import type { EstimateSummary } from '@/types';
 
 export interface LineItemForExport {
   name: string;
+  label?: string;
   section: string;
   qty: number;
   unitPrice: number;
@@ -83,7 +84,7 @@ export function buildLineItemsCopyText(
   lineItems: LineItemForExport[],
   estimateName: string
 ): string {
-  const header = `${estimateName.toUpperCase()}\n\nItem Name\tQty\tUnit Price\tTotal`;
+  const header = `${estimateName.toUpperCase()}\n\nItem Name\tLabel\tQty\tUnit Price\tTotal`;
   const rows = lineItems
     .filter((li) => li.qty > 0 && (li.unitPrice > 0 || (li.categoryId === 'custom' && (li.customClientUnitPrice ?? 0) > 0)))
     .map((li) => {
@@ -91,7 +92,7 @@ export function buildLineItemsCopyText(
         ? li.customClientUnitPrice
         : li.unitPrice * (1 + li.categoryMarkupPct);
       const clientTotal = li.qty * clientUnit;
-      return `${li.name}\t${li.qty}\t${fmtAmt(clientUnit)}\t${fmtAmt(clientTotal)}`;
+      return `${li.name}\t${li.label ?? ''}\t${li.qty}\t${fmtAmt(clientUnit)}\t${fmtAmt(clientTotal)}`;
     });
   if (rows.length === 0) return `${estimateName.toUpperCase()}\n\n(no line items)`;
   return `${header}\n${rows.join('\n')}`;
