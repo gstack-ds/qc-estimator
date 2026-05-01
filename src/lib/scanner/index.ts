@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { scanGmail } from './gmail';
 import { parseLead } from './parser';
 import { suggestOwner } from './router';
-import { writeLead, leadAlreadyExists } from './writer';
+import { writeLead, leadAlreadyExists, type WriteLeadResult } from './writer';
 import { isProcessed, markProcessed } from './dedup';
 import { notifyScanSummary, notifyError } from './notify';
 import type { ScanResult } from './types';
@@ -57,8 +57,9 @@ export async function runScan(afterTimestamp?: number): Promise<ScanResult> {
 
       const suggestedOwner = suggestOwner(lead.region, lead.city, lead.state);
 
+      let written: WriteLeadResult;
       try {
-        const written = await writeLead({
+        written = await writeLead({
           lead,
           messageId: msg.messageId,
           emailLink: msg.emailLink,
@@ -69,18 +70,22 @@ export async function runScan(afterTimestamp?: number): Promise<ScanResult> {
           parseMethod: method,
           parseWarnings: warnings,
         });
-
-        if (written) {
-          result.leadsCreated++;
-          markProcessed(msg.messageId);
-          console.log(`[scanner] Created lead ${written.id} for ${msg.messageId}`);
-        } else {
-          result.errors.push(`DB write returned null for ${msg.messageId}`);
-        }
       } catch (err) {
         const errMsg = `DB write failed for ${msg.messageId}: ${err instanceof Error ? err.message : String(err)}`;
         result.errors.push(errMsg);
         console.error(`[scanner] ${errMsg}`);
+        continue;
+      }
+
+      if (written === null) {
+        result.errors.push(`DB write returned null for ${msg.messageId}`);
+      } else if ('skipped' in written) {
+        markProcessed(msg.messageId);
+        console.log(`[scanner] Skipped ${msg.messageId}: ${written.skipped}`);
+      } else {
+        result.leadsCreated++;
+        markProcessed(msg.messageId);
+        console.log(`[scanner] Created lead ${written.id} for ${msg.messageId}`);
       }
     }
   } catch (err) {

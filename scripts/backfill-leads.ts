@@ -15,7 +15,7 @@ import { google } from 'googleapis';
 import { randomUUID } from 'crypto';
 import { parseLead } from '../src/lib/scanner/parser';
 import { suggestOwner } from '../src/lib/scanner/router';
-import { writeLead, leadAlreadyExists } from '../src/lib/scanner/writer';
+import { writeLead, leadAlreadyExists, type WriteLeadResult } from '../src/lib/scanner/writer';
 
 // ─── Gmail helpers (inlined from gmail.ts — not exported there) ──────────────
 
@@ -166,8 +166,9 @@ async function main() {
 
     // Write
     const suggestedOwner = suggestOwner(lead.region, lead.city, lead.state);
+    let written: WriteLeadResult;
     try {
-      const written = await writeLead({
+      written = await writeLead({
         lead,
         messageId: msgId,
         emailLink,
@@ -178,16 +179,21 @@ async function main() {
         parseMethod: method as 'claude' | 'regex',
         parseWarnings: warnings,
       });
-      if (written) {
-        console.log(`${prefix} — created lead ${written.id} via ${method} (owner: ${suggestedOwner ?? 'unassigned'})`);
-        created++;
-      } else {
-        console.error(`${prefix} — write returned null`);
-        failed++;
-      }
     } catch (err) {
       console.error(`${prefix} — write failed: ${err instanceof Error ? err.message : String(err)}`);
       failed++;
+      continue;
+    }
+
+    if (written === null) {
+      console.error(`${prefix} — write returned null`);
+      failed++;
+    } else if ('skipped' in written) {
+      console.log(`${prefix} — skipped (${written.skipped})`);
+      skipped++;
+    } else {
+      console.log(`${prefix} — created lead ${written.id} via ${method} (owner: ${suggestedOwner ?? 'unassigned'})`);
+      created++;
     }
   }
 

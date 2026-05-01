@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "scan": "node --loader tsx scripts/run-scanner.ts",
     "auth": "node --loader tsx scripts/gmail-auth.ts",
-    "backfill": "node --loader tsx scripts/backfill-leads.ts"
+    "backfill": "node --loader tsx scripts/backfill-leads.ts",
+    "dedup": "node --loader tsx scripts/dedup-leads.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",

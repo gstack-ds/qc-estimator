@@ -8,6 +8,29 @@ function getSupabase() {
   return createClient(url, key);
 }
 
+function toDisplayName(email: string): string {
+  const prefix = email.split('@')[0];
+  return prefix.charAt(0).toUpperCase() + prefix.slice(1);
+}
+
+async function resolveOwnerDisplayName(suggestedName: string | null): Promise<string | null> {
+  if (!suggestedName) return null;
+  const supabase = getSupabase();
+  const { data, error } = await supabase.auth.admin.listUsers();
+  if (error || !data?.users?.length) return suggestedName;
+  const target = suggestedName.toLowerCase();
+  for (const user of data.users) {
+    const name: string = user.user_metadata?.full_name ||
+      (user.email ? toDisplayName(user.email) : '');
+    if (!name) continue;
+    const nameLower = name.toLowerCase();
+    if (nameLower === target || nameLower.startsWith(target + ' ') || nameLower.startsWith(target)) {
+      return name;
+    }
+  }
+  return suggestedName;
+}
+
 export interface WriteLeadInput {
   lead: ParsedLead;
   messageId: string;
@@ -20,14 +43,35 @@ export interface WriteLeadInput {
   parseWarnings: string[];
 }
 
-export async function writeLead(input: WriteLeadInput): Promise<{ id: string } | null> {
+export type WriteLeadResult =
+  | { id: string }           // inserted
+  | { skipped: string }      // intentional dedup skip
+  | null;                    // insert error
+
+export async function writeLead(input: WriteLeadInput): Promise<WriteLeadResult> {
   const supabase = getSupabase();
+
+  // Dedup by client_name + start_date before inserting
+  if (input.lead.client_name && input.lead.start_date) {
+    const { count } = await supabase
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('client_name', input.lead.client_name)
+      .eq('start_date', input.lead.start_date);
+    if ((count ?? 0) > 0) {
+      const reason = `duplicate client_name+start_date: ${input.lead.client_name} / ${input.lead.start_date}`;
+      console.log(`[writer] Skipping — ${reason}`);
+      return { skipped: reason };
+    }
+  }
+
+  const resolvedOwner = await resolveOwnerDisplayName(input.suggestedOwner);
 
   const row = {
     ...input.lead,
     original_email_link: input.emailLink,
     suggested_owner: input.suggestedOwner,
-    assigned_to: input.suggestedOwner,
+    assigned_to: resolvedOwner,
     scan_batch_id: input.batchId,
     parsed_by: input.parseMethod,
     status: 'new_lead',
