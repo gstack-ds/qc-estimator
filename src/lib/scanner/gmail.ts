@@ -58,7 +58,14 @@ export async function scanGmail(options: GmailScanOptions = {}): Promise<RawEmai
   const gmail = google.gmail({ version: 'v1', auth });
 
   const afterTs = options.afterTimestamp ?? Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
-  const query = `subject:"INITIAL LEAD" after:${afterTs}`;
+  const query = [
+    'subject:"INITIAL LEAD"',
+    '-subject:"out of office"',
+    '-subject:"automatic reply"',
+    '-subject:"autoreply"',
+    '-subject:"auto-reply"',
+    `after:${afterTs}`,
+  ].join(' ');
 
   const listRes = await gmail.users.messages.list({
     userId: 'me',

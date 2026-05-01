@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import type { DbLead, DbTeamMember, LeadStatus } from '@/lib/supabase/queries';
 import LeadStatusBadge from './LeadStatusBadge';
-import { createLead, updateLead, archiveLead, type LeadInput } from '@/app/(programs)/leads/actions';
+import { createLead, updateLead, archiveLead, deleteLead, type LeadInput } from '@/app/(programs)/leads/actions';
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -222,11 +222,21 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
 
   // Local overrides for cells edited inline — avoids full page refresh on each change
   const [localEdits, setLocalEdits] = useState<Map<string, Partial<DbLead>>>(new Map());
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
 
   const effectiveLeads = useMemo(
-    () => leads.map((l) => { const e = localEdits.get(l.id); return e ? { ...l, ...e } : l; }),
-    [leads, localEdits],
+    () => leads
+      .filter((l) => !deletedIds.has(l.id))
+      .map((l) => { const e = localEdits.get(l.id); return e ? { ...l, ...e } : l; }),
+    [leads, localEdits, deletedIds],
   );
+
+  async function handleDeleteLead(e: React.MouseEvent, leadId: string) {
+    e.stopPropagation();
+    if (!window.confirm('Delete this lead? This cannot be undone.')) return;
+    setDeletedIds((prev) => new Set([...prev, leadId]));
+    await deleteLead(leadId);
+  }
 
   async function saveCellChange(leadId: string, field: 'status' | 'assigned_to' | 'start_date', value: string | number | null) {
     setLocalEdits((prev) => {
@@ -343,6 +353,7 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
                 <th className={thCls} onClick={() => toggleSort('assigned_to')}>Owner{sortIcon('assigned_to')}</th>
                 <th className={thCls} onClick={() => toggleSort('status')}>Status{sortIcon('status')}</th>
                 <th className={thCls} onClick={() => toggleSort('created_at')}>Received{sortIcon('created_at')}</th>
+                <th className="px-2 py-2" />
               </tr>
             </thead>
             <tbody className="divide-y divide-brand-cream/60">
@@ -401,6 +412,17 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
                     </td>
 
                     <td className="px-3 py-2.5 text-brand-silver whitespace-nowrap text-xs">{fmt(lead.created_at.slice(0, 10))}</td>
+                    <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={(e) => handleDeleteLead(e, lead.id)}
+                        className="text-brand-cream hover:text-red-500 transition-colors p-0.5"
+                        title="Delete lead"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    </td>
                   </tr>
                 );
               })}

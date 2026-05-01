@@ -5,7 +5,19 @@ import { suggestOwner } from './router';
 import { writeLead, leadAlreadyExists, type WriteLeadResult } from './writer';
 import { isProcessed, markProcessed } from './dedup';
 import { notifyScanSummary, notifyError } from './notify';
-import type { ScanResult } from './types';
+import type { ParsedLead, ScanResult } from './types';
+
+function isValidLeadData(lead: ParsedLead): boolean {
+  const fields = [
+    lead.client_name,
+    lead.program_name,
+    lead.start_date,
+    lead.guest_count,
+    lead.city ?? lead.state,
+  ];
+  const populated = fields.filter((v) => v != null && v !== '').length;
+  return populated >= 3;
+}
 
 export async function runScan(afterTimestamp?: number): Promise<ScanResult> {
   const batchId = randomUUID();
@@ -52,6 +64,12 @@ export async function runScan(afterTimestamp?: number): Promise<ScanResult> {
         const errMsg = `Parse failed for ${msg.messageId}: ${err instanceof Error ? err.message : String(err)}`;
         result.errors.push(errMsg);
         console.error(`[scanner] ${errMsg}`);
+        continue;
+      }
+
+      if (!isValidLeadData(lead)) {
+        console.log(`[scanner] Rejected ${msg.messageId} — not a valid lead format`);
+        markProcessed(msg.messageId);
         continue;
       }
 
