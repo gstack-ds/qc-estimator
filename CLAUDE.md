@@ -214,9 +214,9 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Scan Now button (ScanNowButton.tsx) + POST /api/scanner/run — manual on-demand scan with spinner and toast; schedule note "Auto-scans daily at 7am, 11am, 2pm, 4pm ET"
 
 ### Remaining
-- [ ] **Run migration 018 in production Supabase:** `ALTER TABLE estimate_line_items ADD COLUMN IF NOT EXISTS label TEXT;`
-- [ ] **Run migration 019 in production Supabase:** `supabase/migrations/019_team_members.sql` (team_members table + drops/re-adds leads.assigned_to as integer FK)
-- [ ] **Run `npm run dedup`** after 019 migration to clean up any duplicate leads created before the dedup logic was in place
+- [x] Run migration 018 in production Supabase (label column on estimate_line_items)
+- [x] Run migration 019 in production Supabase (team_members table + leads.assigned_to integer FK)
+- [ ] **Run `npm run dedup`** to clean up any duplicate leads created before the dedup logic was in place
 - [ ] Set up Gmail OAuth credentials + run `npm run auth` to get refresh token for scanner
 - [ ] Deploy scanner daemon to Mac with PM2 (all code is on main; env vars needed: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, NOTIFY_EMAIL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY)
 - [ ] Validate against 3-5 real historical proposals — compare engine output to Excel for same inputs
