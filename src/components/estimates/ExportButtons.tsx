@@ -93,7 +93,7 @@ export default function ExportButtons({
       const ws2 = xlsx.utils.aoa_to_sheet(sheet2);
       xlsx.utils.book_append_sheet(wb, ws2, 'Detail');
 
-      const safeName = (estimateName || programName).replace(/[^\w\s-]/g, '').trim();
+      const safeName = (estimateName || programName || 'estimate').replace(/[^\w\s-]/g, '').trim();
       xlsx.writeFile(wb, `${safeName}_estimate.xlsx`);
     } finally {
       setExporting(false);

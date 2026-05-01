@@ -628,7 +628,7 @@ function ExtractionResultPanel({ data, estimateType, onCopyToCanva, onPopulateLi
                   </td>
                   <td className="px-2 py-1 text-right text-brand-charcoal tabular-nums">{item.qty ?? 1}</td>
                   <td className="px-2 py-1 text-right text-brand-charcoal tabular-nums">${(item.unitPrice ?? 0).toFixed(2)}</td>
-                  <td className="px-2 py-1 text-brand-silver capitalize">{item.section.replace('_', ' ')}</td>
+                  <td className="px-2 py-1 text-brand-silver capitalize">{(item.section ?? '').replace('_', ' ')}</td>
                 </tr>
               ))}
             </tbody>
