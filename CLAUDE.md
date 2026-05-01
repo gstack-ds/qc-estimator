@@ -173,9 +173,12 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-04-29 | Gmail scanner: long-running daemon + node-cron, not PM2 cron_restart | PM2 cron_restart restarts the full process on schedule; long-running + cron.schedule() keeps the process alive and fires scans. Simpler. | PM2 cron_restart (rejected — process overhead), Vercel cron (not suitable for daemon with OAuth tokens) |
 | 2026-04-29 | Scanner uses relative imports only, not @/ path aliases | tsx runs scripts outside Next.js build context — tsconfig `moduleResolution: "bundler"` causes resolution failures with @/ aliases. All scanner files use relative imports (../../src/lib/...) | @/ aliases (rejected — tsx resolution failures at runtime) |
 | 2026-04-29 | Leads table inline editing uses a local edit overlay (Map) not useState copy of rows | A useState copy of rows needs useEffect to re-sync when props update (after AddLeadPanel refresh). The overlay pattern applies edits on top of the server-fetched props without blocking prop updates. | useState copy with useEffect sync (rejected — race condition risk) |
-| 2026-04-29 | Team members sourced from auth.admin.listUsers() not a profiles table | Avoids a separate profiles table and a migration. Display name = user_metadata.full_name || capitalized email prefix. Requires SUPABASE_SERVICE_ROLE_KEY, called server-side only. | profiles table (more setup), hardcoded list (brittle) |
+| 2026-04-29 | ~~Team members sourced from auth.admin.listUsers()~~ — superseded 2026-05-01 | Superseded by team_members table (migration 019). auth.users approach required service role key for every read and had no role/title data. | See 2026-05-01 decision below |
 | 2026-05-01 | lineItemsRef.current updated inside setLineItems functional updater, not just on render | React 18 concurrent mode may defer renders past setTimeout(0). Writing `lineItemsRef.current = next` inside the functional updater ensures handleItemSave reads the latest state when it fires, even if React hasn't re-rendered yet. | Update ref only on render (original pattern — race condition with setTimeout saves) |
 | 2026-05-01 | Label field stored on estimate_line_items, not derived from extraction name | The team wants a separate short internal descriptor independent of the vendor item name. Extraction auto-populates it from Claude's label suggestion; users can edit freely. Not included in templates (templates are blueprints; labels are per-estimate). | Reuse name field (conflates vendor name with internal tracking) |
+| 2026-05-01 | team_members table as owner source of truth, not auth.users | auth.users is an auth concern; team roster is a business concern. team_members seeds 9 real team members with first_name, last_name, role — stable, queryable, no service role key required for reads. assigned_to on leads is INTEGER FK to team_members(id). | auth.admin.listUsers (requires service role key everywhere, no row-level data), hardcoded array (brittle) |
+| 2026-05-01 | WriteLeadResult discriminated union: `{ id }` / `{ skipped: string }` / null | writeLead() has two distinct non-error outcomes: success (id) and intentional dedup skip (client_name+start_date). Returning null for both would cause callers to miscount skips as errors and fail to call markProcessed(). Discriminated union lets callers handle all three cases correctly. | Return null for both (ambiguous), throw a SkipError class (heavier) |
+| 2026-05-01 | Scan Now button calls POST /api/scanner/run, not a server action | Server actions can't show in-flight loading state from the client — the button needs to toggle a spinner and render a toast after completion. An API route + fetch() from a client component is the right pattern for user-initiated async jobs. | Server action (no mid-flight UI feedback), WebSocket (overkill) |
 
 ## Gotchas Log
 
@@ -193,61 +196,36 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-04-29 | `returning_client` regex in parseWithRegex tested if the *value* contained "returning" | The regex `/returning\|repeat/i.test(extractField(...))` tested the field value ("Yes") not the field label. Fix: pass the raw string to Zod schema which handles `yes\|true\|y\|1` transform. Always let Zod transforms handle boolean coercion, not pre-processing regexes. |
 | 2026-04-29 | Scanner committed to feat/scanner-phase2; subsequent UI work committed to main | Session started on main (gitStatus showed main, clean). Scanner work was on feat/scanner-phase2. LeadDetail and leads-UI commits landed on main before feat/scanner-phase2 was merged. Merge feat/scanner-phase2 to main before deploying scanner. |
 | 2026-05-01 | scanner-phase2 was already on main at session start | git log showed `10c0c89 feat: add Gmail scanner Phase 2` on main — already merged from a prior session. The Gotchas note was stale. Removed from Remaining TODOs. |
+| 2026-05-01 | React `<select value={id}>` shows "Unassigned" for all rows when id is an integer | HTML option values are always strings in the DOM. React coerces for matching but the behavior can be inconsistent when the JS value is a number. Fix: always use `String(m.id)` for option values and `id != null ? String(id) : ''` for the select value. Never pass raw integer IDs to select/option value props. |
+| 2026-05-01 | `node --loader tsx` is deprecated in newer Node versions | All npm scripts using `node --loader tsx script.ts` were broken. Replace with `npx tsx script.ts` — tsx handles its own loader registration. |
 
 ## Current TODOs
 
 ### Completed ✓
-- [x] Scaffold Next.js project with App Router
-- [x] Set up Supabase project and create migration files
-- [x] Seed reference data from Excel workbook
-- [x] Build pricing engine with tests (74 tests passing)
-- [x] Build admin panel for reference data (locations, markups, tiers, travel tables)
-- [x] Build estimate builder UI (Venue, AV, Decor builders)
-- [x] Build export functionality (Copy Numbers, Export to Excel — all three estimate types)
-- [x] Copy Numbers: grouped summary format (Menu/Bar Package/Staffing/Equipment/Venue Rental/Production Fee/Tax) with 18 unit tests
-- [x] Travel expense calculator with per-trip breakdown feeding into True Net margin
-- [x] File attachments per estimate (Supabase Storage) — PDF/PNG/JPG/JPEG, max 10MB, with upload/list/delete UI
-- [x] Bug fix: client commission 0% now persists (was reverting to 5% due to JS falsy `||` trap)
-- [x] Bug fix: category selections now persist on save (was stale closure in all three builders)
-- [x] Copy Line Items export — tab-separated, client-facing prices only, for Planning Pod
-- [x] Line item templates — save ☆ on any row, "+ From template" picker in each section (migration 007 required)
-- [x] Copy Items From — import all line items from another estimate in the same program
-- [x] Auth: login, signup (@qceventdesign.com restriction), forgot password, reset password
-- [x] Nav: UserMenu with email + Sign Out, white monogram fix
-- [x] ComparisonView: grouped by estimate type, per-type badges
-- [x] ScenarioTabs: typed estimate creation (Venue/AV/Decor) inline, no page navigation needed
-- [x] Claude API PDF extraction — auto-extracts menu items + venue fees from uploaded PDFs; Copy to Canva + Populate Line Items buttons (venue builder only); requires ANTHROPIC_API_KEY in env
-- [x] PDF extraction type-aware (venue/AV/decor/transportation) — each estimate type has its own extraction prompt and populate handler
-- [x] RFP extraction: all fields confirmed working — eventName, clientName, companyName, eventDate, guestCount, serviceStyle, alcoholType, eventStartTime/eventEndTime (24hr), clientHotel, locationHint
-- [x] Program attachment list: multiple PDFs per program, per-doc "Populate Fields" button (manual — does not auto-apply), overwrite confirmation dialog, locationHint fuzzy-matches locations table (auto-selects if exactly 1 match)
-- [x] PDF extraction persistence: extracted_data UPDATE was silently rejected (missing RLS UPDATE policy on estimate_attachments — migration 010)
-- [x] Populate button persistence: line_items_populated + details_populated columns on estimate_attachments (migration 012), reset on re-extraction
-- [x] Transportation estimate builder — 4th estimate type with vehicle rate card, daily schedule, per-estimate commission (default 0), general sales tax, margin analysis (migrations 011 + 013)
-
-### Completed ✓ (continued)
-- [x] Leads Pipeline Phase 1: leads table migration (017_add_leads.sql), leads list page, lead detail page, create-program-from-lead action
-- [x] Leads Pipeline Phase 2: Gmail scanner daemon (src/lib/scanner/), OAuth auth script, PM2 ecosystem config, parser/router/writer/notify/dedup modules, 48 new unit tests (parser + router)
-- [x] LeadDetail inline editing: Field (text/number/date/percent), TextAreaField, SelectField — click-to-edit on all fields, commission % shown as "6.5%" not "0.065"
-- [x] Leads list inline editing: status dropdown, owner dropdown, start date click-to-edit — all save on change without navigating away from the list
-- [x] Team members from auth.users: getTeamMembers() via admin API, display name from user_metadata.full_name or capitalized email prefix; replaces hardcoded OWNERS array in both list and detail pages
-- [x] Bug fix: category dropdown save on extracted line items — lineItemsRef.current now updated inside setLineItems updater to eliminate stale-ref race with setTimeout saves
-- [x] Bug fix: decor extraction prompt rewritten — entrance decor / decorative elements correctly map to florals section; rentals restricted to pure furniture/equipment
-- [x] Label field on line items (migration 018) — small text input below item name, saves on blur, shows in Copy Line Items export, auto-populated from PDF extraction
+- [x] Scaffold, Supabase setup, seed reference data, pricing engine (122 tests), admin panel, estimate builders, export, travel calculator, file attachments, auth, nav, PDF extraction, transportation builder, leads pipeline phases 1 & 2, inline editing, label field (see git log for full history)
+- [x] team_members table (migration 019) — seeds 9 members, assigned_to on leads is now INTEGER FK to team_members(id)
+- [x] Scanner owner lookup: writer.ts queries team_members by first_name match instead of auth.admin.listUsers
+- [x] client_name + start_date dedup in writeLead — prevents duplicate leads from different emails describing the same event
+- [x] WriteLeadResult discriminated union — callers distinguish inserted / skipped / error; skipped messages get markProcessed() to prevent reprocessing
+- [x] scripts/dedup-leads.ts — one-time cleanup script, keeps oldest per client_name+start_date group (`npm run dedup`)
+- [x] scripts/backfill-leads.ts — 12-month Gmail backfill with paginated fetch and Supabase dedup (`npm run backfill`)
+- [x] npm scripts: replaced `node --loader tsx` with `npx tsx` for all four scripts (scan, auth, backfill, dedup)
+- [x] Owner dropdown integer/string fix — explicit `String(m.id)` on all option values and select values in LeadsList and LeadDetail
+- [x] Scan Now button (ScanNowButton.tsx) + POST /api/scanner/run — manual on-demand scan with spinner and toast; schedule note "Auto-scans daily at 7am, 11am, 2pm, 4pm ET"
 
 ### Remaining
-- [ ] Run migration 018 in production Supabase: `ALTER TABLE estimate_line_items ADD COLUMN IF NOT EXISTS label TEXT;`
+- [ ] **Run migration 018 in production Supabase:** `ALTER TABLE estimate_line_items ADD COLUMN IF NOT EXISTS label TEXT;`
+- [ ] **Run migration 019 in production Supabase:** `supabase/migrations/019_team_members.sql` (team_members table + drops/re-adds leads.assigned_to as integer FK)
+- [ ] **Run `npm run dedup`** after 019 migration to clean up any duplicate leads created before the dedup logic was in place
 - [ ] Set up Gmail OAuth credentials + run `npm run auth` to get refresh token for scanner
-- [ ] Deploy scanner (feat/scanner-phase2 already on main) to Mac with PM2
+- [ ] Deploy scanner daemon to Mac with PM2 (all code is on main; env vars needed: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, NOTIFY_EMAIL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY)
 - [ ] Validate against 3-5 real historical proposals — compare engine output to Excel for same inputs
 - [ ] PDF/Canva export — format for client-facing proposals
 - [ ] Mobile polish — currently optimized for desktop/tablet only
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- Branch `feat/line-item-label-and-fixes` is ready to merge to main. Migration 018 must be run in Supabase before the branch is deployed.
-- Scanner is on main and ready to deploy to Mac with PM2. All env vars needed: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, NOTIFY_EMAIL, SUPABASE_SERVICE_ROLE_KEY.
-
-### Next Session Start
-- Scanner (feat/scanner-phase2) is complete and needs to be merged to main, then deployed to a Mac with PM2. All env vars needed: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, NOTIFY_EMAIL, SUPABASE_SERVICE_ROLE_KEY.
-- Run `npm run auth` once to generate GMAIL_REFRESH_TOKEN — opens browser, user authorizes, prints token to console.
-- After scanner is deployed: real-proposal validation is the best next step (compare engine output to Excel for known proposals).
+- Run migrations 018 and 019 in production Supabase (SQL editor), then run `npm run dedup` to clean up any duplicate leads.
+- Deploy scanner daemon to Mac with PM2 — all code is on main. Run `npm run auth` once first to generate the refresh token.
+- After scanner is live: run `npm run backfill` once to import the last 12 months of INITIAL LEAD emails.
+- Real-proposal validation is the best next feature step.
