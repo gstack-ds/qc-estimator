@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import type { DbLead, LeadStatus } from '@/lib/supabase/queries';
+import type { DbLead, DbTeamMember, LeadStatus } from '@/lib/supabase/queries';
 import LeadStatusBadge from './LeadStatusBadge';
 import { createLead, updateLead, archiveLead, type LeadInput } from '@/app/(programs)/leads/actions';
 
@@ -76,7 +76,7 @@ const EMPTY: LeadInput = {
 };
 
 function AddLeadPanel({ teamMembers, onClose, onCreated }: {
-  teamMembers: string[];
+  teamMembers: DbTeamMember[];
   onClose: () => void;
   onCreated: (id: string) => void;
 }) {
@@ -178,9 +178,9 @@ function AddLeadPanel({ teamMembers, onClose, onCreated }: {
             </div>
             <div>
               <label className={labelCls}>Assigned To</label>
-              <select className={inputCls} value={form.assigned_to ?? ''} onChange={(e) => set('assigned_to', e.target.value || null)}>
+              <select className={inputCls} value={form.assigned_to ?? ''} onChange={(e) => set('assigned_to', e.target.value ? Number(e.target.value) : null)}>
                 <option value="">— Unassigned —</option>
-                {teamMembers.map((o) => <option key={o} value={o}>{o}</option>)}
+                {teamMembers.map((m) => <option key={m.id} value={m.id}>{m.first_name} {m.last_name}</option>)}
               </select>
             </div>
           </div>
@@ -209,13 +209,13 @@ function AddLeadPanel({ teamMembers, onClose, onCreated }: {
 interface Props {
   leads: DbLead[];
   counts: Record<LeadStatus | 'all', number>;
-  teamMembers: string[];
+  teamMembers: DbTeamMember[];
 }
 
 export default function LeadsList({ leads, counts, teamMembers }: Props) {
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
-  const [ownerFilter, setOwnerFilter] = useState<string>('');
+  const [ownerFilter, setOwnerFilter] = useState<number | ''>('');
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [showAdd, setShowAdd] = useState(false);
@@ -228,7 +228,7 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
     [leads, localEdits],
   );
 
-  async function saveCellChange(leadId: string, field: 'status' | 'assigned_to' | 'start_date', value: string | null) {
+  async function saveCellChange(leadId: string, field: 'status' | 'assigned_to' | 'start_date', value: string | number | null) {
     setLocalEdits((prev) => {
       const next = new Map(prev);
       next.set(leadId, { ...(next.get(leadId) ?? {}), [field]: value });
@@ -244,7 +244,7 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
   const filtered = useMemo(() => {
     let rows = effectiveLeads;
     if (statusFilter !== 'all') rows = rows.filter((l) => l.status === statusFilter);
-    if (ownerFilter) rows = rows.filter((l) => (l.assigned_to ?? l.suggested_owner) === ownerFilter);
+    if (ownerFilter !== '') rows = rows.filter((l) => l.assigned_to === ownerFilter);
     return [...rows].sort((a, b) => {
       const av = a[sortKey] ?? '';
       const bv = b[sortKey] ?? '';
@@ -263,7 +263,11 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
     return <span className="text-brand-copper ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>;
   }
 
-  const allOwners = Array.from(new Set(effectiveLeads.map((l) => l.assigned_to ?? l.suggested_owner).filter(Boolean))) as string[];
+  const memberName = (id: number | null) => {
+    if (!id) return null;
+    const m = teamMembers.find((t) => t.id === id);
+    return m ? `${m.first_name} ${m.last_name}` : null;
+  };
 
   const STATUS_TABS: (LeadStatus | 'all')[] = ['all', 'new_lead', 'proposal', 'under_contract', 'archived'];
   const TAB_LABELS: Record<LeadStatus | 'all', string> = { all: 'All', ...STATUS_LABELS };
@@ -301,14 +305,14 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
         ))}
 
         <div className="ml-auto flex items-center gap-3">
-          {allOwners.length > 0 && (
+          {teamMembers.length > 0 && (
             <select
               value={ownerFilter}
-              onChange={(e) => setOwnerFilter(e.target.value)}
+              onChange={(e) => setOwnerFilter(e.target.value ? Number(e.target.value) : '')}
               className="text-xs border border-brand-cream rounded px-2 py-1.5 bg-white text-brand-charcoal/70 focus:outline-none focus:ring-1 focus:ring-brand-copper"
             >
               <option value="">All owners</option>
-              {allOwners.map((o) => <option key={o} value={o}>{o}</option>)}
+              {teamMembers.map((m) => <option key={m.id} value={m.id}>{m.first_name} {m.last_name}</option>)}
             </select>
           )}
           <button
@@ -377,11 +381,11 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
                     <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                       <select
                         value={lead.assigned_to ?? ''}
-                        onChange={(e) => saveCellChange(lead.id, 'assigned_to', e.target.value || null)}
+                        onChange={(e) => saveCellChange(lead.id, 'assigned_to', e.target.value ? Number(e.target.value) : null)}
                         className={cellSelectCls}
                       >
                         <option value="">— Unassigned —</option>
-                        {teamMembers.map((m) => <option key={m} value={m}>{m}</option>)}
+                        {teamMembers.map((m) => <option key={m.id} value={m.id}>{m.first_name} {m.last_name}</option>)}
                       </select>
                     </td>
 

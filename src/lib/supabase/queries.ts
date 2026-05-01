@@ -1,5 +1,4 @@
 import { createClient } from './server';
-import { createClient as createAdminClient } from '@supabase/supabase-js';
 
 // ─── Locations ───────────────────────────────────────────
 
@@ -698,7 +697,7 @@ export interface DbLead {
   billing_notes: string | null;
   returning_client: boolean | null;
   special_instructions: string | null;
-  assigned_to: string | null;
+  assigned_to: number | null;
   suggested_owner: string | null;
   original_email_link: string | null;
   parsed_by: string | null;
@@ -755,20 +754,22 @@ export async function getProgramForLead(leadId: string): Promise<{ id: string; n
   return data ?? null;
 }
 
-export async function getTeamMembers(): Promise<string[]> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return [];
-  const admin = createAdminClient(url, key);
-  const { data, error } = await admin.auth.admin.listUsers({ perPage: 100 });
-  if (error || !data) return [];
-  return data.users
-    .filter((u) => !!u.email)
-    .map((u) => {
-      const meta = u.user_metadata as { full_name?: string } | undefined;
-      if (meta?.full_name) return meta.full_name;
-      const prefix = u.email!.split('@')[0];
-      return prefix.charAt(0).toUpperCase() + prefix.slice(1);
-    })
-    .sort();
+export interface DbTeamMember {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  role: string;
+  is_active: boolean;
+}
+
+export async function getTeamMembers(): Promise<DbTeamMember[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('team_members')
+    .select('id, first_name, last_name, email, role, is_active')
+    .eq('is_active', true)
+    .order('first_name');
+  if (error) return [];
+  return (data ?? []) as DbTeamMember[];
 }

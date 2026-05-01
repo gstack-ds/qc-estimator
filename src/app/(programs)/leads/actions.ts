@@ -35,7 +35,7 @@ export type LeadInput = Partial<{
   billing_notes: string | null;
   returning_client: boolean | null;
   special_instructions: string | null;
-  assigned_to: string | null;
+  assigned_to: number | null;
   suggested_owner: string | null;
   original_email_link: string | null;
   status: LeadStatus;

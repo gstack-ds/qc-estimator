@@ -8,27 +8,19 @@ function getSupabase() {
   return createClient(url, key);
 }
 
-function toDisplayName(email: string): string {
-  const prefix = email.split('@')[0];
-  return prefix.charAt(0).toUpperCase() + prefix.slice(1);
-}
-
-async function resolveOwnerDisplayName(suggestedName: string | null): Promise<string | null> {
+async function resolveOwnerTeamMemberId(suggestedName: string | null): Promise<number | null> {
   if (!suggestedName) return null;
   const supabase = getSupabase();
-  const { data, error } = await supabase.auth.admin.listUsers();
-  if (error || !data?.users?.length) return suggestedName;
+  const { data, error } = await supabase
+    .from('team_members')
+    .select('id, first_name')
+    .eq('is_active', true);
+  if (error || !data) return null;
   const target = suggestedName.toLowerCase();
-  for (const user of data.users) {
-    const name: string = user.user_metadata?.full_name ||
-      (user.email ? toDisplayName(user.email) : '');
-    if (!name) continue;
-    const nameLower = name.toLowerCase();
-    if (nameLower === target || nameLower.startsWith(target + ' ') || nameLower.startsWith(target)) {
-      return name;
-    }
-  }
-  return suggestedName;
+  const match = data.find((m: { id: number; first_name: string }) =>
+    m.first_name.toLowerCase() === target,
+  );
+  return match?.id ?? null;
 }
 
 export interface WriteLeadInput {
@@ -65,7 +57,7 @@ export async function writeLead(input: WriteLeadInput): Promise<WriteLeadResult>
     }
   }
 
-  const resolvedOwner = await resolveOwnerDisplayName(input.suggestedOwner);
+  const resolvedOwner = await resolveOwnerTeamMemberId(input.suggestedOwner);
 
   const row = {
     ...input.lead,

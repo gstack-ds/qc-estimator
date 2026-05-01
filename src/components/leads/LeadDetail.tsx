@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type React from 'react';
 import { useRouter } from 'next/navigation';
-import type { DbLead, LeadStatus } from '@/lib/supabase/queries';
+import type { DbLead, DbTeamMember, LeadStatus } from '@/lib/supabase/queries';
 import LeadStatusBadge from './LeadStatusBadge';
 import { updateLead, archiveLead, deleteLead, createProgramFromLead, type LeadInput } from '@/app/(programs)/leads/actions';
 
@@ -174,7 +174,7 @@ function SelectField({ label, value, field, options, onSave }: {
 interface Props {
   lead: DbLead;
   linkedProgram: { id: string; name: string } | null;
-  teamMembers: string[];
+  teamMembers: DbTeamMember[];
 }
 
 export default function LeadDetail({ lead: initialLead, linkedProgram, teamMembers }: Props) {
@@ -277,13 +277,13 @@ export default function LeadDetail({ lead: initialLead, linkedProgram, teamMembe
           <label className={labelCls}>Assigned To</label>
           <select
             value={lead.assigned_to ?? ''}
-            onChange={(e) => save('assigned_to', e.target.value || null)}
+            onChange={(e) => save('assigned_to', e.target.value ? Number(e.target.value) : null)}
             className="border border-brand-cream rounded px-2.5 py-1.5 text-sm bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
           >
             <option value="">— Unassigned —</option>
-            {teamMembers.map((o) => <option key={o} value={o}>{o}</option>)}
+            {teamMembers.map((m) => <option key={m.id} value={m.id}>{m.first_name} {m.last_name}</option>)}
           </select>
-          {lead.suggested_owner && lead.suggested_owner !== lead.assigned_to && (
+          {lead.suggested_owner && (
             <p className="text-[10px] text-brand-silver mt-0.5">Suggested: {lead.suggested_owner}</p>
           )}
         </div>
