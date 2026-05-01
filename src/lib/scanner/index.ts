@@ -33,7 +33,7 @@ export async function runScan(afterTimestamp?: number): Promise<ScanResult> {
 
       // Skip if already in DB (handles cross-machine dedup)
       try {
-        if (await leadAlreadyExists(msg.messageId)) {
+        if (await leadAlreadyExists(msg.emailLink)) {
           markProcessed(msg.messageId);
           console.log(`[scanner] Skipping message already in DB: ${msg.messageId}`);
           continue;

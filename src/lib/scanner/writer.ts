@@ -25,15 +25,11 @@ export async function writeLead(input: WriteLeadInput): Promise<{ id: string } |
 
   const row = {
     ...input.lead,
-    email_message_id: input.messageId,
     original_email_link: input.emailLink,
-    email_subject: input.subject,
-    received_at: input.receivedAt.toISOString(),
     suggested_owner: input.suggestedOwner,
     assigned_to: input.suggestedOwner,
     scan_batch_id: input.batchId,
-    parse_method: input.parseMethod,
-    parse_warnings: input.parseWarnings,
+    parsed_by: input.parseMethod,
     status: 'new_lead',
   };
 
@@ -51,11 +47,11 @@ export async function writeLead(input: WriteLeadInput): Promise<{ id: string } |
   return { id: data.id };
 }
 
-export async function leadAlreadyExists(messageId: string): Promise<boolean> {
+export async function leadAlreadyExists(emailLink: string): Promise<boolean> {
   const supabase = getSupabase();
   const { count } = await supabase
     .from('leads')
     .select('id', { count: 'exact', head: true })
-    .eq('email_message_id', messageId);
+    .eq('original_email_link', emailLink);
   return (count ?? 0) > 0;
 }
