@@ -26,7 +26,7 @@ export async function writeLead(input: WriteLeadInput): Promise<{ id: string } |
   const row = {
     ...input.lead,
     email_message_id: input.messageId,
-    email_link: input.emailLink,
+    original_email_link: input.emailLink,
     email_subject: input.subject,
     received_at: input.receivedAt.toISOString(),
     suggested_owner: input.suggestedOwner,
