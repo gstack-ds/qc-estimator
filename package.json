@@ -10,10 +10,10 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "scan": "node --loader tsx scripts/run-scanner.ts",
-    "auth": "node --loader tsx scripts/gmail-auth.ts",
-    "backfill": "node --loader tsx scripts/backfill-leads.ts",
-    "dedup": "node --loader tsx scripts/dedup-leads.ts"
+    "scan": "npx tsx scripts/run-scanner.ts",
+    "auth": "npx tsx scripts/gmail-auth.ts",
+    "backfill": "npx tsx scripts/backfill-leads.ts",
+    "dedup": "npx tsx scripts/dedup-leads.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
