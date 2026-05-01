@@ -276,12 +276,12 @@ export default function LeadDetail({ lead: initialLead, linkedProgram, teamMembe
         <div>
           <label className={labelCls}>Assigned To</label>
           <select
-            value={lead.assigned_to ?? ''}
+            value={lead.assigned_to != null ? String(lead.assigned_to) : ''}
             onChange={(e) => save('assigned_to', e.target.value ? Number(e.target.value) : null)}
             className="border border-brand-cream rounded px-2.5 py-1.5 text-sm bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
           >
             <option value="">— Unassigned —</option>
-            {teamMembers.map((m) => <option key={m.id} value={m.id}>{m.first_name} {m.last_name}</option>)}
+            {teamMembers.map((m) => <option key={m.id} value={String(m.id)}>{m.first_name} {m.last_name}</option>)}
           </select>
           {lead.suggested_owner && (
             <p className="text-[10px] text-brand-silver mt-0.5">Suggested: {lead.suggested_owner}</p>
