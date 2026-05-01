@@ -174,6 +174,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-04-29 | Scanner uses relative imports only, not @/ path aliases | tsx runs scripts outside Next.js build context — tsconfig `moduleResolution: "bundler"` causes resolution failures with @/ aliases. All scanner files use relative imports (../../src/lib/...) | @/ aliases (rejected — tsx resolution failures at runtime) |
 | 2026-04-29 | Leads table inline editing uses a local edit overlay (Map) not useState copy of rows | A useState copy of rows needs useEffect to re-sync when props update (after AddLeadPanel refresh). The overlay pattern applies edits on top of the server-fetched props without blocking prop updates. | useState copy with useEffect sync (rejected — race condition risk) |
 | 2026-04-29 | Team members sourced from auth.admin.listUsers() not a profiles table | Avoids a separate profiles table and a migration. Display name = user_metadata.full_name || capitalized email prefix. Requires SUPABASE_SERVICE_ROLE_KEY, called server-side only. | profiles table (more setup), hardcoded list (brittle) |
+| 2026-05-01 | lineItemsRef.current updated inside setLineItems functional updater, not just on render | React 18 concurrent mode may defer renders past setTimeout(0). Writing `lineItemsRef.current = next` inside the functional updater ensures handleItemSave reads the latest state when it fires, even if React hasn't re-rendered yet. | Update ref only on render (original pattern — race condition with setTimeout saves) |
+| 2026-05-01 | Label field stored on estimate_line_items, not derived from extraction name | The team wants a separate short internal descriptor independent of the vendor item name. Extraction auto-populates it from Claude's label suggestion; users can edit freely. Not included in templates (templates are blueprints; labels are per-estimate). | Reuse name field (conflates vendor name with internal tracking) |
 
 ## Gotchas Log
 
@@ -190,6 +192,7 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-04-26 | Program attachment uploaded on create was invisible after redirect | `uploadProgramAttachment` select didn't include `extracted_data`; no URL was generated. Updated select + added `getProgramAttachments` / `deleteProgramAttachment` actions. |
 | 2026-04-29 | `returning_client` regex in parseWithRegex tested if the *value* contained "returning" | The regex `/returning\|repeat/i.test(extractField(...))` tested the field value ("Yes") not the field label. Fix: pass the raw string to Zod schema which handles `yes\|true\|y\|1` transform. Always let Zod transforms handle boolean coercion, not pre-processing regexes. |
 | 2026-04-29 | Scanner committed to feat/scanner-phase2; subsequent UI work committed to main | Session started on main (gitStatus showed main, clean). Scanner work was on feat/scanner-phase2. LeadDetail and leads-UI commits landed on main before feat/scanner-phase2 was merged. Merge feat/scanner-phase2 to main before deploying scanner. |
+| 2026-05-01 | scanner-phase2 was already on main at session start | git log showed `10c0c89 feat: add Gmail scanner Phase 2` on main — already merged from a prior session. The Gotchas note was stale. Removed from Remaining TODOs. |
 
 ## Current TODOs
 
@@ -227,14 +230,22 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] LeadDetail inline editing: Field (text/number/date/percent), TextAreaField, SelectField — click-to-edit on all fields, commission % shown as "6.5%" not "0.065"
 - [x] Leads list inline editing: status dropdown, owner dropdown, start date click-to-edit — all save on change without navigating away from the list
 - [x] Team members from auth.users: getTeamMembers() via admin API, display name from user_metadata.full_name or capitalized email prefix; replaces hardcoded OWNERS array in both list and detail pages
+- [x] Bug fix: category dropdown save on extracted line items — lineItemsRef.current now updated inside setLineItems updater to eliminate stale-ref race with setTimeout saves
+- [x] Bug fix: decor extraction prompt rewritten — entrance decor / decorative elements correctly map to florals section; rentals restricted to pure furniture/equipment
+- [x] Label field on line items (migration 018) — small text input below item name, saves on blur, shows in Copy Line Items export, auto-populated from PDF extraction
 
 ### Remaining
-- [ ] Merge feat/scanner-phase2 to main (scanner files not yet on main — see Gotchas)
+- [ ] Run migration 018 in production Supabase: `ALTER TABLE estimate_line_items ADD COLUMN IF NOT EXISTS label TEXT;`
 - [ ] Set up Gmail OAuth credentials + run `npm run auth` to get refresh token for scanner
+- [ ] Deploy scanner (feat/scanner-phase2 already on main) to Mac with PM2
 - [ ] Validate against 3-5 real historical proposals — compare engine output to Excel for same inputs
 - [ ] PDF/Canva export — format for client-facing proposals
 - [ ] Mobile polish — currently optimized for desktop/tablet only
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
+
+### Next Session Start
+- Branch `feat/line-item-label-and-fixes` is ready to merge to main. Migration 018 must be run in Supabase before the branch is deployed.
+- Scanner is on main and ready to deploy to Mac with PM2. All env vars needed: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, NOTIFY_EMAIL, SUPABASE_SERVICE_ROLE_KEY.
 
 ### Next Session Start
 - Scanner (feat/scanner-phase2) is complete and needs to be merged to main, then deployed to a Mac with PM2. All env vars needed: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, NOTIFY_EMAIL, SUPABASE_SERVICE_ROLE_KEY.
