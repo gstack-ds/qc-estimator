@@ -5,17 +5,51 @@ import type React from 'react';
 import { useRouter } from 'next/navigation';
 import type { DbLead, DbTeamMember, LeadStatus } from '@/lib/supabase/queries';
 import LeadStatusBadge from './LeadStatusBadge';
-import { updateLead, archiveLead, deleteLead, createProgramFromLead, type LeadInput } from '@/app/(programs)/leads/actions';
+import { updateLead, deleteLead, createProgramFromLead, type LeadInput } from '@/app/(programs)/leads/actions';
 
 // ─── Config ───────────────────────────────────────────────
 
-const STATUSES: LeadStatus[] = ['new_lead', 'proposal', 'under_contract', 'archived'];
+const STATUSES: LeadStatus[] = [
+  'new_lead', 'proposal_in_progress', 'pending_client_review', 'pending_contract_payment',
+  'under_contract', 'planning', 'unresponsive', 'post_event_close_out',
+  'halted', 'planning_not_started', 'did_not_book', 'completed',
+];
 const STATUS_LABELS: Record<LeadStatus, string> = {
-  new_lead: 'New Lead',
-  proposal: 'Proposal',
-  under_contract: 'Under Contract',
-  archived: 'Archived',
+  new_lead:                 'New Lead',
+  proposal_in_progress:     'Proposal in Progress',
+  pending_client_review:    'Pending Client Review',
+  pending_contract_payment: 'Pending Contract/Payment',
+  under_contract:           'Under Contract',
+  planning:                 'Planning',
+  unresponsive:             'Unresponsive',
+  post_event_close_out:     'Post Event Close Out',
+  halted:                   'Halted',
+  planning_not_started:     'Planning Not Started',
+  did_not_book:             'Did Not Book',
+  completed:                'Completed',
 };
+
+const GDP_ADVISOR_OPTIONS = [
+  { value: '', label: '—' },
+  ...['Shelley', 'Riley', 'Chris', 'Benoit', 'Dawn', 'Maxine'].map((v) => ({ value: v, label: v })),
+];
+const GDP_COORDINATOR_OPTIONS = [
+  { value: '', label: '—' },
+  ...['Amy', 'Maria', 'Jessica', 'Michelle', 'Maxime'].map((v) => ({ value: v, label: v })),
+];
+const THIRD_PARTY_OPTIONS = [
+  { value: '', label: '—' },
+  ...['American Express', 'MMS', 'Ashfield', 'Bishop McCann', 'Bond Brand Loyalty',
+    'Carrousel Travel', 'C2 Events Ltd', 'ConferenceDirect', 'CWT', 'Emota', 'EEG',
+    'Sutton Planning', 'The Turner Agency', 'YES', 'MGME', 'Rubra', 'Meet Events',
+    'FIRST Agency', 'Marbet', 'DMI', 'World Travel Inc', 'Strategic Site Selection',
+    'Pure Event Management', 'Event Strategy Group',
+  ].map((v) => ({ value: v, label: v })),
+];
+const LEAD_SOURCE_TYPE_OPTIONS = [
+  { value: '', label: '—' },
+  ...['GDP', 'Direct', 'Rubra', 'Conference', 'Sales Coordinator'].map((v) => ({ value: v, label: v })),
+];
 
 // ─── Shared styles ─────────────────────────────────────────
 
@@ -193,11 +227,7 @@ export default function LeadDetail({ lead: initialLead, linkedProgram, teamMembe
   }
 
   async function handleStatusChange(status: LeadStatus) {
-    if (status === 'archived') {
-      await archiveLead(lead.id);
-    } else {
-      await updateLead(lead.id, { status });
-    }
+    await updateLead(lead.id, { status });
     setLead((prev) => ({ ...prev, status }));
     router.refresh();
   }
@@ -288,6 +318,18 @@ export default function LeadDetail({ lead: initialLead, linkedProgram, teamMembe
           )}
         </div>
 
+        <div>
+          <label className={labelCls}>Team Support</label>
+          <select
+            value={lead.team_support != null ? String(lead.team_support) : ''}
+            onChange={(e) => save('team_support', e.target.value ? Number(e.target.value) : null)}
+            className="border border-brand-cream rounded px-2.5 py-1.5 text-sm bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
+          >
+            <option value="">— None —</option>
+            {teamMembers.map((m) => <option key={m.id} value={String(m.id)}>{m.first_name} {m.last_name}</option>)}
+          </select>
+        </div>
+
         <div className="ml-auto">
           <LeadStatusBadge status={lead.status} />
         </div>
@@ -329,7 +371,9 @@ export default function LeadDetail({ lead: initialLead, linkedProgram, teamMembe
         <div className="grid grid-cols-2 gap-4">
           {f('client_name', 'Client Name')}
           {f('end_company', 'End Company')}
+          {f('end_client', 'End Client')}
           {f('contact_name', 'Contact Name')}
+          {f('client_contact_name', 'Client Contact Name')}
           {f('contact_email', 'Contact Email')}
           {f('contact_role', 'Contact Role')}
         </div>
@@ -368,6 +412,10 @@ export default function LeadDetail({ lead: initialLead, linkedProgram, teamMembe
           {f('end_date', 'End Date', 'date')}
           {f('rain_date', 'Rain Date', 'date')}
         </div>
+        <div className="grid grid-cols-3 gap-4">
+          {f('date_last_followup', 'Date of Last Follow-Up', 'date')}
+          {f('current_due_date', 'Current Due Date', 'date')}
+        </div>
         <div className="grid grid-cols-2 gap-4">
           {f('hotel', 'Hotel')}
           {f('venue', 'Venue')}
@@ -388,17 +436,55 @@ export default function LeadDetail({ lead: initialLead, linkedProgram, teamMembe
       <div className={sectionCls}>
         <h2 className={sectionHeadCls}>Source & Commission</h2>
         <div className="grid grid-cols-2 gap-4">
-          {f('lead_source', 'Lead Source')}
+          <SelectField
+            label="Lead Source Type"
+            value={lead.lead_source_type}
+            field="lead_source_type"
+            options={LEAD_SOURCE_TYPE_OPTIONS}
+            onSave={(f, v) => save(f, v || null)}
+          />
+          {f('lead_source', 'Lead Source (raw)')}
+          {f('source_commission', 'Source Commission %', 'percent')}
+          {f('gdp_commission', 'GDP Commission %', 'percent')}
+          {f('extra_commission', 'Extra Commission %', 'percent')}
           {f('source_advisor', 'Source Advisor')}
           {f('source_coordinator', 'Source Coordinator')}
-          {f('source_commission', 'Source Commission %', 'percent')}
+          {f('sales_coordinator', 'Sales Coordinator')}
+        </div>
+        {tf('commission_notes', 'Commission Notes')}
+        {tf('billing_notes', 'Billing Notes')}
+      </div>
+
+      {/* GDP & Third Party */}
+      <div className={sectionCls}>
+        <h2 className={sectionHeadCls}>GDP & Third Party</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <SelectField
+            label="GDP Advisor"
+            value={lead.gdp_advisor}
+            field="gdp_advisor"
+            options={GDP_ADVISOR_OPTIONS}
+            onSave={(f, v) => save(f, v || null)}
+          />
+          <SelectField
+            label="GDP Coordinator"
+            value={lead.gdp_coordinator}
+            field="gdp_coordinator"
+            options={GDP_COORDINATOR_OPTIONS}
+            onSave={(f, v) => save(f, v || null)}
+          />
+          <SelectField
+            label="Third Party"
+            value={lead.third_party}
+            field="third_party"
+            options={THIRD_PARTY_OPTIONS}
+            onSave={(f, v) => save(f, v || null)}
+          />
           {f('third_party_company', 'Third-Party Company')}
           {f('third_party_contact', 'Third-Party Contact')}
           {f('third_party_commission', 'Third-Party Commission %', 'percent')}
         </div>
         {tf('third_party_comm_notes', 'Third-Party Commission Notes')}
-        {tf('commission_notes', 'Commission Notes')}
-        {tf('billing_notes', 'Billing Notes')}
       </div>
 
       {/* Notes */}

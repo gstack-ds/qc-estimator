@@ -663,13 +663,36 @@ export async function getVenueWithSpaces(id: string): Promise<DbVenueWithSpaces 
 
 // ─── Leads ────────────────────────────────────────────────
 
-export type LeadStatus = 'new_lead' | 'proposal' | 'under_contract' | 'archived';
+export type LeadStatus =
+  | 'new_lead'
+  | 'proposal_in_progress'
+  | 'pending_client_review'
+  | 'pending_contract_payment'
+  | 'under_contract'
+  | 'planning'
+  | 'unresponsive'
+  | 'post_event_close_out'
+  | 'halted'
+  | 'planning_not_started'
+  | 'did_not_book'
+  | 'completed';
+
+export type LeadStatusGroup = 'all' | 'open' | 'paused' | 'closed';
+
+export const OPEN_STATUSES: LeadStatus[] = [
+  'new_lead', 'proposal_in_progress', 'pending_client_review', 'pending_contract_payment',
+  'under_contract', 'planning', 'unresponsive', 'post_event_close_out',
+];
+export const PAUSED_STATUSES: LeadStatus[] = ['halted', 'planning_not_started'];
+export const CLOSED_STATUSES: LeadStatus[] = ['did_not_book', 'completed'];
 
 export interface DbLead {
   id: string;
   client_name: string | null;
   end_company: string | null;
+  end_client: string | null;
   contact_name: string | null;
+  client_contact_name: string | null;
   contact_email: string | null;
   contact_role: string | null;
   third_party_company: string | null;
@@ -689,16 +712,26 @@ export interface DbLead {
   venue: string | null;
   region: string | null;
   lead_source: string | null;
+  lead_source_type: string | null;
   source_advisor: string | null;
   source_coordinator: string | null;
+  sales_coordinator: string | null;
   source_commission: number | null;
   third_party_commission: number | null;
+  gdp_commission: number | null;
+  extra_commission: number | null;
   commission_notes: string | null;
   billing_notes: string | null;
   returning_client: boolean | null;
   special_instructions: string | null;
   assigned_to: number | null;
+  team_support: number | null;
   suggested_owner: string | null;
+  gdp_advisor: string | null;
+  gdp_coordinator: string | null;
+  third_party: string | null;
+  date_last_followup: string | null;
+  current_due_date: string | null;
   original_email_link: string | null;
   parsed_by: string | null;
   scan_batch_id: string | null;
@@ -710,24 +743,28 @@ export interface DbLead {
 }
 
 const LEAD_FIELDS = [
-  'id', 'client_name', 'end_company', 'contact_name', 'contact_email', 'contact_role',
+  'id', 'client_name', 'end_company', 'end_client',
+  'contact_name', 'client_contact_name', 'contact_email', 'contact_role',
   'third_party_company', 'third_party_contact', 'third_party_comm_notes',
   'program_name', 'program_type', 'program_description',
   'start_date', 'end_date', 'rain_date', 'num_nights', 'guest_count',
   'city', 'state', 'hotel', 'venue', 'region',
-  'lead_source', 'source_advisor', 'source_coordinator',
-  'source_commission', 'third_party_commission', 'commission_notes',
-  'billing_notes', 'returning_client', 'special_instructions',
-  'assigned_to', 'suggested_owner',
+  'lead_source', 'lead_source_type', 'source_advisor', 'source_coordinator', 'sales_coordinator',
+  'source_commission', 'third_party_commission', 'gdp_commission', 'extra_commission',
+  'commission_notes', 'billing_notes', 'returning_client', 'special_instructions',
+  'assigned_to', 'team_support', 'suggested_owner',
+  'gdp_advisor', 'gdp_coordinator', 'third_party',
+  'date_last_followup', 'current_due_date',
   'original_email_link', 'parsed_by', 'scan_batch_id', 'organization_id',
   'status', 'created_at', 'updated_at', 'archived_at',
 ].join(', ');
 
-export async function getLeads(status?: LeadStatus): Promise<DbLead[]> {
+export async function getLeads(): Promise<DbLead[]> {
   const supabase = await createClient();
-  let q = supabase.from('leads').select(LEAD_FIELDS).order('created_at', { ascending: false });
-  if (status) q = q.eq('status', status);
-  const { data, error } = await q;
+  const { data, error } = await supabase
+    .from('leads')
+    .select(LEAD_FIELDS)
+    .order('start_date', { ascending: true, nullsFirst: false });
   if (error) throw new Error(error.message);
   return (data ?? []) as unknown as DbLead[];
 }
@@ -739,12 +776,21 @@ export async function getLead(id: string): Promise<DbLead | null> {
   return data as unknown as DbLead;
 }
 
-export async function getLeadCounts(): Promise<Record<LeadStatus | 'all', number>> {
+export async function getLeadCounts(): Promise<Record<LeadStatusGroup, number>> {
   const supabase = await createClient();
   const { data, error } = await supabase.from('leads').select('status');
-  if (error || !data) return { all: 0, new_lead: 0, proposal: 0, under_contract: 0, archived: 0 };
-  const counts = { all: data.length, new_lead: 0, proposal: 0, under_contract: 0, archived: 0 };
-  for (const row of data) counts[row.status as LeadStatus]++;
+  if (error || !data) return { all: 0, open: 0, paused: 0, closed: 0 };
+  const openSet = new Set<string>(OPEN_STATUSES);
+  const pausedSet = new Set<string>(PAUSED_STATUSES);
+  const closedSet = new Set<string>(CLOSED_STATUSES);
+  const counts = { all: 0, open: 0, paused: 0, closed: 0 };
+  for (const row of data) {
+    const s = row.status as string;
+    counts.all++;
+    if (openSet.has(s)) counts.open++;
+    else if (pausedSet.has(s)) counts.paused++;
+    else if (closedSet.has(s)) counts.closed++;
+  }
   return counts;
 }
 

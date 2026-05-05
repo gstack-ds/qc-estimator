@@ -7,7 +7,9 @@ import type { LeadStatus } from '@/lib/supabase/queries';
 export type LeadInput = Partial<{
   client_name: string | null;
   end_company: string | null;
+  end_client: string | null;
   contact_name: string | null;
+  client_contact_name: string | null;
   contact_email: string | null;
   contact_role: string | null;
   third_party_company: string | null;
@@ -27,16 +29,26 @@ export type LeadInput = Partial<{
   venue: string | null;
   region: string | null;
   lead_source: string | null;
+  lead_source_type: string | null;
   source_advisor: string | null;
   source_coordinator: string | null;
+  sales_coordinator: string | null;
   source_commission: number | null;
   third_party_commission: number | null;
+  gdp_commission: number | null;
+  extra_commission: number | null;
   commission_notes: string | null;
   billing_notes: string | null;
   returning_client: boolean | null;
   special_instructions: string | null;
   assigned_to: number | null;
+  team_support: number | null;
   suggested_owner: string | null;
+  gdp_advisor: string | null;
+  gdp_coordinator: string | null;
+  third_party: string | null;
+  date_last_followup: string | null;
+  current_due_date: string | null;
   original_email_link: string | null;
   status: LeadStatus;
 }>;
@@ -70,18 +82,6 @@ export async function deleteLead(id: string): Promise<{ error: string | null }> 
   return { error: null };
 }
 
-export async function archiveLead(id: string): Promise<{ error: string | null }> {
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from('leads')
-    .update({ status: 'archived', archived_at: new Date().toISOString() })
-    .eq('id', id);
-  if (error) return { error: error.message };
-  revalidatePath('/leads');
-  revalidatePath(`/leads/${id}`);
-  return { error: null };
-}
-
 export async function bulkArchiveLeads(onOrBeforeDate: string): Promise<{ error: string | null; count: number }> {
   const supabase = await createClient();
   // Include the full cutoff day by using < day+1
@@ -90,10 +90,10 @@ export async function bulkArchiveLeads(onOrBeforeDate: string): Promise<{ error:
   const upperBound = next.toISOString().slice(0, 10);
   const { data, error } = await supabase
     .from('leads')
-    .update({ status: 'archived', archived_at: new Date().toISOString() })
+    .update({ status: 'did_not_book', archived_at: new Date().toISOString() })
     .not('start_date', 'is', null)
     .lt('start_date', upperBound)
-    .neq('status', 'archived')
+    .neq('status', 'did_not_book')
     .select('id');
   if (error) return { error: error.message, count: 0 };
   revalidatePath('/leads');

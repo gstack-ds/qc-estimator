@@ -2,20 +2,54 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import type { DbLead, DbTeamMember, LeadStatus } from '@/lib/supabase/queries';
+import type { DbLead, DbTeamMember, LeadStatus, LeadStatusGroup } from '@/lib/supabase/queries';
+import { OPEN_STATUSES, PAUSED_STATUSES, CLOSED_STATUSES } from '@/lib/supabase/queries';
 import LeadStatusBadge from './LeadStatusBadge';
-import { createLead, updateLead, archiveLead, bulkArchiveLeads, deleteLead, type LeadInput } from '@/app/(programs)/leads/actions';
+import { createLead, updateLead, bulkArchiveLeads, deleteLead, type LeadInput } from '@/app/(programs)/leads/actions';
 
-// ─── Helpers ──────────────────────────────────────────────
+// ─── Constants ─────────────────────────────────────────────
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
-  new_lead: 'New Lead',
-  proposal: 'Proposal',
-  under_contract: 'Under Contract',
-  archived: 'Archived',
+  new_lead:                 'New Lead',
+  proposal_in_progress:     'Proposal in Progress',
+  pending_client_review:    'Pending Client Review',
+  pending_contract_payment: 'Pending Contract/Payment',
+  under_contract:           'Under Contract',
+  planning:                 'Planning',
+  unresponsive:             'Unresponsive',
+  post_event_close_out:     'Post Event Close Out',
+  halted:                   'Halted',
+  planning_not_started:     'Planning Not Started',
+  did_not_book:             'Did Not Book',
+  completed:                'Completed',
 };
 
-const STATUSES: LeadStatus[] = ['new_lead', 'proposal', 'under_contract', 'archived'];
+const ALL_STATUSES: LeadStatus[] = [
+  'new_lead', 'proposal_in_progress', 'pending_client_review', 'pending_contract_payment',
+  'under_contract', 'planning', 'unresponsive', 'post_event_close_out',
+  'halted', 'planning_not_started', 'did_not_book', 'completed',
+];
+
+const OPEN_SET = new Set<LeadStatus>(OPEN_STATUSES);
+const PAUSED_SET = new Set<LeadStatus>(PAUSED_STATUSES);
+const CLOSED_SET = new Set<LeadStatus>(CLOSED_STATUSES);
+
+const GDP_ADVISORS = ['', 'Shelley', 'Riley', 'Chris', 'Benoit', 'Dawn', 'Maxine'];
+const GDP_COORDINATORS = ['', 'Amy', 'Maria', 'Jessica', 'Michelle', 'Maxime'];
+const THIRD_PARTY_OPTIONS = [
+  '', 'American Express', 'MMS', 'Ashfield', 'Bishop McCann', 'Bond Brand Loyalty',
+  'Carrousel Travel', 'C2 Events Ltd', 'ConferenceDirect', 'CWT', 'Emota', 'EEG',
+  'Sutton Planning', 'The Turner Agency', 'YES', 'MGME', 'Rubra', 'Meet Events',
+  'FIRST Agency', 'Marbet', 'DMI', 'World Travel Inc', 'Strategic Site Selection',
+  'Pure Event Management', 'Event Strategy Group',
+];
+const LEAD_SOURCE_OPTIONS = ['', 'GDP', 'Direct', 'Rubra', 'Conference', 'Sales Coordinator'];
+
+type SortKey = 'client_name' | 'program_name' | 'city' | 'guest_count' | 'start_date' | 'end_date' | 'status' | 'created_at';
+
+const cellSelectCls = 'text-xs border border-brand-cream rounded px-1.5 py-1 bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper';
+
+// ─── Helpers ───────────────────────────────────────────────
 
 function fmt(iso: string | null): string {
   if (!iso) return '—';
@@ -23,8 +57,10 @@ function fmt(iso: string | null): string {
   return `${m}/${d}/${y}`;
 }
 
-
-type SortKey = 'client_name' | 'program_name' | 'region' | 'guest_count' | 'start_date' | 'assigned_to' | 'status' | 'created_at';
+function location(lead: DbLead): string {
+  const parts = [lead.city, lead.state].filter(Boolean);
+  return parts.length > 0 ? parts.join(', ') : '—';
+}
 
 // ─── DateCell ─────────────────────────────────────────────
 
@@ -203,54 +239,139 @@ function AddLeadPanel({ teamMembers, onClose, onCreated }: {
 
 // ─── Lead Row ─────────────────────────────────────────────
 
-function LeadRow({ lead, teamMembers, cellSelectCls, onRowClick, onSave, onDelete }: {
+function LeadRow({ lead, teamMembers, onRowClick, onSave, onDelete }: {
   lead: DbLead;
   teamMembers: DbTeamMember[];
-  cellSelectCls: string;
   onRowClick: () => void;
-  onSave: (id: string, field: 'status' | 'assigned_to' | 'start_date', value: string | number | null) => void;
+  onSave: (id: string, field: keyof LeadInput, value: string | number | null) => void;
   onDelete: (e: React.MouseEvent, id: string) => void;
 }) {
+  const stopProp = (e: React.MouseEvent) => e.stopPropagation();
+
   return (
     <tr onClick={onRowClick} className="cursor-pointer hover:bg-brand-offwhite transition-colors">
-      <td className="px-3 py-2.5 font-medium text-brand-charcoal">
+      {/* Client */}
+      <td className="px-3 py-2.5 font-medium text-brand-charcoal whitespace-nowrap">
         {lead.client_name ?? <span className="text-brand-silver">—</span>}
       </td>
-      <td className="px-3 py-2.5 text-brand-charcoal/80">
+
+      {/* Program */}
+      <td className="px-3 py-2.5 text-brand-charcoal/80 whitespace-nowrap">
         {lead.program_name ?? <span className="text-brand-silver">—</span>}
       </td>
-      <td className="px-3 py-2.5 text-brand-charcoal/70">{lead.region ?? '—'}</td>
-      <td className="px-3 py-2.5 text-right tabular-nums text-brand-charcoal/70">
+
+      {/* Location */}
+      <td className="px-3 py-2.5 text-brand-charcoal/70 whitespace-nowrap">{location(lead)}</td>
+
+      {/* Guests */}
+      <td className="px-3 py-2.5 text-right tabular-nums text-brand-charcoal/70 whitespace-nowrap">
         {lead.guest_count ?? '—'}
       </td>
-      <td className="px-3 py-2.5 text-brand-charcoal/70" onClick={(e) => e.stopPropagation()}>
-        <DateCell
-          leadId={lead.id}
-          value={lead.start_date}
-          onSave={(id, v) => onSave(id, 'start_date', v)}
-        />
+
+      {/* Start Date */}
+      <td className="px-3 py-2.5 text-brand-charcoal/70" onClick={stopProp}>
+        <DateCell leadId={lead.id} value={lead.start_date} onSave={(id, v) => onSave(id, 'start_date', v)} />
       </td>
-      <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+
+      {/* End Date */}
+      <td className="px-3 py-2.5 text-brand-charcoal/70" onClick={stopProp}>
+        <DateCell leadId={lead.id} value={lead.end_date} onSave={(id, v) => onSave(id, 'end_date', v)} />
+      </td>
+
+      {/* Owner */}
+      <td className="px-3 py-2" onClick={stopProp}>
         <select
           value={lead.assigned_to != null ? String(lead.assigned_to) : ''}
           onChange={(e) => onSave(lead.id, 'assigned_to', e.target.value ? Number(e.target.value) : null)}
           className={cellSelectCls}
         >
-          <option value="">— Unassigned —</option>
-          {teamMembers.map((m) => <option key={m.id} value={String(m.id)}>{m.first_name} {m.last_name}</option>)}
+          <option value="">—</option>
+          {teamMembers.map((m) => <option key={m.id} value={String(m.id)}>{m.first_name}</option>)}
         </select>
       </td>
-      <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+
+      {/* Team Support */}
+      <td className="px-3 py-2" onClick={stopProp}>
+        <select
+          value={lead.team_support != null ? String(lead.team_support) : ''}
+          onChange={(e) => onSave(lead.id, 'team_support', e.target.value ? Number(e.target.value) : null)}
+          className={cellSelectCls}
+        >
+          <option value="">—</option>
+          {teamMembers.map((m) => <option key={m.id} value={String(m.id)}>{m.first_name}</option>)}
+        </select>
+      </td>
+
+      {/* Status */}
+      <td className="px-3 py-2" onClick={stopProp}>
         <select
           value={lead.status}
           onChange={(e) => onSave(lead.id, 'status', e.target.value)}
           className={cellSelectCls}
         >
-          {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+          {ALL_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
         </select>
       </td>
+
+      {/* GDP Advisor */}
+      <td className="px-3 py-2" onClick={stopProp}>
+        <select
+          value={lead.gdp_advisor ?? ''}
+          onChange={(e) => onSave(lead.id, 'gdp_advisor', e.target.value || null)}
+          className={cellSelectCls}
+        >
+          {GDP_ADVISORS.map((v) => <option key={v} value={v}>{v || '—'}</option>)}
+        </select>
+      </td>
+
+      {/* GDP Coordinator */}
+      <td className="px-3 py-2" onClick={stopProp}>
+        <select
+          value={lead.gdp_coordinator ?? ''}
+          onChange={(e) => onSave(lead.id, 'gdp_coordinator', e.target.value || null)}
+          className={cellSelectCls}
+        >
+          {GDP_COORDINATORS.map((v) => <option key={v} value={v}>{v || '—'}</option>)}
+        </select>
+      </td>
+
+      {/* Third Party */}
+      <td className="px-3 py-2" onClick={stopProp}>
+        <select
+          value={lead.third_party ?? ''}
+          onChange={(e) => onSave(lead.id, 'third_party', e.target.value || null)}
+          className={cellSelectCls}
+        >
+          {THIRD_PARTY_OPTIONS.map((v) => <option key={v} value={v}>{v || '—'}</option>)}
+        </select>
+      </td>
+
+      {/* Lead Source */}
+      <td className="px-3 py-2" onClick={stopProp}>
+        <select
+          value={lead.lead_source_type ?? ''}
+          onChange={(e) => onSave(lead.id, 'lead_source_type', e.target.value || null)}
+          className={cellSelectCls}
+        >
+          {LEAD_SOURCE_OPTIONS.map((v) => <option key={v} value={v}>{v || '—'}</option>)}
+        </select>
+      </td>
+
+      {/* Date of Last F/U */}
+      <td className="px-3 py-2.5 text-brand-charcoal/70" onClick={stopProp}>
+        <DateCell leadId={lead.id} value={lead.date_last_followup} onSave={(id, v) => onSave(id, 'date_last_followup', v)} />
+      </td>
+
+      {/* Current Due Date */}
+      <td className="px-3 py-2.5 text-brand-charcoal/70" onClick={stopProp}>
+        <DateCell leadId={lead.id} value={lead.current_due_date} onSave={(id, v) => onSave(id, 'current_due_date', v)} />
+      </td>
+
+      {/* Received */}
       <td className="px-3 py-2.5 text-brand-silver whitespace-nowrap text-xs">{fmt(lead.created_at.slice(0, 10))}</td>
-      <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+
+      {/* Delete */}
+      <td className="px-2 py-2" onClick={stopProp}>
         <button
           onClick={(e) => onDelete(e, lead.id)}
           className="text-brand-cream hover:text-red-500 transition-colors p-0.5"
@@ -269,24 +390,23 @@ function LeadRow({ lead, teamMembers, cellSelectCls, onRowClick, onSave, onDelet
 
 interface Props {
   leads: DbLead[];
-  counts: Record<LeadStatus | 'all', number>;
+  counts: Record<LeadStatusGroup, number>;
   teamMembers: DbTeamMember[];
 }
 
 export default function LeadsList({ leads, counts, teamMembers }: Props) {
   const router = useRouter();
-  const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
+  const [groupFilter, setGroupFilter] = useState<LeadStatusGroup>('open');
   const [ownerFilter, setOwnerFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('2026-01-01');
   const [dateTo, setDateTo] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('created_at');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [sortKey, setSortKey] = useState<SortKey>('start_date');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [showAdd, setShowAdd] = useState(false);
   const [showArchiveOld, setShowArchiveOld] = useState(false);
   const [archiveCutoff, setArchiveCutoff] = useState('2025-12-31');
   const [archiving, setArchiving] = useState(false);
 
-  // Local overrides for cells edited inline — avoids full page refresh on each change
   const [localEdits, setLocalEdits] = useState<Map<string, Partial<DbLead>>>(new Map());
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
 
@@ -304,22 +424,19 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
     await deleteLead(leadId);
   }
 
-  async function saveCellChange(leadId: string, field: 'status' | 'assigned_to' | 'start_date', value: string | number | null) {
+  async function saveCellChange(leadId: string, field: keyof LeadInput, value: string | number | null) {
     setLocalEdits((prev) => {
       const next = new Map(prev);
-      next.set(leadId, { ...(next.get(leadId) ?? {}), [field]: value });
+      next.set(leadId, { ...(next.get(leadId) ?? {}), [field]: value } as Partial<DbLead>);
       return next;
     });
-    if (field === 'status' && value === 'archived') {
-      await archiveLead(leadId);
-    } else {
-      await updateLead(leadId, { [field]: value } as LeadInput);
-    }
+    await updateLead(leadId, { [field]: value } as LeadInput);
   }
 
   const archiveOldCount = useMemo(
     () => effectiveLeads.filter(
-      (l) => l.status !== 'archived' && l.start_date != null && l.start_date <= archiveCutoff,
+      (l) => l.status !== 'did_not_book' && l.status !== 'completed' &&
+             l.start_date != null && l.start_date <= archiveCutoff,
     ).length,
     [effectiveLeads, archiveCutoff],
   );
@@ -337,7 +454,9 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
     const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
     let base = effectiveLeads;
-    if (statusFilter !== 'all') base = base.filter((l) => l.status === statusFilter);
+    if (groupFilter === 'open')   base = base.filter((l) => OPEN_SET.has(l.status));
+    else if (groupFilter === 'paused') base = base.filter((l) => PAUSED_SET.has(l.status));
+    else if (groupFilter === 'closed') base = base.filter((l) => CLOSED_SET.has(l.status));
     if (ownerFilter !== '') base = base.filter((l) => l.assigned_to != null && String(l.assigned_to) === ownerFilter);
 
     const recentRows = base
@@ -348,16 +467,16 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
 
     let earlierRows = base.filter((l) => !recentIds.has(l.id));
     if (dateFrom) earlierRows = earlierRows.filter((l) => l.created_at.slice(0, 10) >= dateFrom);
-    if (dateTo) earlierRows = earlierRows.filter((l) => l.created_at.slice(0, 10) <= dateTo);
+    if (dateTo)   earlierRows = earlierRows.filter((l) => l.created_at.slice(0, 10) <= dateTo);
     earlierRows = [...earlierRows].sort((a, b) => {
-      const av = a[sortKey] ?? '';
-      const bv = b[sortKey] ?? '';
+      const av = a[sortKey as keyof DbLead] ?? '';
+      const bv = b[sortKey as keyof DbLead] ?? '';
       const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
       return sortDir === 'asc' ? cmp : -cmp;
     });
 
     return { recent: recentRows, earlier: earlierRows };
-  }, [effectiveLeads, statusFilter, ownerFilter, dateFrom, dateTo, sortKey, sortDir]);
+  }, [effectiveLeads, groupFilter, ownerFilter, dateFrom, dateTo, sortKey, sortDir]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) { setSortDir((d) => d === 'asc' ? 'desc' : 'asc'); }
@@ -369,11 +488,31 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
     return <span className="text-brand-copper ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>;
   }
 
-  const STATUS_TABS: (LeadStatus | 'all')[] = ['all', 'new_lead', 'proposal', 'under_contract', 'archived'];
-  const TAB_LABELS: Record<LeadStatus | 'all', string> = { all: 'All', ...STATUS_LABELS };
+  const GROUP_TABS: LeadStatusGroup[] = ['all', 'open', 'paused', 'closed'];
+  const GROUP_LABELS: Record<LeadStatusGroup, string> = { all: 'All', open: 'Open', paused: 'Paused', closed: 'Closed' };
 
-  const thCls = 'px-3 py-2 text-left text-[10px] font-medium text-brand-charcoal/50 uppercase tracking-wide whitespace-nowrap cursor-pointer hover:text-brand-charcoal select-none';
-  const cellSelectCls = 'text-xs border border-brand-cream rounded px-1.5 py-1 bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper';
+  const thCls = 'px-3 py-2 text-left text-[10px] font-medium text-brand-charcoal/50 uppercase tracking-wide whitespace-nowrap select-none';
+  const thSortCls = thCls + ' cursor-pointer hover:text-brand-charcoal';
+
+  const colHeaders: { label: string; key?: SortKey }[] = [
+    { label: 'Client', key: 'client_name' },
+    { label: 'Program', key: 'program_name' },
+    { label: 'Location', key: 'city' },
+    { label: 'Guests', key: 'guest_count' },
+    { label: 'Start Date', key: 'start_date' },
+    { label: 'End Date', key: 'end_date' },
+    { label: 'Owner' },
+    { label: 'Team Support' },
+    { label: 'Status', key: 'status' },
+    { label: 'GDP Advisor' },
+    { label: 'GDP Coordinator' },
+    { label: 'Third Party' },
+    { label: 'Lead Source' },
+    { label: 'Last F/U' },
+    { label: 'Due Date' },
+    { label: 'Received', key: 'created_at' },
+    { label: '' },
+  ];
 
   return (
     <>
@@ -385,21 +524,21 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
         />
       )}
 
-      {/* Status tabs */}
+      {/* Group tabs */}
       <div className="flex items-center gap-1 border-b border-brand-cream pb-3">
-        {STATUS_TABS.map((s) => (
+        {GROUP_TABS.map((g) => (
           <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
+            key={g}
+            onClick={() => setGroupFilter(g)}
             className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-              statusFilter === s
+              groupFilter === g
                 ? 'bg-brand-charcoal text-white'
                 : 'text-brand-charcoal/60 hover:text-brand-charcoal hover:bg-brand-cream/50'
             }`}
           >
-            {TAB_LABELS[s]}
-            <span className={`ml-1.5 text-[10px] ${statusFilter === s ? 'opacity-70' : 'text-brand-silver'}`}>
-              {counts[s]}
+            {GROUP_LABELS[g]}
+            <span className={`ml-1.5 text-[10px] ${groupFilter === g ? 'opacity-70' : 'text-brand-silver'}`}>
+              {counts[g]}
             </span>
           </button>
         ))}
@@ -416,7 +555,7 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
             </select>
           )}
           <button
-            onClick={() => { setShowArchiveOld((v) => !v); }}
+            onClick={() => setShowArchiveOld((v) => !v)}
             className="text-xs font-medium rounded px-3 py-1.5 border border-brand-cream text-brand-charcoal/60 hover:text-brand-charcoal hover:border-brand-charcoal/30 transition-colors"
           >
             Archive Old
@@ -488,31 +627,31 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
 
       {recent.length === 0 && earlier.length === 0 ? (
         <div className="text-center py-16 text-brand-silver text-sm">
-          {statusFilter === 'all' && !ownerFilter && !dateFrom && !dateTo
+          {groupFilter === 'all' && !ownerFilter && !dateFrom && !dateTo
             ? 'No leads yet. Add one manually or wait for the scanner.'
             : 'No leads match the current filters.'}
         </div>
       ) : (
-        <div className="rounded-lg border border-brand-cream overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="rounded-lg border border-brand-cream overflow-x-auto">
+          <table className="text-sm">
             <thead className="bg-brand-offwhite border-b border-brand-cream">
               <tr>
-                <th className={thCls} onClick={() => toggleSort('client_name')}>Client{sortIcon('client_name')}</th>
-                <th className={thCls} onClick={() => toggleSort('program_name')}>Program{sortIcon('program_name')}</th>
-                <th className={thCls} onClick={() => toggleSort('region')}>Region{sortIcon('region')}</th>
-                <th className={thCls + ' text-right'} onClick={() => toggleSort('guest_count')}>Guests{sortIcon('guest_count')}</th>
-                <th className={thCls} onClick={() => toggleSort('start_date')}>Start Date{sortIcon('start_date')}</th>
-                <th className={thCls} onClick={() => toggleSort('assigned_to')}>Owner{sortIcon('assigned_to')}</th>
-                <th className={thCls} onClick={() => toggleSort('status')}>Status{sortIcon('status')}</th>
-                <th className={thCls} onClick={() => toggleSort('created_at')}>Received{sortIcon('created_at')}</th>
-                <th className="px-2 py-2" />
+                {colHeaders.map(({ label, key }) =>
+                  key ? (
+                    <th key={label} className={thSortCls} onClick={() => toggleSort(key)}>
+                      {label}{sortIcon(key)}
+                    </th>
+                  ) : (
+                    <th key={label} className={thCls}>{label}</th>
+                  )
+                )}
               </tr>
             </thead>
 
             {recent.length > 0 && (
               <tbody className="divide-y divide-brand-cream/60">
                 <tr className="bg-blue-50/60">
-                  <td colSpan={9} className="px-3 py-1.5 text-[10px] font-semibold text-blue-500 uppercase tracking-widest">
+                  <td colSpan={17} className="px-3 py-1.5 text-[10px] font-semibold text-blue-500 uppercase tracking-widest">
                     Latest Scan
                   </td>
                 </tr>
@@ -521,7 +660,6 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
                     key={lead.id}
                     lead={lead}
                     teamMembers={teamMembers}
-                    cellSelectCls={cellSelectCls}
                     onRowClick={() => router.push(`/leads/${lead.id}`)}
                     onSave={saveCellChange}
                     onDelete={handleDeleteLead}
@@ -534,7 +672,7 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
               <tbody className="divide-y divide-brand-cream/60">
                 {recent.length > 0 && (
                   <tr className="bg-brand-offwhite border-t border-brand-cream">
-                    <td colSpan={9} className="px-3 py-1.5 text-[10px] font-semibold text-brand-charcoal/40 uppercase tracking-widest">
+                    <td colSpan={17} className="px-3 py-1.5 text-[10px] font-semibold text-brand-charcoal/40 uppercase tracking-widest">
                       Earlier
                     </td>
                   </tr>
@@ -544,7 +682,6 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
                     key={lead.id}
                     lead={lead}
                     teamMembers={teamMembers}
-                    cellSelectCls={cellSelectCls}
                     onRowClick={() => router.push(`/leads/${lead.id}`)}
                     onSave={saveCellChange}
                     onDelete={handleDeleteLead}
@@ -554,6 +691,12 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
             )}
           </table>
         </div>
+      )}
+
+      {(recent.length > 0 || earlier.length > 0) && (
+        <p className="text-[10px] text-brand-silver mt-2 text-right">
+          {recent.length + earlier.length} lead{recent.length + earlier.length !== 1 ? 's' : ''}
+        </p>
       )}
     </>
   );
