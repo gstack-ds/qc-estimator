@@ -179,6 +179,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-05-01 | team_members table as owner source of truth, not auth.users | auth.users is an auth concern; team roster is a business concern. team_members seeds 9 real team members with first_name, last_name, role — stable, queryable, no service role key required for reads. assigned_to on leads is INTEGER FK to team_members(id). | auth.admin.listUsers (requires service role key everywhere, no row-level data), hardcoded array (brittle) |
 | 2026-05-01 | WriteLeadResult discriminated union: `{ id }` / `{ skipped: string }` / null | writeLead() has two distinct non-error outcomes: success (id) and intentional dedup skip (client_name+start_date). Returning null for both would cause callers to miscount skips as errors and fail to call markProcessed(). Discriminated union lets callers handle all three cases correctly. | Return null for both (ambiguous), throw a SkipError class (heavier) |
 | 2026-05-01 | Scan Now button calls POST /api/scanner/run, not a server action | Server actions can't show in-flight loading state from the client — the button needs to toggle a spinner and render a toast after completion. An API route + fetch() from a client component is the right pattern for user-initiated async jobs. | Server action (no mid-flight UI feedback), WebSocket (overkill) |
+| 2026-05-05 | Lead status constants extracted to src/lib/leads/constants.ts | LeadStatus, LeadStatusGroup, OPEN/PAUSED/CLOSED_STATUSES live here — no server imports. queries.ts re-exports from it. Client components import from constants.ts directly, never from queries.ts for runtime values. | Inline in queries.ts (breaks client builds), duplicate in each component |
+| 2026-05-05 | Leads pipeline overhaul — 12 statuses, status groups (Open/Paused/Closed), 13 new columns | Migration 020 run in production. status tabs now group by Open/Paused/Closed (default Open). Table is horizontally scrollable, default sort start_date asc. All new dropdown cols inline-editable. | Old 4-value enum (kept for reference in migration file) |
 
 ## Gotchas Log
 
@@ -198,34 +200,34 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-05-01 | scanner-phase2 was already on main at session start | git log showed `10c0c89 feat: add Gmail scanner Phase 2` on main — already merged from a prior session. The Gotchas note was stale. Removed from Remaining TODOs. |
 | 2026-05-01 | React `<select value={id}>` shows "Unassigned" for all rows when id is an integer | HTML option values are always strings in the DOM. React coerces for matching but the behavior can be inconsistent when the JS value is a number. Fix: always use `String(m.id)` for option values and `id != null ? String(id) : ''` for the select value. Never pass raw integer IDs to select/option value props. |
 | 2026-05-01 | `node --loader tsx` is deprecated in newer Node versions | All npm scripts using `node --loader tsx script.ts` were broken. Replace with `npx tsx script.ts` — tsx handles its own loader registration. |
+| 2026-05-05 | PM2 on Windows cannot use tsx as interpreter — silently crashes with no logs | Compile scanner to CJS first with `npm run build:scanner` (esbuild), then PM2 runs plain `node scripts/run-scanner.js`. |
+| 2026-05-05 | `import 'dotenv/config'` in scanner resolves .env from process.cwd(), not the script dir | PM2 may not set cwd correctly. Use `dotenv.config({ path: path.resolve(__dirname, '..', '.env') })` for reliable resolution. |
+| 2026-05-05 | Client component importing runtime values from queries.ts breaks the build | queries.ts imports server.ts (next/headers) — any runtime import in a client component pulls that chain in. Extract constants with no server deps into a separate file (src/lib/leads/constants.ts) and import from there instead. |
 
 ## Current TODOs
 
 ### Completed ✓
 - [x] Scaffold, Supabase setup, seed reference data, pricing engine (122 tests), admin panel, estimate builders, export, travel calculator, file attachments, auth, nav, PDF extraction, transportation builder, leads pipeline phases 1 & 2, inline editing, label field (see git log for full history)
 - [x] team_members table (migration 019) — seeds 9 members, assigned_to on leads is now INTEGER FK to team_members(id)
-- [x] Scanner owner lookup: writer.ts queries team_members by first_name match instead of auth.admin.listUsers
-- [x] client_name + start_date dedup in writeLead — prevents duplicate leads from different emails describing the same event
-- [x] WriteLeadResult discriminated union — callers distinguish inserted / skipped / error; skipped messages get markProcessed() to prevent reprocessing
-- [x] scripts/dedup-leads.ts — one-time cleanup script, keeps oldest per client_name+start_date group (`npm run dedup`)
-- [x] scripts/backfill-leads.ts — 12-month Gmail backfill with paginated fetch and Supabase dedup (`npm run backfill`)
-- [x] npm scripts: replaced `node --loader tsx` with `npx tsx` for all four scripts (scan, auth, backfill, dedup)
-- [x] Owner dropdown integer/string fix — explicit `String(m.id)` on all option values and select values in LeadsList and LeadDetail
-- [x] Scan Now button (ScanNowButton.tsx) + POST /api/scanner/run — manual on-demand scan with spinner and toast; schedule note "Auto-scans daily at 7am, 11am, 2pm, 4pm ET"
+- [x] Scanner owner lookup, dedup logic, backfill script, npm scripts cleanup
+- [x] Scan Now button + POST /api/scanner/run
+- [x] PM2 scanner: ecosystem.config.js uses interpreter pattern → compile step (build:scanner via esbuild) → plain node on compiled JS
+- [x] Leads list: date range filter (From defaults 2026-01-01), Latest Scan / Earlier sections, default sort start_date asc
+- [x] Archive Old bulk action (filters by start_date, sets did_not_book)
+- [x] Leads pipeline overhaul (migration 020, run in prod): 12-value status enum, Open/Paused/Closed tabs, 13 new columns, 16-column horizontally-scrollable table, all dropdown cols inline-editable
+- [x] Lead status constants extracted to src/lib/leads/constants.ts to fix client/server boundary build error
 
 ### Remaining
-- [x] Run migration 018 in production Supabase (label column on estimate_line_items)
-- [x] Run migration 019 in production Supabase (team_members table + leads.assigned_to integer FK)
-- [x] Run migration 020 in production Supabase (leads overhaul — 12-value status enum + 13 new columns)
 - [ ] **Run `npm run dedup`** to clean up any duplicate leads created before the dedup logic was in place
 - [ ] Set up Gmail OAuth credentials + run `npm run auth` to get refresh token for scanner
-- [ ] Deploy scanner daemon to Mac with PM2 (all code is on main; env vars needed: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, NOTIFY_EMAIL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY)
+- [ ] Deploy scanner daemon to Mac with PM2: `npm run auth` → `npm run build:scanner` → `pm2 start ecosystem.config.js`
+  - Env vars needed: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, NOTIFY_EMAIL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY
+- [ ] After scanner is live: run `npm run backfill` once to import last 12 months of INITIAL LEAD emails
 - [ ] Validate against 3-5 real historical proposals — compare engine output to Excel for same inputs
 - [ ] PDF/Canva export — format for client-facing proposals
 - [ ] Mobile polish — currently optimized for desktop/tablet only
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- Deploy scanner daemon to Mac with PM2 — all code is on main. Run `npm run auth` once first to generate the refresh token, then `npm run build:scanner` before `pm2 start`.
-- After scanner is live: run `npm run backfill` once to import the last 12 months of INITIAL LEAD emails.
-- Real-proposal validation is the best next feature step.
+- Scanner deployment is the top priority — see Remaining above for exact steps.
+- After scanner is live and backfill is run, real-proposal validation is the best next feature step.
