@@ -258,7 +258,7 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
 
   const archiveOldCount = useMemo(
     () => effectiveLeads.filter(
-      (l) => l.status !== 'archived' && l.created_at.slice(0, 10) <= archiveCutoff,
+      (l) => l.status !== 'archived' && l.start_date != null && l.start_date <= archiveCutoff,
     ).length,
     [effectiveLeads, archiveCutoff],
   );
@@ -392,7 +392,7 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
 
         {showArchiveOld && (
           <div className="ml-auto flex items-center gap-3 pl-4 border-l border-brand-cream">
-            <span className="text-xs text-brand-charcoal/60">Archive received on or before</span>
+            <span className="text-xs text-brand-charcoal/60">Archive leads with start date on or before</span>
             <input
               type="date"
               value={archiveCutoff}

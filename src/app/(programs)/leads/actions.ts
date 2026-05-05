@@ -91,7 +91,8 @@ export async function bulkArchiveLeads(onOrBeforeDate: string): Promise<{ error:
   const { data, error } = await supabase
     .from('leads')
     .update({ status: 'archived', archived_at: new Date().toISOString() })
-    .lt('created_at', upperBound)
+    .not('start_date', 'is', null)
+    .lt('start_date', upperBound)
     .neq('status', 'archived')
     .select('id');
   if (error) return { error: error.message, count: 0 };
