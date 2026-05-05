@@ -181,6 +181,10 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-05-01 | Scan Now button calls POST /api/scanner/run, not a server action | Server actions can't show in-flight loading state from the client — the button needs to toggle a spinner and render a toast after completion. An API route + fetch() from a client component is the right pattern for user-initiated async jobs. | Server action (no mid-flight UI feedback), WebSocket (overkill) |
 | 2026-05-05 | Lead status constants extracted to src/lib/leads/constants.ts | LeadStatus, LeadStatusGroup, OPEN/PAUSED/CLOSED_STATUSES live here — no server imports. queries.ts re-exports from it. Client components import from constants.ts directly, never from queries.ts for runtime values. | Inline in queries.ts (breaks client builds), duplicate in each component |
 | 2026-05-05 | Leads pipeline overhaul — 12 statuses, status groups (Open/Paused/Closed), 13 new columns | Migration 020 run in production. status tabs now group by Open/Paused/Closed (default Open). Table is horizontally scrollable, default sort start_date asc. All new dropdown cols inline-editable. | Old 4-value enum (kept for reference in migration file) |
+| 2026-05-05 | Leads table: dual-axis scroll with fixed viewport height | Table in overflow-auto max-h-[calc(100vh-300px)] container so both scrollbars appear within the viewport. thead is sticky top-0. Client column frozen sticky left-0 with group-hover bg sync. Section headers sticky top-8 (below thead). | Horizontal-only scroll (scrollbar off-screen), separate sticky component (overkill) |
+| 2026-05-05 | Scan timestamp groups replace "Latest Scan" / "Earlier" labels | Groups by scan_batch_id; null → "Manual Entry". Labels: "Today H:MM AM/PM (N leads)", "May 1, 2026 H:MM AM/PM (N leads)". Sorted most-recent-first, manual last. | Time-based 24h cutoff (rejected — backfilled leads all share one created_at) |
+| 2026-05-05 | ScanNowButton: router.refresh() after scan + 60s auto-poll | router.refresh() fires immediately after POST /api/scanner/run returns. setInterval(60s) calls router.refresh() in background; shows "Updated just now" for 8s. | Manual page refresh (poor UX), WebSocket (overkill for polling) |
+| 2026-05-05 | Scanner writer maps to migration 020 column names with dropdown normalization | ParsedLead has source_advisor/source_coordinator/third_party_company/lead_source (old cols from migration 017). Migration 020 added gdp_advisor/gdp_coordinator/third_party/lead_source_type. writer.ts explicitly sets all 4 new cols via matchOption()/normalizeLeadSource() after spread. | Rename ParsedLead fields (breaks regex parser field labels), add DB migration to rename columns (destructive) |
 
 ## Gotchas Log
 
@@ -203,6 +207,7 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-05-05 | PM2 on Windows cannot use tsx as interpreter — silently crashes with no logs | Compile scanner to CJS first with `npm run build:scanner` (esbuild), then PM2 runs plain `node scripts/run-scanner.js`. |
 | 2026-05-05 | `import 'dotenv/config'` in scanner resolves .env from process.cwd(), not the script dir | PM2 may not set cwd correctly. Use `dotenv.config({ path: path.resolve(__dirname, '..', '.env') })` for reliable resolution. |
 | 2026-05-05 | Client component importing runtime values from queries.ts breaks the build | queries.ts imports server.ts (next/headers) — any runtime import in a client component pulls that chain in. Extract constants with no server deps into a separate file (src/lib/leads/constants.ts) and import from there instead. |
+| 2026-05-05 | Migration 017 + 020 created parallel column sets for the same data | Migration 017 created source_advisor/source_coordinator/third_party_company/lead_source. Migration 020 added gdp_advisor/gdp_coordinator/third_party/lead_source_type as new columns. Both exist in DB. Scanner was writing to old, UI reading from new → data invisible in dropdowns. Fix: writer.ts explicitly maps new cols. Historical rows may need a one-time UPDATE backfill. |
 
 ## Current TODOs
 
@@ -216,9 +221,14 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Archive Old bulk action (filters by start_date, sets did_not_book)
 - [x] Leads pipeline overhaul (migration 020, run in prod): 12-value status enum, Open/Paused/Closed tabs, 13 new columns, 16-column horizontally-scrollable table, all dropdown cols inline-editable
 - [x] Lead status constants extracted to src/lib/leads/constants.ts to fix client/server boundary build error
+- [x] Leads list UX: dual-axis scroll (overflow-auto max-h-[calc(100vh-300px)]), sticky thead, frozen Client column, scan timestamp group labels, sticky section headers
+- [x] ScanNowButton: router.refresh() after scan completes + 60s auto-poll with "Updated just now" indicator
+- [x] Scanner writer: map source_advisor/source_coordinator/third_party_company/lead_source → gdp_advisor/gdp_coordinator/third_party/lead_source_type with dropdown normalization (matchOption, normalizeLeadSource)
+- [x] Parser: updated Claude prompt to enumerate exact lead_source values and guide advisor/coordinator to first-name-only output
 
 ### Remaining
 - [ ] **Run `npm run dedup`** to clean up any duplicate leads created before the dedup logic was in place
+- [ ] **Optional backfill**: `UPDATE leads SET gdp_advisor = source_advisor, gdp_coordinator = source_coordinator, third_party = third_party_company, lead_source_type = lead_source WHERE gdp_advisor IS NULL` — populates new UI columns for existing scanner-imported leads (with manual normalization as needed)
 - [ ] Set up Gmail OAuth credentials + run `npm run auth` to get refresh token for scanner
 - [ ] Deploy scanner daemon to Mac with PM2: `npm run auth` → `npm run build:scanner` → `pm2 start ecosystem.config.js`
   - Env vars needed: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, NOTIFY_EMAIL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY
@@ -230,4 +240,5 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 
 ### Next Session Start
 - Scanner deployment is the top priority — see Remaining above for exact steps.
+- Consider running the optional DB backfill to populate gdp_advisor/gdp_coordinator/third_party/lead_source_type for existing rows.
 - After scanner is live and backfill is run, real-proposal validation is the best next feature step.
