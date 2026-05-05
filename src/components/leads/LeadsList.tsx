@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import type { DbLead, DbTeamMember, LeadStatus } from '@/lib/supabase/queries';
 import LeadStatusBadge from './LeadStatusBadge';
-import { createLead, updateLead, archiveLead, deleteLead, type LeadInput } from '@/app/(programs)/leads/actions';
+import { createLead, updateLead, archiveLead, bulkArchiveLeads, deleteLead, type LeadInput } from '@/app/(programs)/leads/actions';
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -216,9 +216,14 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
   const [ownerFilter, setOwnerFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('2026-01-01');
+  const [dateTo, setDateTo] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [showAdd, setShowAdd] = useState(false);
+  const [showArchiveOld, setShowArchiveOld] = useState(false);
+  const [archiveCutoff, setArchiveCutoff] = useState('2025-12-31');
+  const [archiving, setArchiving] = useState(false);
 
   // Local overrides for cells edited inline — avoids full page refresh on each change
   const [localEdits, setLocalEdits] = useState<Map<string, Partial<DbLead>>>(new Map());
@@ -251,10 +256,28 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
     }
   }
 
+  const archiveOldCount = useMemo(
+    () => effectiveLeads.filter(
+      (l) => l.status !== 'archived' && l.created_at.slice(0, 10) <= archiveCutoff,
+    ).length,
+    [effectiveLeads, archiveCutoff],
+  );
+
+  async function handleBulkArchive() {
+    setArchiving(true);
+    const { error } = await bulkArchiveLeads(archiveCutoff);
+    setArchiving(false);
+    if (error) { alert(error); return; }
+    setShowArchiveOld(false);
+    router.refresh();
+  }
+
   const filtered = useMemo(() => {
     let rows = effectiveLeads;
     if (statusFilter !== 'all') rows = rows.filter((l) => l.status === statusFilter);
     if (ownerFilter !== '') rows = rows.filter((l) => l.assigned_to != null && String(l.assigned_to) === ownerFilter);
+    if (dateFrom) rows = rows.filter((l) => l.created_at.slice(0, 10) >= dateFrom);
+    if (dateTo) rows = rows.filter((l) => l.created_at.slice(0, 10) <= dateTo);
     return [...rows].sort((a, b) => {
       const av = a[sortKey] ?? '';
       const bv = b[sortKey] ?? '';
@@ -296,7 +319,7 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
       )}
 
       {/* Status tabs */}
-      <div className="flex items-center gap-1 mb-4 border-b border-brand-cream pb-3">
+      <div className="flex items-center gap-1 border-b border-brand-cream pb-3">
         {STATUS_TABS.map((s) => (
           <button
             key={s}
@@ -326,6 +349,12 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
             </select>
           )}
           <button
+            onClick={() => { setShowArchiveOld((v) => !v); }}
+            className="text-xs font-medium rounded px-3 py-1.5 border border-brand-cream text-brand-charcoal/60 hover:text-brand-charcoal hover:border-brand-charcoal/30 transition-colors"
+          >
+            Archive Old
+          </button>
+          <button
             onClick={() => setShowAdd(true)}
             className="bg-brand-brown text-white text-xs font-medium rounded px-3 py-1.5 hover:bg-brand-charcoal transition-colors"
           >
@@ -334,9 +363,65 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
         </div>
       </div>
 
+      {/* Date range filter + Archive Old panel */}
+      <div className="flex items-center gap-4 py-2.5 border-b border-brand-cream mb-4">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-medium text-brand-charcoal/50 uppercase tracking-wide">Received</span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="text-xs border border-brand-cream rounded px-2 py-1 text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
+          />
+          <span className="text-xs text-brand-charcoal/40">to</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="text-xs border border-brand-cream rounded px-2 py-1 text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
+          />
+          {(dateFrom || dateTo) && (
+            <button
+              onClick={() => { setDateFrom(''); setDateTo(''); }}
+              className="text-[10px] text-brand-copper hover:text-brand-brown transition-colors"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
+        {showArchiveOld && (
+          <div className="ml-auto flex items-center gap-3 pl-4 border-l border-brand-cream">
+            <span className="text-xs text-brand-charcoal/60">Archive received on or before</span>
+            <input
+              type="date"
+              value={archiveCutoff}
+              onChange={(e) => setArchiveCutoff(e.target.value)}
+              className="text-xs border border-brand-cream rounded px-2 py-1 text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
+            />
+            <span className="text-xs text-brand-charcoal/50">
+              {archiveOldCount} lead{archiveOldCount !== 1 ? 's' : ''} affected
+            </span>
+            <button
+              onClick={handleBulkArchive}
+              disabled={archiving || archiveOldCount === 0}
+              className="text-xs font-medium bg-brand-charcoal text-white rounded px-3 py-1 hover:bg-brand-brown transition-colors disabled:opacity-40"
+            >
+              {archiving ? 'Archiving…' : `Archive ${archiveOldCount}`}
+            </button>
+            <button
+              onClick={() => setShowArchiveOld(false)}
+              className="text-xs text-brand-charcoal/50 hover:text-brand-charcoal transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+
       {filtered.length === 0 ? (
         <div className="text-center py-16 text-brand-silver text-sm">
-          {statusFilter === 'all' && !ownerFilter
+          {statusFilter === 'all' && !ownerFilter && !dateFrom && !dateTo
             ? 'No leads yet. Add one manually or wait for the scanner.'
             : 'No leads match the current filters.'}
         </div>

@@ -82,6 +82,23 @@ export async function archiveLead(id: string): Promise<{ error: string | null }>
   return { error: null };
 }
 
+export async function bulkArchiveLeads(onOrBeforeDate: string): Promise<{ error: string | null; count: number }> {
+  const supabase = await createClient();
+  // Include the full cutoff day by using < day+1
+  const next = new Date(onOrBeforeDate);
+  next.setDate(next.getDate() + 1);
+  const upperBound = next.toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from('leads')
+    .update({ status: 'archived', archived_at: new Date().toISOString() })
+    .lt('created_at', upperBound)
+    .neq('status', 'archived')
+    .select('id');
+  if (error) return { error: error.message, count: 0 };
+  revalidatePath('/leads');
+  return { error: null, count: data.length };
+}
+
 export async function createProgramFromLead(leadId: string): Promise<{ error: string | null; programId: string | null }> {
   const supabase = await createClient();
 
