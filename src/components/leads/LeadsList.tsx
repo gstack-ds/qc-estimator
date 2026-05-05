@@ -23,9 +23,6 @@ function fmt(iso: string | null): string {
   return `${m}/${d}/${y}`;
 }
 
-function isToday(iso: string): boolean {
-  return iso.slice(0, 10) === new Date().toISOString().slice(0, 10);
-}
 
 type SortKey = 'client_name' | 'program_name' | 'region' | 'guest_count' | 'start_date' | 'assigned_to' | 'status' | 'created_at';
 
@@ -204,6 +201,70 @@ function AddLeadPanel({ teamMembers, onClose, onCreated }: {
   );
 }
 
+// ─── Lead Row ─────────────────────────────────────────────
+
+function LeadRow({ lead, teamMembers, cellSelectCls, onRowClick, onSave, onDelete }: {
+  lead: DbLead;
+  teamMembers: DbTeamMember[];
+  cellSelectCls: string;
+  onRowClick: () => void;
+  onSave: (id: string, field: 'status' | 'assigned_to' | 'start_date', value: string | number | null) => void;
+  onDelete: (e: React.MouseEvent, id: string) => void;
+}) {
+  return (
+    <tr onClick={onRowClick} className="cursor-pointer hover:bg-brand-offwhite transition-colors">
+      <td className="px-3 py-2.5 font-medium text-brand-charcoal">
+        {lead.client_name ?? <span className="text-brand-silver">—</span>}
+      </td>
+      <td className="px-3 py-2.5 text-brand-charcoal/80">
+        {lead.program_name ?? <span className="text-brand-silver">—</span>}
+      </td>
+      <td className="px-3 py-2.5 text-brand-charcoal/70">{lead.region ?? '—'}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-brand-charcoal/70">
+        {lead.guest_count ?? '—'}
+      </td>
+      <td className="px-3 py-2.5 text-brand-charcoal/70" onClick={(e) => e.stopPropagation()}>
+        <DateCell
+          leadId={lead.id}
+          value={lead.start_date}
+          onSave={(id, v) => onSave(id, 'start_date', v)}
+        />
+      </td>
+      <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+        <select
+          value={lead.assigned_to != null ? String(lead.assigned_to) : ''}
+          onChange={(e) => onSave(lead.id, 'assigned_to', e.target.value ? Number(e.target.value) : null)}
+          className={cellSelectCls}
+        >
+          <option value="">— Unassigned —</option>
+          {teamMembers.map((m) => <option key={m.id} value={String(m.id)}>{m.first_name} {m.last_name}</option>)}
+        </select>
+      </td>
+      <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+        <select
+          value={lead.status}
+          onChange={(e) => onSave(lead.id, 'status', e.target.value)}
+          className={cellSelectCls}
+        >
+          {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+        </select>
+      </td>
+      <td className="px-3 py-2.5 text-brand-silver whitespace-nowrap text-xs">{fmt(lead.created_at.slice(0, 10))}</td>
+      <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+        <button
+          onClick={(e) => onDelete(e, lead.id)}
+          className="text-brand-cream hover:text-red-500 transition-colors p-0.5"
+          title="Delete lead"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+          </svg>
+        </button>
+      </td>
+    </tr>
+  );
+}
+
 // ─── Leads List ────────────────────────────────────────────
 
 interface Props {
@@ -272,19 +333,31 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
     router.refresh();
   }
 
-  const filtered = useMemo(() => {
-    let rows = effectiveLeads;
-    if (statusFilter !== 'all') rows = rows.filter((l) => l.status === statusFilter);
-    if (ownerFilter !== '') rows = rows.filter((l) => l.assigned_to != null && String(l.assigned_to) === ownerFilter);
-    if (dateFrom) rows = rows.filter((l) => l.created_at.slice(0, 10) >= dateFrom);
-    if (dateTo) rows = rows.filter((l) => l.created_at.slice(0, 10) <= dateTo);
-    return [...rows].sort((a, b) => {
+  const { recent, earlier } = useMemo(() => {
+    const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    let base = effectiveLeads;
+    if (statusFilter !== 'all') base = base.filter((l) => l.status === statusFilter);
+    if (ownerFilter !== '') base = base.filter((l) => l.assigned_to != null && String(l.assigned_to) === ownerFilter);
+
+    const recentRows = base
+      .filter((l) => l.created_at >= cutoff24h)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+    const recentIds = new Set(recentRows.map((l) => l.id));
+
+    let earlierRows = base.filter((l) => !recentIds.has(l.id));
+    if (dateFrom) earlierRows = earlierRows.filter((l) => l.created_at.slice(0, 10) >= dateFrom);
+    if (dateTo) earlierRows = earlierRows.filter((l) => l.created_at.slice(0, 10) <= dateTo);
+    earlierRows = [...earlierRows].sort((a, b) => {
       const av = a[sortKey] ?? '';
       const bv = b[sortKey] ?? '';
       const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [effectiveLeads, statusFilter, ownerFilter, sortKey, sortDir]);
+
+    return { recent: recentRows, earlier: earlierRows };
+  }, [effectiveLeads, statusFilter, ownerFilter, dateFrom, dateTo, sortKey, sortDir]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) { setSortDir((d) => d === 'asc' ? 'desc' : 'asc'); }
@@ -295,12 +368,6 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
     if (sortKey !== key) return <span className="text-brand-cream ml-1">↕</span>;
     return <span className="text-brand-copper ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>;
   }
-
-  const memberName = (id: number | null) => {
-    if (!id) return null;
-    const m = teamMembers.find((t) => t.id === id);
-    return m ? `${m.first_name} ${m.last_name}` : null;
-  };
 
   const STATUS_TABS: (LeadStatus | 'all')[] = ['all', 'new_lead', 'proposal', 'under_contract', 'archived'];
   const TAB_LABELS: Record<LeadStatus | 'all', string> = { all: 'All', ...STATUS_LABELS };
@@ -419,7 +486,7 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
         )}
       </div>
 
-      {filtered.length === 0 ? (
+      {recent.length === 0 && earlier.length === 0 ? (
         <div className="text-center py-16 text-brand-silver text-sm">
           {statusFilter === 'all' && !ownerFilter && !dateFrom && !dateTo
             ? 'No leads yet. Add one manually or wait for the scanner.'
@@ -441,77 +508,50 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
                 <th className="px-2 py-2" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-brand-cream/60">
-              {filtered.map((lead) => {
-                const today = isToday(lead.created_at);
-                return (
-                  <tr
+
+            {recent.length > 0 && (
+              <tbody className="divide-y divide-brand-cream/60">
+                <tr className="bg-blue-50/60">
+                  <td colSpan={9} className="px-3 py-1.5 text-[10px] font-semibold text-blue-500 uppercase tracking-widest">
+                    Latest Scan
+                  </td>
+                </tr>
+                {recent.map((lead) => (
+                  <LeadRow
                     key={lead.id}
-                    onClick={() => router.push(`/leads/${lead.id}`)}
-                    className="cursor-pointer hover:bg-brand-offwhite transition-colors"
-                  >
-                    <td className="px-3 py-2.5 font-medium text-brand-charcoal">
-                      {lead.client_name ?? <span className="text-brand-silver">—</span>}
-                      {today && (
-                        <span className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-blue-500 align-middle" title="Received today" />
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5 text-brand-charcoal/80">
-                      {lead.program_name ?? <span className="text-brand-silver">—</span>}
-                    </td>
-                    <td className="px-3 py-2.5 text-brand-charcoal/70">{lead.region ?? '—'}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-brand-charcoal/70">
-                      {lead.guest_count ?? '—'}
-                    </td>
+                    lead={lead}
+                    teamMembers={teamMembers}
+                    cellSelectCls={cellSelectCls}
+                    onRowClick={() => router.push(`/leads/${lead.id}`)}
+                    onSave={saveCellChange}
+                    onDelete={handleDeleteLead}
+                  />
+                ))}
+              </tbody>
+            )}
 
-                    {/* Start date — click to edit */}
-                    <td className="px-3 py-2.5 text-brand-charcoal/70" onClick={(e) => e.stopPropagation()}>
-                      <DateCell
-                        leadId={lead.id}
-                        value={lead.start_date}
-                        onSave={(id, v) => saveCellChange(id, 'start_date', v)}
-                      />
-                    </td>
-
-                    {/* Owner — inline select */}
-                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                      <select
-                        value={lead.assigned_to != null ? String(lead.assigned_to) : ''}
-                        onChange={(e) => saveCellChange(lead.id, 'assigned_to', e.target.value ? Number(e.target.value) : null)}
-                        className={cellSelectCls}
-                      >
-                        <option value="">— Unassigned —</option>
-                        {teamMembers.map((m) => <option key={m.id} value={String(m.id)}>{m.first_name} {m.last_name}</option>)}
-                      </select>
-                    </td>
-
-                    {/* Status — inline select */}
-                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                      <select
-                        value={lead.status}
-                        onChange={(e) => saveCellChange(lead.id, 'status', e.target.value)}
-                        className={cellSelectCls}
-                      >
-                        {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-                      </select>
-                    </td>
-
-                    <td className="px-3 py-2.5 text-brand-silver whitespace-nowrap text-xs">{fmt(lead.created_at.slice(0, 10))}</td>
-                    <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={(e) => handleDeleteLead(e, lead.id)}
-                        className="text-brand-cream hover:text-red-500 transition-colors p-0.5"
-                        title="Delete lead"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                      </button>
+            {earlier.length > 0 && (
+              <tbody className="divide-y divide-brand-cream/60">
+                {recent.length > 0 && (
+                  <tr className="bg-brand-offwhite border-t border-brand-cream">
+                    <td colSpan={9} className="px-3 py-1.5 text-[10px] font-semibold text-brand-charcoal/40 uppercase tracking-widest">
+                      Earlier
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
+                )}
+                {earlier.map((lead) => (
+                  <LeadRow
+                    key={lead.id}
+                    lead={lead}
+                    teamMembers={teamMembers}
+                    cellSelectCls={cellSelectCls}
+                    onRowClick={() => router.push(`/leads/${lead.id}`)}
+                    onSave={saveCellChange}
+                    onDelete={handleDeleteLead}
+                  />
+                ))}
+              </tbody>
+            )}
           </table>
         </div>
       )}
