@@ -47,6 +47,14 @@ const LEAD_SOURCE_OPTIONS = ['', 'GDP', 'Direct', 'Rubra', 'Conference', 'Sales 
 
 type SortKey = 'client_name' | 'program_name' | 'city' | 'guest_count' | 'start_date' | 'end_date' | 'status' | 'created_at';
 
+interface LeadGroup {
+  key: string;
+  label: string;
+  isManual: boolean;
+  leads: DbLead[];
+  representativeAt: string;
+}
+
 const cellSelectCls = 'text-xs border border-brand-cream rounded px-1.5 py-1 bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper';
 
 // ─── Helpers ───────────────────────────────────────────────
@@ -249,9 +257,9 @@ function LeadRow({ lead, teamMembers, onRowClick, onSave, onDelete }: {
   const stopProp = (e: React.MouseEvent) => e.stopPropagation();
 
   return (
-    <tr onClick={onRowClick} className="cursor-pointer hover:bg-brand-offwhite transition-colors">
+    <tr onClick={onRowClick} className="group cursor-pointer hover:bg-brand-offwhite transition-colors">
       {/* Client */}
-      <td className="px-3 py-2.5 font-medium text-brand-charcoal whitespace-nowrap">
+      <td className="px-3 py-2.5 font-medium text-brand-charcoal whitespace-nowrap sticky left-0 z-10 bg-white group-hover:bg-brand-offwhite transition-colors">
         {lead.client_name ?? <span className="text-brand-silver">—</span>}
       </td>
 
@@ -450,33 +458,55 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
     router.refresh();
   }
 
-  const { recent, earlier } = useMemo(() => {
-    const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
+  const groups = useMemo((): LeadGroup[] => {
     let base = effectiveLeads;
-    if (groupFilter === 'open')   base = base.filter((l) => OPEN_SET.has(l.status));
+    if (groupFilter === 'open')        base = base.filter((l) => OPEN_SET.has(l.status));
     else if (groupFilter === 'paused') base = base.filter((l) => PAUSED_SET.has(l.status));
     else if (groupFilter === 'closed') base = base.filter((l) => CLOSED_SET.has(l.status));
     if (ownerFilter !== '') base = base.filter((l) => l.assigned_to != null && String(l.assigned_to) === ownerFilter);
+    if (dateFrom) base = base.filter((l) => l.created_at.slice(0, 10) >= dateFrom);
+    if (dateTo)   base = base.filter((l) => l.created_at.slice(0, 10) <= dateTo);
 
-    const recentRows = base
-      .filter((l) => l.created_at >= cutoff24h)
-      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    const groupMap = new Map<string, DbLead[]>();
+    for (const lead of base) {
+      const key = lead.scan_batch_id ?? 'manual';
+      const arr = groupMap.get(key) ?? [];
+      arr.push(lead);
+      groupMap.set(key, arr);
+    }
 
-    const recentIds = new Set(recentRows.map((l) => l.id));
+    const today = new Date().toDateString();
 
-    let earlierRows = base.filter((l) => !recentIds.has(l.id));
-    if (dateFrom) earlierRows = earlierRows.filter((l) => l.created_at.slice(0, 10) >= dateFrom);
-    if (dateTo)   earlierRows = earlierRows.filter((l) => l.created_at.slice(0, 10) <= dateTo);
-    earlierRows = [...earlierRows].sort((a, b) => {
-      const av = a[sortKey as keyof DbLead] ?? '';
-      const bv = b[sortKey as keyof DbLead] ?? '';
-      const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
-      return sortDir === 'asc' ? cmp : -cmp;
+    return Array.from(groupMap.entries()).map(([key, rows]) => {
+      const isManual = key === 'manual';
+      const sorted = [...rows].sort((a, b) => {
+        if (!isManual) return b.created_at.localeCompare(a.created_at);
+        const av = a[sortKey as keyof DbLead] ?? '';
+        const bv = b[sortKey as keyof DbLead] ?? '';
+        const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
+        return sortDir === 'asc' ? cmp : -cmp;
+      });
+      const representativeAt = rows.reduce((max, l) => l.created_at > max ? l.created_at : max, rows[0].created_at);
+      const dt = new Date(representativeAt);
+      const timeStr = dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      let label: string;
+      if (isManual) {
+        label = `Manual Entry (${rows.length} lead${rows.length !== 1 ? 's' : ''})`;
+      } else if (dt.toDateString() === today) {
+        label = `Today ${timeStr} (${rows.length} lead${rows.length !== 1 ? 's' : ''})`;
+      } else {
+        const dateStr = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        label = `${dateStr} ${timeStr} (${rows.length} lead${rows.length !== 1 ? 's' : ''})`;
+      }
+      return { key, label, isManual, leads: sorted, representativeAt };
+    }).sort((a, b) => {
+      if (a.isManual && !b.isManual) return 1;
+      if (!a.isManual && b.isManual) return -1;
+      return b.representativeAt.localeCompare(a.representativeAt);
     });
-
-    return { recent: recentRows, earlier: earlierRows };
   }, [effectiveLeads, groupFilter, ownerFilter, dateFrom, dateTo, sortKey, sortDir]);
+
+  const totalLeads = groups.reduce((s, g) => s + g.leads.length, 0);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) { setSortDir((d) => d === 'asc' ? 'desc' : 'asc'); }
@@ -625,20 +655,24 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
         )}
       </div>
 
-      {recent.length === 0 && earlier.length === 0 ? (
+      {groups.length === 0 ? (
         <div className="text-center py-16 text-brand-silver text-sm">
           {groupFilter === 'all' && !ownerFilter && !dateFrom && !dateTo
             ? 'No leads yet. Add one manually or wait for the scanner.'
             : 'No leads match the current filters.'}
         </div>
       ) : (
-        <div className="rounded-lg border border-brand-cream overflow-x-auto">
+        <div className="rounded-lg border border-brand-cream overflow-auto max-h-[calc(100vh-300px)]">
           <table className="text-sm">
-            <thead className="bg-brand-offwhite border-b border-brand-cream">
+            <thead className="bg-brand-offwhite border-b border-brand-cream sticky top-0 z-20">
               <tr>
                 {colHeaders.map(({ label, key }) =>
                   key ? (
-                    <th key={label} className={thSortCls} onClick={() => toggleSort(key)}>
+                    <th
+                      key={label}
+                      className={thSortCls + (label === 'Client' ? ' sticky left-0 z-30 bg-brand-offwhite' : '')}
+                      onClick={() => toggleSort(key)}
+                    >
                       {label}{sortIcon(key)}
                     </th>
                   ) : (
@@ -648,14 +682,19 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
               </tr>
             </thead>
 
-            {recent.length > 0 && (
-              <tbody className="divide-y divide-brand-cream/60">
-                <tr className="bg-blue-50/60">
-                  <td colSpan={17} className="px-3 py-1.5 text-[10px] font-semibold text-blue-500 uppercase tracking-widest">
-                    Latest Scan
+            {groups.map((group) => (
+              <tbody key={group.key} className="divide-y divide-brand-cream/60">
+                <tr className={group.isManual ? 'bg-brand-offwhite border-t border-brand-cream' : 'bg-blue-50/60'}>
+                  <td
+                    colSpan={17}
+                    className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest sticky top-8 z-10 ${
+                      group.isManual ? 'text-brand-charcoal/40 bg-brand-offwhite' : 'text-blue-500 bg-blue-50'
+                    }`}
+                  >
+                    {group.label}
                   </td>
                 </tr>
-                {recent.map((lead) => (
+                {group.leads.map((lead) => (
                   <LeadRow
                     key={lead.id}
                     lead={lead}
@@ -666,36 +705,14 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
                   />
                 ))}
               </tbody>
-            )}
-
-            {earlier.length > 0 && (
-              <tbody className="divide-y divide-brand-cream/60">
-                {recent.length > 0 && (
-                  <tr className="bg-brand-offwhite border-t border-brand-cream">
-                    <td colSpan={17} className="px-3 py-1.5 text-[10px] font-semibold text-brand-charcoal/40 uppercase tracking-widest">
-                      Earlier
-                    </td>
-                  </tr>
-                )}
-                {earlier.map((lead) => (
-                  <LeadRow
-                    key={lead.id}
-                    lead={lead}
-                    teamMembers={teamMembers}
-                    onRowClick={() => router.push(`/leads/${lead.id}`)}
-                    onSave={saveCellChange}
-                    onDelete={handleDeleteLead}
-                  />
-                ))}
-              </tbody>
-            )}
+            ))}
           </table>
         </div>
       )}
 
-      {(recent.length > 0 || earlier.length > 0) && (
+      {totalLeads > 0 && (
         <p className="text-[10px] text-brand-silver mt-2 text-right">
-          {recent.length + earlier.length} lead{recent.length + earlier.length !== 1 ? 's' : ''}
+          {totalLeads} lead{totalLeads !== 1 ? 's' : ''}
         </p>
       )}
     </>

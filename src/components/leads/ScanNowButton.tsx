@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 
 interface Toast {
   message: string;
@@ -8,19 +9,33 @@ interface Toast {
 }
 
 export default function ScanNowButton() {
+  const router = useRouter();
   const [scanning, setScanning] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [autoRefreshLabel, setAutoRefreshLabel] = useState('');
 
   function showToast(message: string, isError: boolean) {
     setToast({ message, isError });
     setTimeout(() => setToast(null), 4000);
   }
 
+  const autoRefresh = useCallback(() => {
+    router.refresh();
+    setAutoRefreshLabel('Updated just now');
+    setTimeout(() => setAutoRefreshLabel(''), 8000);
+  }, [router]);
+
+  useEffect(() => {
+    const interval = setInterval(autoRefresh, 60_000);
+    return () => clearInterval(interval);
+  }, [autoRefresh]);
+
   async function handleScan() {
     setScanning(true);
     try {
       const res = await fetch('/api/scanner/run', { method: 'POST' });
       const data: { leadsCreated?: number; emailsFound?: number; errors?: string[]; error?: string } = await res.json();
+      router.refresh();
       if (!res.ok) {
         showToast(data.error ?? 'Scan failed', true);
         return;
@@ -58,7 +73,12 @@ export default function ScanNowButton() {
             </>
           ) : 'Scan Now'}
         </button>
-        <span className="text-[10px] text-brand-silver">Auto-scans daily at 7am, 11am, 2pm, 4pm ET</span>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[10px] text-brand-silver">Auto-scans daily at 7am, 11am, 2pm, 4pm ET</span>
+          {autoRefreshLabel && (
+            <span className="text-[10px] text-brand-copper">{autoRefreshLabel}</span>
+          )}
+        </div>
       </div>
 
       {toast && (
