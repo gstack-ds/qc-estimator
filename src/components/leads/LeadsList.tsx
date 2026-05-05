@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import type { DbLead, DbTeamMember, LeadStatus, LeadStatusGroup } from '@/lib/supabase/queries';
-import { OPEN_STATUSES, PAUSED_STATUSES, CLOSED_STATUSES } from '@/lib/supabase/queries';
+import { OPEN_STATUSES, PAUSED_STATUSES, CLOSED_STATUSES } from '@/lib/leads/constants';
 import LeadStatusBadge from './LeadStatusBadge';
 import { createLead, updateLead, bulkArchiveLeads, deleteLead, type LeadInput } from '@/app/(programs)/leads/actions';
 
