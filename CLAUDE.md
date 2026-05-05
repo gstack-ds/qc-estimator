@@ -216,6 +216,7 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 ### Remaining
 - [x] Run migration 018 in production Supabase (label column on estimate_line_items)
 - [x] Run migration 019 in production Supabase (team_members table + leads.assigned_to integer FK)
+- [x] Run migration 020 in production Supabase (leads overhaul — 12-value status enum + 13 new columns)
 - [ ] **Run `npm run dedup`** to clean up any duplicate leads created before the dedup logic was in place
 - [ ] Set up Gmail OAuth credentials + run `npm run auth` to get refresh token for scanner
 - [ ] Deploy scanner daemon to Mac with PM2 (all code is on main; env vars needed: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, NOTIFY_EMAIL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY)
@@ -225,7 +226,6 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- Run migrations 018 and 019 in production Supabase (SQL editor), then run `npm run dedup` to clean up any duplicate leads.
-- Deploy scanner daemon to Mac with PM2 — all code is on main. Run `npm run auth` once first to generate the refresh token.
+- Deploy scanner daemon to Mac with PM2 — all code is on main. Run `npm run auth` once first to generate the refresh token, then `npm run build:scanner` before `pm2 start`.
 - After scanner is live: run `npm run backfill` once to import the last 12 months of INITIAL LEAD emails.
 - Real-proposal validation is the best next feature step.
