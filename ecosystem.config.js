@@ -2,8 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'qc-lead-scanner',
-      interpreter: './node_modules/.bin/tsx',
-      script: 'scripts/run-scanner.ts',
+      script: 'scripts/run-scanner.js',
       cwd: __dirname,
       env: {
         NODE_ENV: 'production',

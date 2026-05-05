@@ -36,3 +36,4 @@ next-env.d.ts
 # Scanner
 data/processed-ids.json
 logs/
+scripts/run-scanner.js
