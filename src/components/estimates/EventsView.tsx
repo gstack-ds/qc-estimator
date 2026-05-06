@@ -100,13 +100,18 @@ function EstimateCardItem({
   isLowest,
   isBestMargin,
   onToggle,
+  eventGuestCount,
 }: {
   card: EstimateCard;
   programId: string;
   isLowest: boolean;
   isBestMargin: boolean;
   onToggle: (id: string, next: boolean) => void;
+  eventGuestCount?: number;
 }) {
+  const displayedPricePerPerson = eventGuestCount && eventGuestCount > 0
+    ? Math.ceil(card.total / eventGuestCount)
+    : card.pricePerPerson;
   return (
     <Link
       href={`/programs/${programId}/estimates/${card.id}`}
@@ -139,10 +144,10 @@ function EstimateCardItem({
           <p className="font-serif text-lg font-medium text-brand-charcoal">{fmt(card.total)}</p>
           <p className="text-xs text-brand-silver mt-0.5">total estimate</p>
         </div>
-        {card.pricePerPerson > 0 && (
+        {displayedPricePerPerson > 0 && (
           <div>
             <p className="text-sm font-medium text-brand-brown">
-              ${card.pricePerPerson.toLocaleString('en-US')}
+              ${displayedPricePerPerson.toLocaleString('en-US')}
               <span className="text-xs font-normal text-brand-silver">/pp</span>
             </p>
           </div>
@@ -415,6 +420,7 @@ function EventCard({
                     isLowest={isLowest}
                     isBestMargin={isBestMargin}
                     onToggle={onToggle}
+                    eventGuestCount={event.guest_count > 0 ? event.guest_count : undefined}
                   />
                 );
               })}
