@@ -69,13 +69,14 @@ function buildLineItems(items: DbLineItem[], markups: DbMarkup[]): LineItem[] {
   return items.map((item) => {
     const markup = markups.find((m) => m.id === item.category_id);
     const isCustom = item.custom_client_unit_price !== null;
+    const defaultMarkupPct = isCustom ? 0 : (markup?.markup_pct ?? 0.5);
     return {
       id: item.id,
       section: item.section,
       name: item.name,
       qty: item.qty,
       unitPrice: item.unit_price,
-      categoryMarkupPct: isCustom ? 0 : (markup?.markup_pct ?? 0.5),
+      categoryMarkupPct: isCustom ? 0 : (item.markup_override ?? defaultMarkupPct),
       taxType: item.tax_type as TaxType,
       clientCostOverride: isCustom
         ? item.qty * item.custom_client_unit_price!
