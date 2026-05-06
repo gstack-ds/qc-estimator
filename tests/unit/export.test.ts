@@ -120,21 +120,54 @@ describe('buildSummaryRows (venue)', () => {
     expect(labels).toContain('Menu');
   });
 
-  it('shows rows in spec order: Menu, Bar Package, Staffing, Equipment, Venue Rental, Production Fee, Tax', () => {
+  it('shows rows in spec order: Menu, Bar Package, Staffing, Equipment, Venue Rental, Service Charge, Gratuity, Admin Fee, Production Fee, Tax', () => {
     const summary = makeSummary({
       fbFoodSubtotalClient: 5000,
       fbAlcoholSubtotalClient: 2000,
       qcStaffingSubtotalClient: 800,
       equipmentSubtotalClient: 1200,
       venueSubtotalClient: 3000,
+      serviceChargeClient: 600,
+      gratuityClient: 300,
+      adminFeeClient: 150,
       productionFee: 500,
       foodTax: 362,
       alcoholTax: 145,
-      totalClient: 13007,
+      totalClient: 14007,
     });
     const rows = buildSummaryRows(summary, 'venue', [], MARKUPS);
     const labels = rows.map((r) => r.label);
-    expect(labels).toEqual(['Menu', 'Bar Package', 'Staffing', 'Equipment', 'Venue Rental', 'Production Fee', 'Tax']);
+    expect(labels).toEqual(['Menu', 'Bar Package', 'Staffing', 'Equipment', 'Venue Rental', 'Service Charge', 'Gratuity', 'Admin Fee', 'Production Fee', 'Tax']);
+  });
+
+  it('includes Service Charge, Gratuity, Admin Fee rows when > 0', () => {
+    const summary = makeSummary({
+      fbFoodSubtotalClient: 5000,
+      venueSubtotalClient: 2000,
+      serviceChargeClient: 700,
+      gratuityClient: 350,
+      adminFeeClient: 175,
+      totalClient: 8225,
+    });
+    const rows = buildSummaryRows(summary, 'venue', [], MARKUPS);
+    expect(rows.find((r) => r.label === 'Service Charge')?.amount).toBe(700);
+    expect(rows.find((r) => r.label === 'Gratuity')?.amount).toBe(350);
+    expect(rows.find((r) => r.label === 'Admin Fee')?.amount).toBe(175);
+  });
+
+  it('omits Service Charge, Gratuity, Admin Fee rows when 0', () => {
+    const summary = makeSummary({
+      fbFoodSubtotalClient: 5000,
+      serviceChargeClient: 0,
+      gratuityClient: 0,
+      adminFeeClient: 0,
+      totalClient: 5000,
+    });
+    const rows = buildSummaryRows(summary, 'venue', [], MARKUPS);
+    const labels = rows.map((r) => r.label);
+    expect(labels).not.toContain('Service Charge');
+    expect(labels).not.toContain('Gratuity');
+    expect(labels).not.toContain('Admin Fee');
   });
 
   it('moves Staffing & Labor items out of Equipment bucket', () => {
@@ -240,11 +273,14 @@ describe('buildCopyText', () => {
       qcStaffingSubtotalClient: 475,
       equipmentSubtotalClient: 620,
       venueSubtotalClient: 1500,
+      serviceChargeClient: 1736,
+      gratuityClient: 868,
+      adminFeeClient: 434,
       productionFee: 872,
       foodTax: 629,
       alcoholTax: 236,
       equipmentTax: 45,
-      totalClient: 16307,
+      totalClient: 19345,
     });
     const text = buildCopyText(summary, 75, 'venue', 'Spring Gala — The Belmond', [], MARKUPS);
     const lines = text.split('\n');
@@ -256,9 +292,12 @@ describe('buildCopyText', () => {
     expect(text).toContain('Staffing\t$475.00');
     expect(text).toContain('Equipment\t$620.00');
     expect(text).toContain('Venue Rental\t$1,500.00');
+    expect(text).toContain('Service Charge\t$1,736.00');
+    expect(text).toContain('Gratuity\t$868.00');
+    expect(text).toContain('Admin Fee\t$434.00');
     expect(text).toContain('Production Fee\t$872.00');
     expect(text).toContain('Tax\t$910.00'); // 629+236+45
-    expect(text).toContain('TOTAL ESTIMATE\t$16,307.00');
-    expect(text).toContain('Price PP\t$218.00'); // ceil(16307/75)
+    expect(text).toContain('TOTAL ESTIMATE\t$19,345.00');
+    expect(text).toContain('Price PP\t$258.00'); // ceil(19345/75)
   });
 });

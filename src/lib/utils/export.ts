@@ -66,13 +66,16 @@ export function buildSummaryRows(
     if (tax > 0) rows.push({ label: 'Tax', amount: tax });
     if (summary.productionFee > 0) rows.push({ label: 'Production Fee', amount: summary.productionFee });
   } else {
-    // Venue: Menu / Bar Package / Staffing / Equipment / Venue Rental / Production Fee / Tax
+    // Venue: Menu / Bar Package / Staffing / Equipment / Venue Rental / Service Charge / Gratuity / Admin Fee / Production Fee / Tax
     const { staffing, equipment } = splitStaffingEquipment(lineItems, markups, summary);
     if (summary.fbFoodSubtotalClient > 0)    rows.push({ label: 'Menu', amount: summary.fbFoodSubtotalClient });
     if (summary.fbAlcoholSubtotalClient > 0) rows.push({ label: 'Bar Package', amount: summary.fbAlcoholSubtotalClient });
     if (staffing > 0)                        rows.push({ label: 'Staffing', amount: staffing });
     if (equipment > 0)                       rows.push({ label: 'Equipment', amount: equipment });
     if (summary.venueSubtotalClient > 0)     rows.push({ label: 'Venue Rental', amount: summary.venueSubtotalClient });
+    if (summary.serviceChargeClient > 0)     rows.push({ label: 'Service Charge', amount: summary.serviceChargeClient });
+    if (summary.gratuityClient > 0)          rows.push({ label: 'Gratuity', amount: summary.gratuityClient });
+    if (summary.adminFeeClient > 0)          rows.push({ label: 'Admin Fee', amount: summary.adminFeeClient });
     if (summary.productionFee > 0)           rows.push({ label: 'Production Fee', amount: summary.productionFee });
     if (tax > 0)                             rows.push({ label: 'Tax', amount: tax });
   }
