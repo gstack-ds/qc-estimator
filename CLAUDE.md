@@ -185,6 +185,9 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-05-05 | Scan timestamp groups replace "Latest Scan" / "Earlier" labels | Groups by scan_batch_id; null → "Manual Entry". Labels: "Today H:MM AM/PM (N leads)", "May 1, 2026 H:MM AM/PM (N leads)". Sorted most-recent-first, manual last. | Time-based 24h cutoff (rejected — backfilled leads all share one created_at) |
 | 2026-05-05 | ScanNowButton: router.refresh() after scan + 60s auto-poll | router.refresh() fires immediately after POST /api/scanner/run returns. setInterval(60s) calls router.refresh() in background; shows "Updated just now" for 8s. | Manual page refresh (poor UX), WebSocket (overkill for polling) |
 | 2026-05-05 | Scanner writer maps to migration 020 column names with dropdown normalization | ParsedLead has source_advisor/source_coordinator/third_party_company/lead_source (old cols from migration 017). Migration 020 added gdp_advisor/gdp_coordinator/third_party/lead_source_type. writer.ts explicitly sets all 4 new cols via matchOption()/normalizeLeadSource() after spread. | Rename ParsedLead fields (breaks regex parser field labels), add DB migration to rename columns (destructive) |
+| 2026-05-06 | EventsView per-person price recomputed from event guest_count, not pre-stored card value | card.pricePerPerson is computed in page.tsx using program guest count. Events have their own guest_count. EstimateCardItem now receives eventGuestCount prop and recomputes: ceil(total / eventGuestCount) when available, falls back to card.pricePerPerson. | Pass event count to page.tsx computation (requires more plumbing), store separate pp field (denormalized) |
+| 2026-05-06 | buildLineItems in page.tsx now applies markup_override per item | Original code always used category default markup_pct. All three builders correctly apply item.markup_override ?? defaultMarkupPct; page.tsx was the outlier causing card totals to diverge from live summary. | Separate query for estimate cards (extra round trip) |
+| 2026-05-06 | Copy Numbers venue export includes Service Charge, Gratuity, Admin Fee as separate rows | These fees are material line items clients need to see broken out. Values come from EstimateSummary fields already calculated by the pricing engine. Rows are omitted when 0. Order: ...Venue Rental, Service Charge, Gratuity, Admin Fee, Production Fee, Tax. | Lump into a single "Fees" row (loses transparency) |
 
 ## Gotchas Log
 
@@ -225,6 +228,9 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] ScanNowButton: router.refresh() after scan completes + 60s auto-poll with "Updated just now" indicator
 - [x] Scanner writer: map source_advisor/source_coordinator/third_party_company/lead_source → gdp_advisor/gdp_coordinator/third_party/lead_source_type with dropdown normalization (matchOption, normalizeLeadSource)
 - [x] Parser: updated Claude prompt to enumerate exact lead_source values and guide advisor/coordinator to first-name-only output
+- [x] EventsView per-person price: uses event guest_count when set, falls back to program guest_count
+- [x] buildLineItems in page.tsx: now applies markup_override per item (fixes card total mismatch vs live summary)
+- [x] Copy Numbers venue export: Service Charge, Gratuity, Admin Fee now appear as separate rows (124 tests passing)
 
 ### Remaining
 - [ ] **Run `npm run dedup`** to clean up any duplicate leads created before the dedup logic was in place
@@ -242,3 +248,4 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - Scanner deployment is the top priority — see Remaining above for exact steps.
 - Consider running the optional DB backfill to populate gdp_advisor/gdp_coordinator/third_party/lead_source_type for existing rows.
 - After scanner is live and backfill is run, real-proposal validation is the best next feature step.
+- All estimate card UX fixes (pp price, total accuracy, export rows) are done and tested.
