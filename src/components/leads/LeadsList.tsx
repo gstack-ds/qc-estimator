@@ -47,13 +47,7 @@ const LEAD_SOURCE_OPTIONS = ['', 'GDP', 'Direct', 'Rubra', 'Conference', 'Sales 
 
 type SortKey = 'client_name' | 'program_name' | 'city' | 'guest_count' | 'start_date' | 'end_date' | 'status' | 'created_at';
 
-interface LeadGroup {
-  key: string;
-  label: string;
-  isManual: boolean;
-  leads: DbLead[];
-  representativeAt: string;
-}
+const NEW_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
 const cellSelectCls = 'text-xs border border-brand-cream rounded px-1.5 py-1 bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper';
 
@@ -247,9 +241,10 @@ function AddLeadPanel({ teamMembers, onClose, onCreated }: {
 
 // ─── Lead Row ─────────────────────────────────────────────
 
-function LeadRow({ lead, teamMembers, onRowClick, onSave, onDelete }: {
+function LeadRow({ lead, teamMembers, isNew, onRowClick, onSave, onDelete }: {
   lead: DbLead;
   teamMembers: DbTeamMember[];
+  isNew: boolean;
   onRowClick: () => void;
   onSave: (id: string, field: keyof LeadInput, value: string | number | null) => void;
   onDelete: (e: React.MouseEvent, id: string) => void;
@@ -260,7 +255,14 @@ function LeadRow({ lead, teamMembers, onRowClick, onSave, onDelete }: {
     <tr onClick={onRowClick} className="group cursor-pointer hover:bg-brand-offwhite transition-colors">
       {/* Client */}
       <td className="px-3 py-2.5 font-medium text-brand-charcoal whitespace-nowrap sticky left-0 z-10 bg-white group-hover:bg-brand-offwhite transition-colors">
-        {lead.client_name ?? <span className="text-brand-silver">—</span>}
+        <span className="flex items-center gap-1.5">
+          {lead.client_name ?? <span className="text-brand-silver">—</span>}
+          {isNew && (
+            <span className="text-[9px] font-semibold bg-brand-copper text-white px-1.5 py-0.5 rounded-full leading-none">
+              NEW
+            </span>
+          )}
+        </span>
       </td>
 
       {/* Program */}
@@ -410,6 +412,7 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
   const [dateTo, setDateTo] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('start_date');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [showNewOnly, setShowNewOnly] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [showArchiveOld, setShowArchiveOld] = useState(false);
   const [archiveCutoff, setArchiveCutoff] = useState('2025-12-31');
@@ -458,7 +461,14 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
     router.refresh();
   }
 
-  const groups = useMemo((): LeadGroup[] => {
+  const nowMs = Date.now();
+
+  const newTodayCount = useMemo(
+    () => effectiveLeads.filter((l) => nowMs - new Date(l.created_at).getTime() < NEW_THRESHOLD_MS).length,
+    [effectiveLeads, nowMs],
+  );
+
+  const displayLeads = useMemo(() => {
     let base = effectiveLeads;
     if (groupFilter === 'open')        base = base.filter((l) => OPEN_SET.has(l.status));
     else if (groupFilter === 'paused') base = base.filter((l) => PAUSED_SET.has(l.status));
@@ -466,47 +476,17 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
     if (ownerFilter !== '') base = base.filter((l) => l.assigned_to != null && String(l.assigned_to) === ownerFilter);
     if (dateFrom) base = base.filter((l) => l.created_at.slice(0, 10) >= dateFrom);
     if (dateTo)   base = base.filter((l) => l.created_at.slice(0, 10) <= dateTo);
+    if (showNewOnly) base = base.filter((l) => nowMs - new Date(l.created_at).getTime() < NEW_THRESHOLD_MS);
 
-    const groupMap = new Map<string, DbLead[]>();
-    for (const lead of base) {
-      const key = lead.scan_batch_id ?? 'manual';
-      const arr = groupMap.get(key) ?? [];
-      arr.push(lead);
-      groupMap.set(key, arr);
-    }
-
-    const today = new Date().toDateString();
-
-    return Array.from(groupMap.entries()).map(([key, rows]) => {
-      const isManual = key === 'manual';
-      const sorted = [...rows].sort((a, b) => {
-        if (!isManual) return b.created_at.localeCompare(a.created_at);
-        const av = a[sortKey as keyof DbLead] ?? '';
-        const bv = b[sortKey as keyof DbLead] ?? '';
-        const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
-        return sortDir === 'asc' ? cmp : -cmp;
-      });
-      const representativeAt = rows.reduce((max, l) => l.created_at > max ? l.created_at : max, rows[0].created_at);
-      const dt = new Date(representativeAt);
-      const timeStr = dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-      let label: string;
-      if (isManual) {
-        label = `Manual Entry (${rows.length} lead${rows.length !== 1 ? 's' : ''})`;
-      } else if (dt.toDateString() === today) {
-        label = `Today ${timeStr} (${rows.length} lead${rows.length !== 1 ? 's' : ''})`;
-      } else {
-        const dateStr = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        label = `${dateStr} ${timeStr} (${rows.length} lead${rows.length !== 1 ? 's' : ''})`;
-      }
-      return { key, label, isManual, leads: sorted, representativeAt };
-    }).sort((a, b) => {
-      if (a.isManual && !b.isManual) return 1;
-      if (!a.isManual && b.isManual) return -1;
-      return b.representativeAt.localeCompare(a.representativeAt);
+    return [...base].sort((a, b) => {
+      const av = a[sortKey as keyof DbLead] ?? '';
+      const bv = b[sortKey as keyof DbLead] ?? '';
+      const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
+      return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [effectiveLeads, groupFilter, ownerFilter, dateFrom, dateTo, sortKey, sortDir]);
+  }, [effectiveLeads, groupFilter, ownerFilter, dateFrom, dateTo, showNewOnly, sortKey, sortDir, nowMs]);
 
-  const totalLeads = groups.reduce((s, g) => s + g.leads.length, 0);
+  const totalLeads = displayLeads.length;
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) { setSortDir((d) => d === 'asc' ? 'desc' : 'asc'); }
@@ -572,6 +552,19 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
             </span>
           </button>
         ))}
+
+        {newTodayCount > 0 && (
+          <button
+            onClick={() => setShowNewOnly((v) => !v)}
+            className={`ml-3 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
+              showNewOnly
+                ? 'bg-brand-copper text-white'
+                : 'bg-brand-copper/10 text-brand-copper hover:bg-brand-copper/20'
+            }`}
+          >
+            {newTodayCount} new today
+          </button>
+        )}
 
         <div className="ml-auto flex items-center gap-3">
           {teamMembers.length > 0 && (
@@ -655,9 +648,9 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
         )}
       </div>
 
-      {groups.length === 0 ? (
+      {displayLeads.length === 0 ? (
         <div className="text-center py-16 text-brand-silver text-sm">
-          {groupFilter === 'all' && !ownerFilter && !dateFrom && !dateTo
+          {groupFilter === 'all' && !ownerFilter && !dateFrom && !dateTo && !showNewOnly
             ? 'No leads yet. Add one manually or wait for the scanner.'
             : 'No leads match the current filters.'}
         </div>
@@ -682,30 +675,19 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
               </tr>
             </thead>
 
-            {groups.map((group) => (
-              <tbody key={group.key} className="divide-y divide-brand-cream/60">
-                <tr className={group.isManual ? 'bg-brand-offwhite border-t border-brand-cream' : 'bg-blue-50/60'}>
-                  <td
-                    colSpan={17}
-                    className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest sticky top-8 z-10 ${
-                      group.isManual ? 'text-brand-charcoal/40 bg-brand-offwhite' : 'text-blue-500 bg-blue-50'
-                    }`}
-                  >
-                    {group.label}
-                  </td>
-                </tr>
-                {group.leads.map((lead) => (
-                  <LeadRow
-                    key={lead.id}
-                    lead={lead}
-                    teamMembers={teamMembers}
-                    onRowClick={() => router.push(`/leads/${lead.id}`)}
-                    onSave={saveCellChange}
-                    onDelete={handleDeleteLead}
-                  />
-                ))}
-              </tbody>
-            ))}
+            <tbody className="divide-y divide-brand-cream/60">
+              {displayLeads.map((lead) => (
+                <LeadRow
+                  key={lead.id}
+                  lead={lead}
+                  teamMembers={teamMembers}
+                  isNew={nowMs - new Date(lead.created_at).getTime() < NEW_THRESHOLD_MS}
+                  onRowClick={() => router.push(`/leads/${lead.id}`)}
+                  onSave={saveCellChange}
+                  onDelete={handleDeleteLead}
+                />
+              ))}
+            </tbody>
           </table>
         </div>
       )}
