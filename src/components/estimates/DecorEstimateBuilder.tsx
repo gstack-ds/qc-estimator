@@ -581,7 +581,7 @@ export default function DecorEstimateBuilder({
             showMath={showMath}
             mathRates={mathRates}
           />
-          <MarginPanel margin={marginAnalysis} showMath={showMath} />
+          <MarginPanel margin={marginAnalysis} summary={summary} showMath={showMath} />
         </div>
       </div>
     </div>

@@ -50,6 +50,8 @@ function makeSummary(overrides: Partial<EstimateSummary> = {}): EstimateSummary 
     pricePerPerson: 0,
     fbMinimumMet: true,
     fbShortfall: 0,
+    vendorTaxesTotal: 0,
+    revenueItemsClientTotal: 0,
     ...overrides,
   };
 }

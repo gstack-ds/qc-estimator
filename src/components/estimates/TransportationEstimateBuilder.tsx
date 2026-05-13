@@ -156,24 +156,26 @@ export default function TransportationEstimateBuilder({
     );
   }, [computedRows, generalTaxRate, programConfig.ccProcessingFee, commission]);
 
+  const fakeSummary = useMemo<EstimateSummary>(() => ({
+    fbSubtotalOur: 0, fbSubtotalClient: 0, fbFoodSubtotalClient: 0, fbAlcoholSubtotalClient: 0,
+    foodTax: 0, alcoholTax: 0,
+    equipmentSubtotalOur: summary.subtotalOur, equipmentSubtotalClient: summary.subtotalClient, equipmentTax: 0,
+    qcStaffingSubtotalOur: 0, qcStaffingSubtotalClient: 0,
+    venueSubtotalOur: 0, venueSubtotalClient: 0, venueTax: 0,
+    serviceChargeOur: 0, serviceChargeClient: 0,
+    gratuityOur: 0, gratuityClient: 0,
+    adminFeeOur: 0, adminFeeClient: 0,
+    subtotalOur: summary.subtotalOur, subtotalClient: summary.subtotalClient,
+    productionFee: summary.productionFee,
+    totalOur: summary.subtotalOur, totalClient: summary.totalClient,
+    pricePerPerson: 0, fbMinimumMet: true, fbShortfall: 0,
+    vendorTaxesTotal: 0, revenueItemsClientTotal: 0,
+  }), [summary]);
+
   const margin = useMemo<MarginAnalysis>(() => {
-    const fakeSummary: EstimateSummary = {
-      fbSubtotalOur: 0, fbSubtotalClient: 0, fbFoodSubtotalClient: 0, fbAlcoholSubtotalClient: 0,
-      foodTax: 0, alcoholTax: 0,
-      equipmentSubtotalOur: summary.subtotalOur, equipmentSubtotalClient: summary.subtotalClient, equipmentTax: 0,
-      qcStaffingSubtotalOur: 0, qcStaffingSubtotalClient: 0,
-      venueSubtotalOur: 0, venueSubtotalClient: 0, venueTax: 0,
-      serviceChargeOur: 0, serviceChargeClient: 0,
-      gratuityOur: 0, gratuityClient: 0,
-      adminFeeOur: 0, adminFeeClient: 0,
-      subtotalOur: summary.subtotalOur, subtotalClient: summary.subtotalClient,
-      productionFee: summary.productionFee,
-      totalOur: summary.subtotalOur, totalClient: summary.totalClient,
-      pricePerPerson: 0, fbMinimumMet: true, fbShortfall: 0,
-    };
     const transportConfig: ProgramConfig = { ...programConfig, clientCommission: commission, gdpCommissionEnabled: false, thirdPartyCommissions: [] };
     return calculateMarginAnalysis(fakeSummary, transportConfig, teamHoursTiers, travelTotal);
-  }, [summary, programConfig, commission, teamHoursTiers, travelTotal]);
+  }, [fakeSummary, programConfig, commission, teamHoursTiers, travelTotal]);
 
   // ─── Save helpers ────────────────────────────────────────
 
@@ -653,7 +655,7 @@ export default function TransportationEstimateBuilder({
             </div>
 
             {/* Margin */}
-            <MarginPanel margin={margin} />
+            <MarginPanel margin={margin} summary={fakeSummary} />
           </div>
         </div>
       </div>

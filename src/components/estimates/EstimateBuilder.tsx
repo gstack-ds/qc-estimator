@@ -809,7 +809,7 @@ export default function EstimateBuilder({
         {/* Right sidebar — summary + margin */}
         <div className="w-72 flex-shrink-0 border-l border-brand-cream bg-brand-offwhite overflow-y-auto p-4 space-y-4">
           <SummaryPanel summary={summary} guestCount={program.guest_count} fbMinimum={est.fbMinimum} showMath={showMath} mathRates={mathRates} />
-          <MarginPanel margin={marginAnalysis} showMath={showMath} />
+          <MarginPanel margin={marginAnalysis} summary={summary} showMath={showMath} />
         </div>
       </div>
     </div>

@@ -398,6 +398,103 @@ describe('calculateVenueEstimate — decor sections', () => {
   });
 });
 
+// ─── Margin Formula (new: CC pass-through, taxes pass-through, clientComm not deducted) ─────
+
+describe('calculateMarginAnalysis — new formula', () => {
+  // Farm Tables: 5 × $200 = ourCost $1000, markup 85% = clientCost $1850, general tax 7.25%
+  const simpleDecorInput: VenueEstimateInput = {
+    name: 'Simple Decor',
+    fbMinimum: 0,
+    isVenueTaxable: false,
+    serviceCharge: 0,
+    gratuity: 0,
+    adminFee: 0,
+    lineItems: [
+      { id: '1', section: 'Rentals - Tables', name: 'Farm Tables', qty: 5, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'general' },
+    ],
+  };
+  // Derived: equipmentTax=134.125, vendorTaxesTotal=72.5, subtotalClient=1984.125,
+  // productionFee(BASE)=161.94375, totalClient=2146.06875
+
+  it('vendorCostsBase equals sum of item ourCosts (vendor taxes excluded)', () => {
+    const summary = calculateVenueEstimate(simpleDecorInput, BASE_CONFIG);
+    const margin = calculateMarginAnalysis(summary, BASE_CONFIG, TEAM_HOURS_TIERS, 0);
+    expect(margin.vendorCostsBase).toBeCloseTo(1000);
+  });
+
+  it('totalTaxes equals client-side taxes', () => {
+    const summary = calculateVenueEstimate(simpleDecorInput, BASE_CONFIG);
+    const margin = calculateMarginAnalysis(summary, BASE_CONFIG, TEAM_HOURS_TIERS, 0);
+    // equipmentTax = 1850 × 0.0725 = 134.125
+    expect(margin.totalTaxes).toBeCloseTo(134.125);
+  });
+
+  it('ccProcessingAmount = subtotalClient × ccRate', () => {
+    const summary = calculateVenueEstimate(simpleDecorInput, BASE_CONFIG);
+    const margin = calculateMarginAnalysis(summary, BASE_CONFIG, TEAM_HOURS_TIERS, 0);
+    // subtotalClient = 1984.125, ccRate = 3.5%
+    expect(margin.ccProcessingAmount).toBeCloseTo(1984.125 * 0.035);
+  });
+
+  it('qcRevenue = totalClient − vendorCostsBase − totalTaxes − ccProcessing − gdpComm', () => {
+    const summary = calculateVenueEstimate(simpleDecorInput, BASE_CONFIG);
+    const margin = calculateMarginAnalysis(summary, BASE_CONFIG, TEAM_HOURS_TIERS, 0);
+    const expected = summary.totalClient
+      - margin.vendorCostsBase - margin.totalTaxes
+      - margin.ccProcessingAmount - margin.gdpCommissionAmount;
+    expect(margin.qcRevenue).toBeCloseTo(expected);
+    expect(margin.qcRevenue).toBeCloseTo(822.25);
+  });
+
+  it('client commission is NOT deducted — higher commission increases qcRevenue', () => {
+    const noGdpHigh: ProgramConfig = { ...BASE_CONFIG, gdpCommissionEnabled: false, clientCommission: 0.10 };
+    const noGdpZero: ProgramConfig = { ...BASE_CONFIG, gdpCommissionEnabled: false, clientCommission: 0 };
+
+    const marginHigh = calculateMarginAnalysis(
+      calculateVenueEstimate(simpleDecorInput, noGdpHigh), noGdpHigh, TEAM_HOURS_TIERS, 0,
+    );
+    const marginZero = calculateMarginAnalysis(
+      calculateVenueEstimate(simpleDecorInput, noGdpZero), noGdpZero, TEAM_HOURS_TIERS, 0,
+    );
+
+    expect(marginHigh.qcRevenue).toBeGreaterThan(marginZero.qcRevenue);
+    // difference = 1850 × 0.10 = 185 (client commission is pure QC earnings)
+    expect(marginHigh.qcRevenue - marginZero.qcRevenue).toBeCloseTo(1850 * 0.10);
+  });
+
+  it('taxes are a pure pass-through — qcRevenue identical at 0% and 10% tax rates', () => {
+    const zeroTaxConfig: ProgramConfig = {
+      ...BASE_CONFIG,
+      location: { id: 'z', name: 'No Tax', foodTaxRate: 0, alcoholTaxRate: 0, generalTaxRate: 0 },
+    };
+    const highTaxConfig: ProgramConfig = {
+      ...BASE_CONFIG,
+      location: { id: 'h', name: 'High Tax', foodTaxRate: 0.10, alcoholTaxRate: 0.10, generalTaxRate: 0.10 },
+    };
+
+    const marginZero = calculateMarginAnalysis(
+      calculateVenueEstimate(simpleDecorInput, zeroTaxConfig), zeroTaxConfig, TEAM_HOURS_TIERS, 0,
+    );
+    const marginHigh = calculateMarginAnalysis(
+      calculateVenueEstimate(simpleDecorInput, highTaxConfig), highTaxConfig, TEAM_HOURS_TIERS, 0,
+    );
+
+    expect(marginZero.qcRevenue).toBeCloseTo(marginHigh.qcRevenue);
+  });
+
+  it('totalVendorCosts field equals vendorCostsBase', () => {
+    const summary = calculateVenueEstimate(simpleDecorInput, BASE_CONFIG);
+    const margin = calculateMarginAnalysis(summary, BASE_CONFIG, TEAM_HOURS_TIERS, 0);
+    expect(margin.totalVendorCosts).toBeCloseTo(margin.vendorCostsBase);
+  });
+
+  it('EstimateSummary exposes vendorTaxesTotal = sum of vendor-side taxes', () => {
+    const summary = calculateVenueEstimate(simpleDecorInput, BASE_CONFIG);
+    // equipmentTaxOur = 1000 × 0.0725 = 72.5
+    expect(summary.vendorTaxesTotal).toBeCloseTo(72.5);
+  });
+});
+
 // ─── Team Hours Lookup ───────────────────────────────────
 
 describe('lookupTeamHours', () => {

@@ -109,6 +109,9 @@ export interface EstimateSummary {
   productionFee: number;
   totalOur: number;
   totalClient: number;
+  // Margin support fields
+  vendorTaxesTotal: number;       // foodTaxOur + alcoholTaxOur + equipmentTaxOur + venueTaxOur
+  revenueItemsClientTotal: number; // sum of clientCost for isRevenueItem items
   // Per person
   pricePerPerson: number;
   // F&B minimum
@@ -119,17 +122,21 @@ export interface EstimateSummary {
 // ─── Margin Analysis ─────────────────────────────────────
 
 export interface MarginAnalysis {
+  // Cost breakdown
+  vendorCostsBase: number;        // item ourCosts without taxes
+  totalTaxes: number;             // client-side taxes (pass-through)
+  ccProcessingAmount: number;     // subtotalClient × ccRate (pass-through)
   clientCommissionAmount: number;
   gdpCommissionAmount: number;
   thirdPartyCommissionsTotal: number;
-  totalVendorCosts: number;
+  totalVendorCosts: number;       // alias for vendorCostsBase
   qcRevenue: number;
   qcMarginPct: number;
   marginHealth: MarginHealth;
   // True net (after OpEx and travel)
   estimatedTeamHours: number;
   opExEstimate: number;           // hours × $90
-  travelExpenses: number;         // Phase 3
+  travelExpenses: number;
   trueNetProfit: number;
   trueNetMarginPct: number;
   trueNetHealth: NetHealth;

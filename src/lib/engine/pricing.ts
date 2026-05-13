@@ -153,6 +153,11 @@ export function calculateVenueEstimate(
   const fbMinimumMet = fbSubtotalOur >= input.fbMinimum;
   const fbShortfall = fbMinimumMet ? 0 : input.fbMinimum - fbSubtotalOur;
 
+  const vendorTaxesTotal = foodTaxOur + alcoholTaxOur + equipmentTaxOur + venueTaxOur;
+  const revenueItemsClientTotal = calculated
+    .filter((li) => li.isRevenueItem)
+    .reduce((s, li) => s + li.clientCost, 0);
+
   return {
     fbSubtotalOur, fbSubtotalClient,
     fbFoodSubtotalClient, fbAlcoholSubtotalClient,
@@ -166,6 +171,7 @@ export function calculateVenueEstimate(
     subtotalOur, subtotalClient,
     productionFee,
     totalOur, totalClient,
+    vendorTaxesTotal, revenueItemsClientTotal,
     pricePerPerson,
     fbMinimumMet, fbShortfall,
   };
@@ -211,12 +217,20 @@ export function calculateMarginAnalysis(
   const gdpCommissionAmount = config.gdpCommissionEnabled
     ? markupRevenue * config.gdpCommissionRate
     : 0;
-
   const thirdPartyCommissionsTotal = (config.thirdPartyCommissions ?? [])
     .reduce((s, c) => s + markupRevenue * c.rate, 0);
 
-  const totalVendorCosts = summary.totalOur;
-  const qcRevenue = summary.totalClient - clientCommissionAmount - gdpCommissionAmount - thirdPartyCommissionsTotal - totalVendorCosts;
+  // New formula: taxes and CC processing are pass-throughs that cancel out algebraically.
+  // Client commission is QC revenue (not a deduction). GDP and third-party are true costs.
+  const vendorCostsBase = summary.subtotalOur - summary.vendorTaxesTotal;
+  const totalTaxes = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax;
+  const ccProcessingAmount = summary.subtotalClient * config.ccProcessingFee;
+
+  const qcRevenue = summary.totalClient
+    - vendorCostsBase - totalTaxes - ccProcessingAmount
+    - gdpCommissionAmount - thirdPartyCommissionsTotal;
+
+  const totalVendorCosts = vendorCostsBase;
   const qcMarginPct = summary.totalClient > 0 ? qcRevenue / summary.totalClient : 0;
   const marginHealth = getMarginHealth(qcMarginPct);
 
@@ -228,6 +242,9 @@ export function calculateMarginAnalysis(
   const trueNetHealth = getNetHealth(trueNetMarginPct);
 
   return {
+    vendorCostsBase,
+    totalTaxes,
+    ccProcessingAmount,
     clientCommissionAmount,
     gdpCommissionAmount,
     thirdPartyCommissionsTotal,
