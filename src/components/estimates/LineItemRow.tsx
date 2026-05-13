@@ -1,19 +1,35 @@
 'use client';
 
 import { useState } from 'react';
-import type { TaxType } from '@/types';
+import type { TaxType, Location } from '@/types';
 import type { DbMarkup } from '@/lib/supabase/queries';
 import type { LocalLineItem } from './EstimateBuilder';
 
 interface Props {
   item: LocalLineItem;
   markups: DbMarkup[];
+  location: Location | null;
   showTaxToggle: boolean;  // only for F&B section
   onChange: (id: string, patch: Partial<LocalLineItem>) => void;
   onBlur: (id: string) => void;
   onDelete: (id: string) => void;
   onSaveAsTemplate?: (id: string) => Promise<void>;
   showMath?: boolean;
+}
+
+function shortLocationName(name: string): string {
+  return name.replace(/\s*\([^)]*\)/, '').replace(/\s+(NC|SC|GA|VA|PA|MD|NY|NJ|DC)$/, '').trim();
+}
+
+function taxLabel(taxType: TaxType, location: Location | null): { rate: string; place: string } | null {
+  if (taxType === 'none' || !location) return null;
+  const r = taxType === 'food' ? location.foodTaxRate
+    : taxType === 'alcohol' ? location.alcoholTaxRate
+    : location.generalTaxRate;
+  return {
+    rate: parseFloat((r * 100).toFixed(3)) + '%',
+    place: shortLocationName(location.name),
+  };
 }
 
 function fmt(val: number) {
@@ -27,7 +43,7 @@ function fmtM(v: number) {
 
 const inputClass = 'border border-brand-cream rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper focus:border-brand-brown bg-white text-brand-charcoal w-full';
 
-export default function LineItemRow({ item, markups, showTaxToggle, onChange, onBlur, onDelete, onSaveAsTemplate, showMath }: Props) {
+export default function LineItemRow({ item, markups, location, showTaxToggle, onChange, onBlur, onDelete, onSaveAsTemplate, showMath }: Props) {
   const [savedTemplate, setSavedTemplate] = useState(false);
   const isCustom = item.categoryId === 'custom';
   const isRevenue = item.isRevenueItem === true;
@@ -72,7 +88,7 @@ export default function LineItemRow({ item, markups, showTaxToggle, onChange, on
 
   return (
     <div className="border-b border-brand-cream/40 last:border-0">
-    <div className="grid items-center gap-2 py-1.5" style={{ gridTemplateColumns: '2fr 60px 90px 130px 60px 80px 80px 20px 20px' }}>
+    <div className="grid items-center gap-2 py-1.5" style={{ gridTemplateColumns: '2fr 60px 90px 130px 100px 60px 80px 80px 20px 20px' }}>
       {/* Name + Label + Revenue toggle */}
       <div className="flex flex-col gap-0.5">
         <input
@@ -146,6 +162,19 @@ export default function LineItemRow({ item, markups, showTaxToggle, onChange, on
         ))}
         <option value="custom">Custom (manual price)</option>
       </select>
+
+      {/* Tax */}
+      {(() => {
+        const t = taxLabel(item.taxType, location);
+        return t ? (
+          <div className="leading-tight" title={`${t.rate} — ${location?.name ?? ''}`}>
+            <div className="text-sm tabular-nums text-brand-charcoal/70">{t.rate}</div>
+            <div className="text-[10px] text-brand-silver/50 truncate">{t.place}</div>
+          </div>
+        ) : (
+          <div className="text-xs text-brand-silver/40">Non-taxable</div>
+        );
+      })()}
 
       {/* Markup % (editable, yellow when overridden) */}
       {isCustom ? (

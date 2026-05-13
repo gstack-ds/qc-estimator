@@ -792,6 +792,7 @@ export default function EstimateBuilder({
                 onAdd={handleAddItem}
                 onAddFromTemplate={handleAddFromTemplate}
                 onSaveAsTemplate={handleSaveAsTemplate}
+                location={programConfig.location}
                 showMath={showMath}
               />
             ))}

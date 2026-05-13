@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { TaxType } from '@/types';
+import type { TaxType, Location } from '@/types';
 import type { DbMarkup } from '@/lib/supabase/queries';
 import type { LocalLineItem, LocalSection } from './EstimateBuilder';
 import type { DbTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
@@ -13,6 +13,7 @@ interface Props {
   label?: string;
   items: LocalLineItem[];
   markups: DbMarkup[];
+  location: Location | null;
   defaultTaxType: TaxType;
   onChange: (id: string, patch: Partial<LocalLineItem>) => void;
   onBlur: (id: string) => void;
@@ -37,7 +38,7 @@ const SECTION_LABELS: Record<string, string> = {
   'Rentals - Non-Taxable': 'Non-Taxable Rental Fees',
 };
 
-export default function LineItemSection({ section, label, items, markups, defaultTaxType, onChange, onBlur, onDelete, onAdd, onAddFromTemplate, onSaveAsTemplate, showMath }: Props) {
+export default function LineItemSection({ section, label, items, markups, location, defaultTaxType, onChange, onBlur, onDelete, onAdd, onAddFromTemplate, onSaveAsTemplate, showMath }: Props) {
   const isFB = section === 'F&B';
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
@@ -47,11 +48,12 @@ export default function LineItemSection({ section, label, items, markups, defaul
       <div className="flex items-center justify-between py-2 border-b border-brand-cream mb-1">
         <h4 className="text-xs font-semibold text-brand-brown uppercase tracking-[0.08em]">{label ?? SECTION_LABELS[section]}</h4>
         {items.length > 0 && (
-          <div className="grid text-xs font-medium text-brand-silver gap-2 pr-6" style={{ gridTemplateColumns: '2fr 60px 90px 130px 60px 80px 80px 20px 20px' }}>
+          <div className="grid text-xs font-medium text-brand-silver gap-2 pr-6" style={{ gridTemplateColumns: '2fr 60px 90px 130px 100px 60px 80px 80px 20px 20px' }}>
             <span></span>
             <span className="text-right">Qty</span>
             <span className="text-right">Unit Price</span>
             <span>Category</span>
+            <span>Tax</span>
             <span className="text-right">Markup</span>
             <span className="text-right">Our Cost</span>
             <span className="text-right">Client Cost</span>
@@ -79,6 +81,7 @@ export default function LineItemSection({ section, label, items, markups, defaul
             <LineItemRow
               item={item}
               markups={markups}
+              location={location}
               showTaxToggle={isFB}
               onChange={onChange}
               onBlur={onBlur}

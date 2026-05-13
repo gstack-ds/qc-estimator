@@ -471,6 +471,7 @@ export default function DecorEstimateBuilder({
               onAdd={handleAddItem}
               onAddFromTemplate={handleAddFromTemplate}
               onSaveAsTemplate={handleSaveAsTemplate}
+              location={programConfig.location}
               showMath={showMath}
             />
           </div>

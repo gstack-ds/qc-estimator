@@ -20,6 +20,7 @@ import ProgramForm from '@/components/estimates/ProgramForm';
 import EventsView, { type EventRow } from '@/components/estimates/EventsView';
 import { type EstimateCard } from '@/components/estimates/ComparisonView';
 import DeleteProgramButton from '@/components/estimates/DeleteProgramButton';
+import ProgramPnLPanel, { type PnLRow } from '@/components/estimates/ProgramPnLPanel';
 import { calculateVenueEstimate, calculateMarginAnalysis } from '@/lib/engine/pricing';
 import { calcTransportSummary } from '@/lib/engine/transportation';
 import type { LineItem, TaxType, ProgramConfig, TeamHoursTier, EstimateSummary } from '@/types';
@@ -85,14 +86,14 @@ function buildLineItems(items: DbLineItem[], markups: DbMarkup[]): LineItem[] {
   });
 }
 
-function buildEstimateCard(
+function buildEstimateData(
   estimate: DbEstimate,
   items: DbLineItem[],
   markups: DbMarkup[],
   config: ProgramConfig,
   tiers: TeamHoursTier[],
   transportAggregate?: TransportAggregate,
-): EstimateCard {
+): { card: EstimateCard; pnlRow: PnLRow } {
   if (estimate.type === 'transportation') {
     const agg = transportAggregate ?? { estimate_id: estimate.id, total_our: 0, total_client: 0 };
     const transportCommission = estimate.transport_commission ?? 0;
@@ -118,16 +119,21 @@ function buildEstimateCard(
     };
     const transportConfig: ProgramConfig = { ...config, clientCommission: transportCommission, gdpCommissionEnabled: false, thirdPartyCommissions: [] };
     const margin = calculateMarginAnalysis(fakeSummary, transportConfig, tiers);
-    return {
-      id: estimate.id,
-      name: estimate.name,
-      type: estimate.type,
-      total: transportSummary.totalClient,
-      pricePerPerson: config.guestCount > 0 ? Math.ceil(transportSummary.totalClient / config.guestCount) : 0,
-      lineItemCount: 0,
-      includeInBudget: estimate.include_in_budget,
+    const billing = transportSummary.totalClient;
+    const card: EstimateCard = {
+      id: estimate.id, name: estimate.name, type: estimate.type,
+      total: billing,
+      pricePerPerson: config.guestCount > 0 ? Math.ceil(billing / config.guestCount) : 0,
+      lineItemCount: 0, includeInBudget: estimate.include_in_budget,
       qcMarginPct: margin.qcMarginPct,
     };
+    const pnlRow: PnLRow = {
+      id: estimate.id, name: estimate.name, type: estimate.type as PnLRow['type'],
+      billing, vendorCosts: margin.vendorCostsBase, taxes: margin.totalTaxes,
+      commissions: margin.ccProcessingAmount + margin.gdpCommissionAmount + margin.thirdPartyCommissionsTotal,
+      qcMargin: margin.qcRevenue, marginPct: margin.qcMarginPct,
+    };
+    return { card, pnlRow };
   }
 
   const lineItems = buildLineItems(items, markups);
@@ -136,30 +142,24 @@ function buildEstimateCard(
   const af = estimate.admin_fee_override ?? config.adminFeeDefault;
 
   const summary = calculateVenueEstimate(
-    {
-      name: estimate.name,
-      fbMinimum: estimate.fb_minimum,
-      isVenueTaxable: estimate.is_venue_taxable,
-      serviceCharge: sc,
-      gratuity: gr,
-      adminFee: af,
-      lineItems,
-    },
-    config
+    { name: estimate.name, fbMinimum: estimate.fb_minimum, isVenueTaxable: estimate.is_venue_taxable, serviceCharge: sc, gratuity: gr, adminFee: af, lineItems },
+    config,
   );
-
   const margin = calculateMarginAnalysis(summary, config, tiers);
 
-  return {
-    id: estimate.id,
-    name: estimate.name,
-    type: estimate.type,
-    total: summary.totalClient,
-    pricePerPerson: summary.pricePerPerson,
-    lineItemCount: items.length,
-    includeInBudget: estimate.include_in_budget,
+  const card: EstimateCard = {
+    id: estimate.id, name: estimate.name, type: estimate.type,
+    total: summary.totalClient, pricePerPerson: summary.pricePerPerson,
+    lineItemCount: items.length, includeInBudget: estimate.include_in_budget,
     qcMarginPct: margin.qcMarginPct,
   };
+  const pnlRow: PnLRow = {
+    id: estimate.id, name: estimate.name, type: estimate.type as PnLRow['type'],
+    billing: summary.totalClient, vendorCosts: margin.vendorCostsBase, taxes: margin.totalTaxes,
+    commissions: margin.ccProcessingAmount + margin.gdpCommissionAmount + margin.thirdPartyCommissionsTotal,
+    qcMargin: margin.qcRevenue, marginPct: margin.qcMarginPct,
+  };
+  return { card, pnlRow };
 }
 
 // ─── Page ─────────────────────────────────────────────────
@@ -191,12 +191,15 @@ export default async function ProgramPage({ params }: Props) {
   ]);
   const programConfig = buildProgramConfig(program, program.location);
 
-  // Build a card for each estimate
+  // Build a card and P&L row for each estimate
   const cardMap = new Map<string, EstimateCard>();
+  const pnlRows: PnLRow[] = [];
   for (const est of estimates) {
     const items = allLineItems.filter((li) => li.estimate_id === est.id);
     const transportAgg = transportAggregates.find((a) => a.estimate_id === est.id);
-    cardMap.set(est.id, buildEstimateCard(est, items, markups, programConfig, tiers, transportAgg));
+    const { card, pnlRow } = buildEstimateData(est, items, markups, programConfig, tiers, transportAgg);
+    cardMap.set(est.id, card);
+    if (est.include_in_budget) pnlRows.push(pnlRow);
   }
 
   // Group estimates by event_id
@@ -254,6 +257,9 @@ export default async function ProgramPage({ params }: Props) {
           programGuestCount={program.guest_count}
         />
       </div>
+
+      {/* Program P&L */}
+      <ProgramPnLPanel rows={pnlRows} />
     </div>
   );
 }
