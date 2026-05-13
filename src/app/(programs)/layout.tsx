@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import NavLinks from '@/components/layout/NavLinks';
 import UserMenu from '@/components/layout/UserMenu';
+import MobileNav from '@/components/layout/MobileNav';
 import { getProfile } from '@/lib/supabase/queries';
 
 export default async function ProgramsLayout({
@@ -27,8 +28,8 @@ export default async function ProgramsLayout({
 
   return (
     <div className="min-h-screen bg-brand-offwhite">
-      <header className="bg-brand-charcoal border-b border-black/20 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-8">
+      <header className="bg-brand-charcoal border-b border-black/20 px-4 sm:px-6 py-3 flex items-center justify-between relative">
+        <div className="flex items-center gap-6 md:gap-8">
           <Link href="/programs" className="flex items-center gap-3 group">
             <Image
               src="/images/qc-monogram.png"
@@ -46,11 +47,16 @@ export default async function ProgramsLayout({
               </div>
             </div>
           </Link>
-          <nav className="flex items-center gap-6">
+          <nav className="hidden md:flex items-center gap-6">
             <NavLinks links={navLinks} />
           </nav>
         </div>
-        <UserMenu email={user.email ?? ''} />
+        <div className="flex items-center gap-3">
+          <div className="hidden md:block">
+            <UserMenu email={user.email ?? ''} />
+          </div>
+          <MobileNav links={navLinks} email={user.email ?? ''} />
+        </div>
       </header>
       <main>{children}</main>
     </div>

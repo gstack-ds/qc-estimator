@@ -230,7 +230,7 @@ export default async function ProgramPage({ params }: Props) {
   }));
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-8 space-y-10">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-10">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>

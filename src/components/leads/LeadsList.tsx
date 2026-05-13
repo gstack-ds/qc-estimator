@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { DbLead, DbTeamMember, LeadStatus, LeadStatusGroup } from '@/lib/supabase/queries';
 import { OPEN_STATUSES, PAUSED_STATUSES, CLOSED_STATUSES } from '@/lib/leads/constants';
@@ -234,6 +235,73 @@ function AddLeadPanel({ teamMembers, onClose, onCreated }: {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Lead Card (mobile) ────────────────────────────────────
+
+function LeadCard({ lead, teamMembers, isNew, onSave }: {
+  lead: DbLead;
+  teamMembers: DbTeamMember[];
+  isNew: boolean;
+  onSave: (id: string, field: keyof LeadInput, value: string | number | null) => void;
+}) {
+  return (
+    <div className="bg-white border border-brand-cream rounded-lg p-4 space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-medium text-brand-charcoal flex items-center gap-1.5 flex-wrap">
+            <span className="truncate">{lead.client_name ?? <span className="text-brand-silver">—</span>}</span>
+            {isNew && (
+              <span className="text-[9px] font-semibold bg-brand-copper text-white px-1.5 py-0.5 rounded-full leading-none flex-shrink-0">
+                NEW
+              </span>
+            )}
+          </div>
+          {lead.program_name && (
+            <div className="text-sm text-brand-charcoal/70 mt-0.5 truncate">{lead.program_name}</div>
+          )}
+          <div className="text-xs text-brand-charcoal/50 mt-0.5">
+            {fmt(lead.start_date)}
+            {lead.city && ` · ${lead.city}${lead.state ? `, ${lead.state}` : ''}`}
+          </div>
+        </div>
+        <Link
+          href={`/leads/${lead.id}`}
+          className="text-xs text-brand-brown hover:text-brand-charcoal font-medium transition-colors whitespace-nowrap flex-shrink-0"
+        >
+          View →
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <div className="text-[10px] font-medium text-brand-charcoal/40 uppercase tracking-wide mb-1">Owner</div>
+          <select
+            value={lead.assigned_to != null ? String(lead.assigned_to) : ''}
+            onChange={(e) => onSave(lead.id, 'assigned_to', e.target.value ? Number(e.target.value) : null)}
+            className={cellSelectCls + ' w-full'}
+          >
+            <option value="">—</option>
+            {teamMembers.map((m) => (
+              <option key={m.id} value={String(m.id)}>{m.first_name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <div className="text-[10px] font-medium text-brand-charcoal/40 uppercase tracking-wide mb-1">Status</div>
+          <select
+            value={lead.status}
+            onChange={(e) => onSave(lead.id, 'status', e.target.value)}
+            className={cellSelectCls + ' w-full'}
+          >
+            {ALL_STATUSES.map((s) => (
+              <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+            ))}
+          </select>
+        </div>
       </div>
     </div>
   );
@@ -535,38 +603,40 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
       )}
 
       {/* Group tabs */}
-      <div className="flex items-center gap-1 border-b border-brand-cream pb-3">
-        {GROUP_TABS.map((g) => (
-          <button
-            key={g}
-            onClick={() => setGroupFilter(g)}
-            className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-              groupFilter === g
-                ? 'bg-brand-charcoal text-white'
-                : 'text-brand-charcoal/60 hover:text-brand-charcoal hover:bg-brand-cream/50'
-            }`}
-          >
-            {GROUP_LABELS[g]}
-            <span className={`ml-1.5 text-[10px] ${groupFilter === g ? 'opacity-70' : 'text-brand-silver'}`}>
-              {counts[g]}
-            </span>
-          </button>
-        ))}
+      <div className="border-b border-brand-cream pb-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-1">
+          {GROUP_TABS.map((g) => (
+            <button
+              key={g}
+              onClick={() => setGroupFilter(g)}
+              className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                groupFilter === g
+                  ? 'bg-brand-charcoal text-white'
+                  : 'text-brand-charcoal/60 hover:text-brand-charcoal hover:bg-brand-cream/50'
+              }`}
+            >
+              {GROUP_LABELS[g]}
+              <span className={`ml-1.5 text-[10px] ${groupFilter === g ? 'opacity-70' : 'text-brand-silver'}`}>
+                {counts[g]}
+              </span>
+            </button>
+          ))}
 
-        {newTodayCount > 0 && (
-          <button
-            onClick={() => setShowNewOnly((v) => !v)}
-            className={`ml-3 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
-              showNewOnly
-                ? 'bg-brand-copper text-white'
-                : 'bg-brand-copper/10 text-brand-copper hover:bg-brand-copper/20'
-            }`}
-          >
-            {newTodayCount} new today
-          </button>
-        )}
+          {newTodayCount > 0 && (
+            <button
+              onClick={() => setShowNewOnly((v) => !v)}
+              className={`ml-2 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
+                showNewOnly
+                  ? 'bg-brand-copper text-white'
+                  : 'bg-brand-copper/10 text-brand-copper hover:bg-brand-copper/20'
+              }`}
+            >
+              {newTodayCount} new today
+            </button>
+          )}
+        </div>
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           {teamMembers.length > 0 && (
             <select
               value={ownerFilter}
@@ -593,7 +663,7 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
       </div>
 
       {/* Date range filter + Archive Old panel */}
-      <div className="flex items-center gap-4 py-2.5 border-b border-brand-cream mb-4">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-4 py-2.5 border-b border-brand-cream mb-4">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-medium text-brand-charcoal/50 uppercase tracking-wide">Received</span>
           <input
@@ -655,41 +725,57 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
             : 'No leads match the current filters.'}
         </div>
       ) : (
-        <div className="rounded-lg border border-brand-cream overflow-auto max-h-[calc(100vh-300px)]">
-          <table className="text-sm">
-            <thead className="bg-brand-offwhite border-b border-brand-cream sticky top-0 z-20">
-              <tr>
-                {colHeaders.map(({ label, key }) =>
-                  key ? (
-                    <th
-                      key={label}
-                      className={thSortCls + (label === 'Client' ? ' sticky left-0 z-30 bg-brand-offwhite' : '')}
-                      onClick={() => toggleSort(key)}
-                    >
-                      {label}{sortIcon(key)}
-                    </th>
-                  ) : (
-                    <th key={label} className={thCls}>{label}</th>
-                  )
-                )}
-              </tr>
-            </thead>
+        <>
+          {/* Mobile card list */}
+          <div className="md:hidden space-y-3">
+            {displayLeads.map((lead) => (
+              <LeadCard
+                key={lead.id}
+                lead={lead}
+                teamMembers={teamMembers}
+                isNew={nowMs - new Date(lead.created_at).getTime() < NEW_THRESHOLD_MS}
+                onSave={saveCellChange}
+              />
+            ))}
+          </div>
 
-            <tbody className="divide-y divide-brand-cream/60">
-              {displayLeads.map((lead) => (
-                <LeadRow
-                  key={lead.id}
-                  lead={lead}
-                  teamMembers={teamMembers}
-                  isNew={nowMs - new Date(lead.created_at).getTime() < NEW_THRESHOLD_MS}
-                  onRowClick={() => router.push(`/leads/${lead.id}`)}
-                  onSave={saveCellChange}
-                  onDelete={handleDeleteLead}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
+          {/* Desktop table */}
+          <div className="hidden md:block rounded-lg border border-brand-cream overflow-auto max-h-[calc(100vh-300px)]">
+            <table className="text-sm">
+              <thead className="bg-brand-offwhite border-b border-brand-cream sticky top-0 z-20">
+                <tr>
+                  {colHeaders.map(({ label, key }) =>
+                    key ? (
+                      <th
+                        key={label}
+                        className={thSortCls + (label === 'Client' ? ' sticky left-0 z-30 bg-brand-offwhite' : '')}
+                        onClick={() => toggleSort(key)}
+                      >
+                        {label}{sortIcon(key)}
+                      </th>
+                    ) : (
+                      <th key={label} className={thCls}>{label}</th>
+                    )
+                  )}
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-brand-cream/60">
+                {displayLeads.map((lead) => (
+                  <LeadRow
+                    key={lead.id}
+                    lead={lead}
+                    teamMembers={teamMembers}
+                    isNew={nowMs - new Date(lead.created_at).getTime() < NEW_THRESHOLD_MS}
+                    onRowClick={() => router.push(`/leads/${lead.id}`)}
+                    onSave={saveCellChange}
+                    onDelete={handleDeleteLead}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {totalLeads > 0 && (

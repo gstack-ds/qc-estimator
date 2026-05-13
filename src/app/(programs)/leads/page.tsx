@@ -8,8 +8,8 @@ export default async function LeadsPage() {
   const [leads, counts, teamMembers] = await Promise.all([getLeads(), getLeadCounts(), getTeamMembers()]);
 
   return (
-    <div className="px-6 py-8">
-      <div className="flex items-start justify-between mb-6">
+    <div className="px-4 sm:px-6 py-8">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="font-serif text-2xl font-medium text-brand-charcoal">Leads</h1>
           <p className="text-sm text-brand-charcoal/60 mt-1">GDP leads and manual entries. Click a row to view details.</p>

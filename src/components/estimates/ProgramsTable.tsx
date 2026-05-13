@@ -46,8 +46,8 @@ export default function ProgramsTable({ programs }: Props) {
           )}
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-brand-cream overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-white rounded-lg border border-brand-cream overflow-x-auto">
+          <table className="w-full min-w-[600px] text-sm">
             <thead className="bg-brand-offwhite border-b border-brand-cream">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-brand-charcoal/70 text-xs tracking-wide uppercase">Program</th>
