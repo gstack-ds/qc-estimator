@@ -51,6 +51,7 @@ export interface LocalLineItem {
   categoryMarkupPct: number;   // effective markup (override ?? default)
   taxType: TaxType;
   customClientUnitPrice?: number;
+  isRevenueItem?: boolean;
   sortOrder: number;
   isNew?: boolean;
 }
@@ -76,6 +77,7 @@ function toEngineLineItems(items: LocalLineItem[]) {
     unitPrice: item.unitPrice,
     categoryMarkupPct: item.categoryMarkupPct,
     taxType: item.taxType,
+    isRevenueItem: item.isRevenueItem,
     clientCostOverride:
       item.categoryId === 'custom' && item.customClientUnitPrice !== undefined
         ? item.qty * item.customClientUnitPrice
@@ -131,6 +133,7 @@ function dbItemToLocal(item: DbLineItem, markups: DbMarkup[]): LocalLineItem {
     categoryMarkupPct: effectiveMarkupPct,
     taxType: item.tax_type as TaxType,
     customClientUnitPrice: isCustom ? item.custom_client_unit_price! : undefined,
+    isRevenueItem: item.is_revenue_item,
     sortOrder: item.sort_order,
   };
 }
@@ -352,6 +355,7 @@ export default function EstimateBuilder({
       tax_type: item.taxType,
       custom_client_unit_price: item.categoryId === 'custom' ? (item.customClientUnitPrice ?? 0) : null,
       markup_override: isOverridden ? item.categoryMarkupPct : null,
+      is_revenue_item: item.isRevenueItem ?? false,
       sort_order: item.sortOrder,
     }));
 

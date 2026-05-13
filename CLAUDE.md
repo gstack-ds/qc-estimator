@@ -189,6 +189,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-05-06 | buildLineItems in page.tsx now applies markup_override per item | Original code always used category default markup_pct. All three builders correctly apply item.markup_override ?? defaultMarkupPct; page.tsx was the outlier causing card totals to diverge from live summary. | Separate query for estimate cards (extra round trip) |
 | 2026-05-06 | Copy Numbers venue export includes Service Charge, Gratuity, Admin Fee as separate rows | These fees are material line items clients need to see broken out. Values come from EstimateSummary fields already calculated by the pricing engine. Rows are omitted when 0. Order: ...Venue Rental, Service Charge, Gratuity, Admin Fee, Production Fee, Tax. | Lump into a single "Fees" row (loses transparency) |
 | 2026-05-12 | Leads list: flat start_date-sorted list replaces scan-batch grouping | Alex (end user) wants events sorted by start date, not grouped by when the scanner ingested them. Scan batch grouping was an implementation detail that leaked into the UI. NEW badge (24h rolling window, copper pill) + "N new today" toggle button replace section headers for new-lead visibility. Sort applies universally — no isManual branch. | Keep scan batch groups with sort option (rejected — confusing to users), dot/badge only with no filter shortcut (rejected — no quick access to today's leads) |
+| 2026-05-13 | isRevenueItem flag on LineItem: ourCost=0, clientCost=qty×unitPrice (no markup) | Coordinator Fee and similar QC-owned fees have no vendor. Setting ourCost=0 naturally excludes them from totalVendorCosts in margin analysis — no special margin logic needed. | Separate margin deduction path (more code, same result) |
+| 2026-05-13 | Copy Numbers now uses buildDetailedCopyText (per-item rows + section subtotals) | Team uses Copy Numbers output for invoicing — they need individual line items, not grouped category totals. buildCopyText (grouped) is kept for potential future use. | Modify in-place (would break existing behavior); remove old function (might be needed later) |
 
 ## Gotchas Log
 
@@ -233,6 +235,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] buildLineItems in page.tsx: now applies markup_override per item (fixes card total mismatch vs live summary)
 - [x] Copy Numbers venue export: Service Charge, Gratuity, Admin Fee now appear as separate rows (124 tests passing)
 - [x] Leads list: replaced scan-batch grouping with flat start_date-sorted list; sort is universal (no isManual branch); NEW badge (copper pill, 24h rolling) inline next to client name; "N new today" toggle button in tab bar filters to recent leads
+- [x] Revenue item flag (is_revenue_item): migration 021, isRevenueItem on LineItem/LocalLineItem, ourCost=0 in engine, "Rev/Rev ✓" toggle in LineItemRow — 5 new pricing tests (144 total)
+- [x] Copy Numbers now exports per-item detail: item name, qty, unit price, our cost, client cost; section subtotals; then summary fees + total — 13 new export tests
 
 ### Remaining
 - [ ] **Run `npm run dedup`** to clean up any duplicate leads created before the dedup logic was in place
@@ -247,7 +251,7 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
+- Run migration 021 in Supabase production: `ALTER TABLE estimate_line_items ADD COLUMN IF NOT EXISTS is_revenue_item BOOLEAN NOT NULL DEFAULT FALSE`
 - Scanner deployment is the top priority — see Remaining above for exact steps.
 - Consider running the optional DB backfill to populate gdp_advisor/gdp_coordinator/third_party/lead_source_type for existing rows.
 - After scanner is live and backfill is run, real-proposal validation is the best next feature step.
-- Leads list UX is current — flat start_date sort, NEW badge, "N new today" toggle all committed.

@@ -58,6 +58,7 @@ export interface LineItem {
   categoryMarkupPct: number;      // resolved from category lookup
   taxType: TaxType;
   clientCostOverride?: number;    // total client cost; when set, skips markup formula
+  isRevenueItem?: boolean;        // when true: ourCost=0, clientCost=qty*unitPrice (no markup)
 }
 
 export interface CalculatedLineItem extends LineItem {

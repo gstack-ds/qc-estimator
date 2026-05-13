@@ -42,17 +42,16 @@ export function calculateLineItem(
   item: LineItem,
   config: ProgramConfig
 ): CalculatedLineItem {
-  const ourCost = item.qty * item.unitPrice;
-  const clientCost = item.clientCostOverride ?? ourCost * (1 + item.categoryMarkupPct);
   const taxRate = getTaxRate(item.taxType, config);
 
-  return {
-    ...item,
-    ourCost,
-    clientCost,
-    taxRate,
-    taxAmount: clientCost * taxRate,
-  };
+  if (item.isRevenueItem) {
+    const clientCost = item.qty * item.unitPrice;
+    return { ...item, ourCost: 0, clientCost, taxRate, taxAmount: clientCost * taxRate };
+  }
+
+  const ourCost = item.qty * item.unitPrice;
+  const clientCost = item.clientCostOverride ?? ourCost * (1 + item.categoryMarkupPct);
+  return { ...item, ourCost, clientCost, taxRate, taxAmount: clientCost * taxRate };
 }
 
 // ─── Venue Estimate Summary ──────────────────────────────

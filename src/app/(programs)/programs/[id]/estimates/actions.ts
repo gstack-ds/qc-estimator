@@ -119,6 +119,7 @@ export async function upsertLineItem(data: {
   tax_type: string;
   custom_client_unit_price?: number | null;
   markup_override?: number | null;
+  is_revenue_item?: boolean;
   sort_order: number;
 }) {
   const supabase = await createClient();
@@ -136,6 +137,7 @@ export async function upsertLineItem(data: {
         tax_type: data.tax_type,
         custom_client_unit_price: data.custom_client_unit_price ?? null,
         markup_override: data.markup_override ?? null,
+        is_revenue_item: data.is_revenue_item ?? false,
         sort_order: data.sort_order,
       })
       .eq('id', data.id);
@@ -155,6 +157,7 @@ export async function upsertLineItem(data: {
         tax_type: data.tax_type,
         custom_client_unit_price: data.custom_client_unit_price ?? null,
         markup_override: data.markup_override ?? null,
+        is_revenue_item: data.is_revenue_item ?? false,
         sort_order: data.sort_order,
       })
       .select('id')
@@ -613,7 +616,7 @@ export async function getLineItemsForEstimate(estimateId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('estimate_line_items')
-    .select('id, section, name, label, qty, unit_price, category_id, tax_type, custom_client_unit_price, markup_override, sort_order')
+    .select('id, section, name, label, qty, unit_price, category_id, tax_type, custom_client_unit_price, markup_override, is_revenue_item, sort_order')
     .eq('estimate_id', estimateId)
     .order('sort_order');
   if (error) return { error: error.message, items: [] };
@@ -776,7 +779,7 @@ export async function getExportDataForProgram(programId: string) {
 
   const { data: lineItems, error: liErr } = await supabase
     .from('estimate_line_items')
-    .select('id, estimate_id, section, name, qty, unit_price, category_id, tax_type, custom_client_unit_price, markup_override, sort_order')
+    .select('id, estimate_id, section, name, qty, unit_price, category_id, tax_type, custom_client_unit_price, markup_override, is_revenue_item, sort_order')
     .in('estimate_id', estimateIds)
     .order('sort_order');
   if (liErr) return { error: liErr.message, data: null };

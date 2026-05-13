@@ -13,6 +13,7 @@ export interface LineItemForExport {
   categoryId: string | 'custom' | null;
   customClientUnitPrice?: number;
   taxType: string;
+  isRevenueItem?: boolean;
 }
 
 export interface MarkupForExport {
@@ -120,6 +121,69 @@ export function buildCopyText(
     `TOTAL ESTIMATE\t${fmtAmt(summary.totalClient)}`,
     `Price PP\t${fmtAmt(pp)}`,
   ];
+
+  return lines.join('\n');
+}
+
+export function buildDetailedCopyText(
+  lineItems: LineItemForExport[],
+  summary: EstimateSummary,
+  guestCount: number,
+  estimateName: string,
+): string {
+  const activeItems = lineItems.filter(
+    (li) => li.qty > 0 && (li.unitPrice > 0 || (li.categoryId === 'custom' && (li.customClientUnitPrice ?? 0) > 0))
+  );
+
+  // Group items by section, preserving first-appearance order
+  const sectionOrder: string[] = [];
+  const sectionMap = new Map<string, LineItemForExport[]>();
+  for (const li of activeItems) {
+    if (!sectionMap.has(li.section)) {
+      sectionOrder.push(li.section);
+      sectionMap.set(li.section, []);
+    }
+    sectionMap.get(li.section)!.push(li);
+  }
+
+  const lines: string[] = [
+    estimateName.toUpperCase(),
+    '',
+    'Item\tQty\tUnit Price\tOur Cost\tClient Cost',
+  ];
+
+  for (const section of sectionOrder) {
+    const items = sectionMap.get(section)!;
+    lines.push('');
+    lines.push(section);
+
+    let ourCostSum = 0;
+    let clientCostSum = 0;
+    for (const li of items) {
+      const isRevenue = li.isRevenueItem === true;
+      const ourCostItem = isRevenue ? 0 : li.qty * li.unitPrice;
+      const clientCostItem = isRevenue ? li.qty * li.unitPrice : itemClientCost(li);
+      ourCostSum += ourCostItem;
+      clientCostSum += clientCostItem;
+      lines.push(`${li.name}\t${li.qty}\t${fmtAmt(li.unitPrice)}\t${fmtAmt(ourCostItem)}\t${fmtAmt(clientCostItem)}`);
+    }
+
+    lines.push(`${section} Total\t\t\t${fmtAmt(ourCostSum)}\t${fmtAmt(clientCostSum)}`);
+  }
+
+  lines.push('');
+  if (summary.serviceChargeClient > 0) lines.push(`Service Charge\t\t\t\t${fmtAmt(summary.serviceChargeClient)}`);
+  if (summary.gratuityClient > 0)      lines.push(`Gratuity\t\t\t\t${fmtAmt(summary.gratuityClient)}`);
+  if (summary.adminFeeClient > 0)      lines.push(`Admin Fee\t\t\t\t${fmtAmt(summary.adminFeeClient)}`);
+  if (summary.productionFee > 0)       lines.push(`Production Fee\t\t\t\t${fmtAmt(summary.productionFee)}`);
+
+  const tax = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax;
+  if (tax > 0) lines.push(`Tax\t\t\t\t${fmtAmt(tax)}`);
+
+  const pp = guestCount > 0 ? Math.ceil(summary.totalClient / guestCount) : 0;
+  lines.push('');
+  lines.push(`TOTAL ESTIMATE\t\t\t\t${fmtAmt(summary.totalClient)}`);
+  lines.push(`Price PP\t\t\t\t${fmtAmt(pp)}`);
 
   return lines.join('\n');
 }

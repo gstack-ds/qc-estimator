@@ -25,10 +25,13 @@ const inputClass = 'border border-brand-cream rounded px-2 py-1 text-sm focus:ou
 export default function LineItemRow({ item, markups, showTaxToggle, onChange, onBlur, onDelete, onSaveAsTemplate }: Props) {
   const [savedTemplate, setSavedTemplate] = useState(false);
   const isCustom = item.categoryId === 'custom';
-  const ourCost = item.qty * item.unitPrice;
-  const clientCost = isCustom && item.customClientUnitPrice !== undefined
-    ? item.qty * item.customClientUnitPrice
-    : ourCost * (1 + item.categoryMarkupPct);
+  const isRevenue = item.isRevenueItem === true;
+  const ourCost = isRevenue ? 0 : item.qty * item.unitPrice;
+  const clientCost = isRevenue
+    ? item.qty * item.unitPrice
+    : isCustom && item.customClientUnitPrice !== undefined
+      ? item.qty * item.customClientUnitPrice
+      : item.qty * item.unitPrice * (1 + item.categoryMarkupPct);
 
   const markupOverridden = !isCustom && item.categoryMarkupPct !== item.defaultMarkupPct;
   const markupDisplayPct = parseFloat((item.categoryMarkupPct * 100).toFixed(2));
@@ -64,7 +67,7 @@ export default function LineItemRow({ item, markups, showTaxToggle, onChange, on
 
   return (
     <div className="grid items-center gap-2 py-1.5 border-b border-brand-cream/40 last:border-0" style={{ gridTemplateColumns: '2fr 60px 90px 130px 60px 80px 80px 20px 20px' }}>
-      {/* Name + Label */}
+      {/* Name + Label + Revenue toggle */}
       <div className="flex flex-col gap-0.5">
         <input
           type="text"
@@ -74,14 +77,28 @@ export default function LineItemRow({ item, markups, showTaxToggle, onChange, on
           className={inputClass}
           placeholder="Item name"
         />
-        <input
-          type="text"
-          value={item.label ?? ''}
-          onChange={(e) => onChange(item.id, { label: e.target.value })}
-          onBlur={() => onBlur(item.id)}
-          className="border border-brand-cream/60 rounded px-2 py-0.5 text-xs text-brand-silver/80 focus:outline-none focus:ring-1 focus:ring-brand-copper/50 bg-transparent w-full placeholder:text-brand-silver/40"
-          placeholder="Label (internal)"
-        />
+        <div className="flex items-center gap-1">
+          <input
+            type="text"
+            value={item.label ?? ''}
+            onChange={(e) => onChange(item.id, { label: e.target.value })}
+            onBlur={() => onBlur(item.id)}
+            className="border border-brand-cream/60 rounded px-2 py-0.5 text-xs text-brand-silver/80 focus:outline-none focus:ring-1 focus:ring-brand-copper/50 bg-transparent flex-1 min-w-0 placeholder:text-brand-silver/40"
+            placeholder="Label (internal)"
+          />
+          <button
+            type="button"
+            onClick={() => { onChange(item.id, { isRevenueItem: !item.isRevenueItem }); onBlur(item.id); }}
+            title="Revenue item — vendor cost is $0, full client price is QC margin"
+            className={`text-xs px-1.5 py-0.5 rounded whitespace-nowrap flex-shrink-0 border transition-colors ${
+              isRevenue
+                ? 'bg-green-100 text-green-700 font-medium border-green-200'
+                : 'text-brand-silver/40 border-brand-cream/40 hover:text-brand-silver hover:border-brand-cream'
+            }`}
+          >
+            {isRevenue ? 'Rev ✓' : 'Rev'}
+          </button>
+        </div>
       </div>
 
       {/* Qty */}

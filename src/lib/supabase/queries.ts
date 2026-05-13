@@ -258,13 +258,14 @@ export interface DbLineItem {
   tax_type: string;
   custom_client_unit_price: number | null;
   markup_override: number | null;
+  is_revenue_item: boolean;
   notes: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
 }
 
-const LINE_ITEM_FIELDS = 'id, estimate_id, section, name, label, qty, unit_price, category_id, tax_type, custom_client_unit_price, markup_override, notes, sort_order, created_at, updated_at';
+const LINE_ITEM_FIELDS = 'id, estimate_id, section, name, label, qty, unit_price, category_id, tax_type, custom_client_unit_price, markup_override, is_revenue_item, notes, sort_order, created_at, updated_at';
 
 export async function getLineItemsForEstimate(estimateId: string): Promise<DbLineItem[]> {
   const supabase = await createClient();

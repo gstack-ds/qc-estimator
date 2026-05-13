@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { EstimateSummary } from '@/types';
 import {
-  buildCopyText,
+  buildDetailedCopyText,
   buildLineItemsCopyText,
   buildSummaryRows,
   itemClientCost,
@@ -41,7 +41,7 @@ export default function ExportButtons({
   const [exporting, setExporting] = useState(false);
 
   async function handleCopy() {
-    const text = buildCopyText(summary, guestCount, estimateType, estimateName, lineItems, markups);
+    const text = buildDetailedCopyText(lineItems, summary, guestCount, estimateName);
     await navigator.clipboard.writeText(text);
     setCopyLabel('Copied!');
     setTimeout(() => setCopyLabel('Copy Numbers'), 2000);

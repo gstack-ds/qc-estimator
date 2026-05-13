@@ -130,6 +130,74 @@ describe('calculateLineItem', () => {
   });
 });
 
+// ─── Revenue Items ────────────────────────────────────────
+
+describe('calculateLineItem — revenue item', () => {
+  const revenueItem: LineItem = {
+    id: 'rev-1',
+    section: 'Non-Taxable Staffing',
+    name: 'Coordinator Fee',
+    qty: 1,
+    unitPrice: 500,
+    categoryMarkupPct: 0.90,
+    taxType: 'none',
+    isRevenueItem: true,
+  };
+
+  it('sets ourCost to 0', () => {
+    const result = calculateLineItem(revenueItem, BASE_CONFIG);
+    expect(result.ourCost).toBe(0);
+  });
+
+  it('sets clientCost to qty × unitPrice (no markup)', () => {
+    const result = calculateLineItem(revenueItem, BASE_CONFIG);
+    expect(result.clientCost).toBe(500);  // 1 × 500, no 90% markup
+  });
+
+  it('applies tax to clientCost normally', () => {
+    const taxableRevItem: LineItem = { ...revenueItem, taxType: 'general' };
+    const result = calculateLineItem(taxableRevItem, BASE_CONFIG);
+    expect(result.taxAmount).toBeCloseTo(500 * 0.0725);
+  });
+
+  it('does not inflate totalVendorCosts when added to an estimate', () => {
+    const regularItem: LineItem = {
+      id: 'r1', section: 'F&B', name: 'Dinner', qty: 50, unitPrice: 50,
+      categoryMarkupPct: 0.55, taxType: 'food',
+    };
+    const noCommConfig: ProgramConfig = {
+      ...BASE_CONFIG, ccProcessingFee: 0, clientCommission: 0, gdpCommissionEnabled: false,
+    };
+    const base: VenueEstimateInput = {
+      name: 'Test', fbMinimum: 0, isVenueTaxable: false,
+      serviceCharge: 0, gratuity: 0, adminFee: 0, lineItems: [regularItem],
+    };
+    const withRev: VenueEstimateInput = { ...base, lineItems: [regularItem, revenueItem] };
+
+    const summaryBase = calculateVenueEstimate(base, noCommConfig);
+    const summaryWith = calculateVenueEstimate(withRev, noCommConfig);
+
+    const marginBase = calculateMarginAnalysis(summaryBase, noCommConfig, TEAM_HOURS_TIERS, 0);
+    const marginWith = calculateMarginAnalysis(summaryWith, noCommConfig, TEAM_HOURS_TIERS, 0);
+
+    expect(marginWith.totalVendorCosts).toBeCloseTo(marginBase.totalVendorCosts, 2);
+  });
+
+  it('produces 100% QC margin when the only item is a revenue item with no commissions', () => {
+    const noCommConfig: ProgramConfig = {
+      ...BASE_CONFIG, ccProcessingFee: 0, clientCommission: 0, gdpCommissionEnabled: false,
+    };
+    const input: VenueEstimateInput = {
+      name: 'Test', fbMinimum: 0, isVenueTaxable: false,
+      serviceCharge: 0, gratuity: 0, adminFee: 0, lineItems: [revenueItem],
+    };
+    const summary = calculateVenueEstimate(input, noCommConfig);
+    const margin = calculateMarginAnalysis(summary, noCommConfig, TEAM_HOURS_TIERS, 0);
+    expect(margin.totalVendorCosts).toBe(0);
+    expect(margin.qcMarginPct).toBeCloseTo(1.0);
+  });
+});
+
 // ─── Venue Estimate (Excel validation) ───────────────────
 
 describe('calculateVenueEstimate', () => {

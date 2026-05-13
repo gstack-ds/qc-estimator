@@ -6,6 +6,7 @@ import {
   itemClientCost,
   buildSummaryRows,
   buildCopyText,
+  buildDetailedCopyText,
 } from '../../src/lib/utils/export';
 import type { LineItemForExport, MarkupForExport } from '../../src/lib/utils/export';
 import type { EstimateSummary } from '../../src/types';
@@ -223,6 +224,133 @@ describe('buildSummaryRows (av)', () => {
     const rows = buildSummaryRows(summary, 'av', [], MARKUPS);
     const labels = rows.map((r) => r.label);
     expect(labels).toEqual(['AV Equipment', 'Labor & Fees', 'Tax', 'Production Fee']);
+  });
+});
+
+// ─── buildDetailedCopyText ───────────────────────────────
+
+describe('buildDetailedCopyText', () => {
+  it('starts with estimate name in caps', () => {
+    const text = buildDetailedCopyText([], makeSummary(), 50, 'Spring Gala');
+    expect(text.split('\n')[0]).toBe('SPRING GALA');
+  });
+
+  it('second line is blank', () => {
+    const text = buildDetailedCopyText([], makeSummary(), 50, 'Test');
+    expect(text.split('\n')[1]).toBe('');
+  });
+
+  it('third line is the 5-column header', () => {
+    const text = buildDetailedCopyText([], makeSummary(), 50, 'Test');
+    expect(text.split('\n')[2]).toBe('Item\tQty\tUnit Price\tOur Cost\tClient Cost');
+  });
+
+  it('shows section name above item rows', () => {
+    const items: LineItemForExport[] = [
+      { name: 'Chicken Dinner', section: 'F&B', qty: 10, unitPrice: 50, categoryMarkupPct: 0.55, categoryId: 'markup-catering', taxType: 'food' },
+    ];
+    const text = buildDetailedCopyText(items, makeSummary(), 50, 'Test');
+    expect(text).toContain('F&B');
+  });
+
+  it('shows individual item row with correct values', () => {
+    const items: LineItemForExport[] = [
+      { name: 'Chicken Dinner', section: 'F&B', qty: 10, unitPrice: 50, categoryMarkupPct: 0.55, categoryId: 'markup-catering', taxType: 'food' },
+    ];
+    // ourCost = 10 * 50 = 500, clientCost = 10 * 50 * 1.55 = 775
+    const text = buildDetailedCopyText(items, makeSummary(), 50, 'Test');
+    expect(text).toContain('Chicken Dinner\t10\t$50.00\t$500.00\t$775.00');
+  });
+
+  it('shows section subtotal row with our cost and client cost sums', () => {
+    const items: LineItemForExport[] = [
+      { name: 'Item A', section: 'F&B', qty: 1, unitPrice: 100, categoryMarkupPct: 0.55, categoryId: 'markup-catering', taxType: 'food' },
+      { name: 'Item B', section: 'F&B', qty: 2, unitPrice: 50, categoryMarkupPct: 0.55, categoryId: 'markup-catering', taxType: 'food' },
+    ];
+    // ourCost: 100 + 100 = 200, clientCost: 155 + 155 = 310
+    const text = buildDetailedCopyText(items, makeSummary(), 50, 'Test');
+    expect(text).toContain('F&B Total\t\t\t$200.00\t$310.00');
+  });
+
+  it('groups items into separate sections', () => {
+    const items: LineItemForExport[] = [
+      { name: 'Food Item', section: 'F&B', qty: 1, unitPrice: 100, categoryMarkupPct: 0.55, categoryId: 'markup-catering', taxType: 'food' },
+      { name: 'Equipment', section: 'Equipment & Staffing', qty: 1, unitPrice: 200, categoryMarkupPct: 0.65, categoryId: 'markup-av', taxType: 'general' },
+    ];
+    const text = buildDetailedCopyText(items, makeSummary(), 50, 'Test');
+    expect(text).toContain('F&B Total');
+    expect(text).toContain('Equipment & Staffing Total');
+  });
+
+  it('shows Service Charge, Gratuity, Admin Fee when > 0', () => {
+    const summary = makeSummary({ serviceChargeClient: 700, gratuityClient: 350, adminFeeClient: 175 });
+    const text = buildDetailedCopyText([], summary, 50, 'Test');
+    expect(text).toContain('Service Charge\t\t\t\t$700.00');
+    expect(text).toContain('Gratuity\t\t\t\t$350.00');
+    expect(text).toContain('Admin Fee\t\t\t\t$175.00');
+  });
+
+  it('omits Service Charge, Gratuity, Admin Fee when 0', () => {
+    const summary = makeSummary({ serviceChargeClient: 0, gratuityClient: 0, adminFeeClient: 0 });
+    const text = buildDetailedCopyText([], summary, 50, 'Test');
+    expect(text).not.toContain('Service Charge');
+    expect(text).not.toContain('Gratuity');
+    expect(text).not.toContain('Admin Fee');
+  });
+
+  it('shows Production Fee when > 0', () => {
+    const summary = makeSummary({ productionFee: 500 });
+    const text = buildDetailedCopyText([], summary, 50, 'Test');
+    expect(text).toContain('Production Fee\t\t\t\t$500.00');
+  });
+
+  it('shows Tax when > 0', () => {
+    const summary = makeSummary({ foodTax: 362, alcoholTax: 145 });
+    const text = buildDetailedCopyText([], summary, 50, 'Test');
+    expect(text).toContain('Tax\t\t\t\t$507.00');
+  });
+
+  it('shows TOTAL ESTIMATE and Price PP', () => {
+    const summary = makeSummary({ totalClient: 15000 });
+    const text = buildDetailedCopyText([], summary, 50, 'Test');
+    expect(text).toContain('TOTAL ESTIMATE\t\t\t\t$15,000.00');
+    expect(text).toContain('Price PP\t\t\t\t$300.00');  // ceil(15000/50)
+  });
+
+  it('shows ourCost as $0 for revenue items and clientCost as qty × unitPrice', () => {
+    const items: LineItemForExport[] = [
+      {
+        name: 'Coordinator Fee', section: 'Non-Taxable Staffing', qty: 1, unitPrice: 500,
+        categoryMarkupPct: 0.9, categoryId: STAFFING_MARKUP_ID, taxType: 'none',
+        isRevenueItem: true,
+      },
+    ];
+    // isRevenue: ourCost = 0, clientCost = 1 * 500 = 500
+    const text = buildDetailedCopyText(items, makeSummary(), 50, 'Test');
+    expect(text).toContain('Coordinator Fee\t1\t$500.00\t$0.00\t$500.00');
+  });
+
+  it('revenue item section subtotal excludes ourCost', () => {
+    const items: LineItemForExport[] = [
+      {
+        name: 'Coordinator Fee', section: 'Non-Taxable Staffing', qty: 2, unitPrice: 500,
+        categoryMarkupPct: 0.9, categoryId: STAFFING_MARKUP_ID, taxType: 'none',
+        isRevenueItem: true,
+      },
+    ];
+    // ourCostSum = 0, clientCostSum = 2 * 500 = 1000
+    const text = buildDetailedCopyText(items, makeSummary(), 50, 'Test');
+    expect(text).toContain('Non-Taxable Staffing Total\t\t\t$0.00\t$1,000.00');
+  });
+
+  it('filters out items with qty=0 or unitPrice=0', () => {
+    const items: LineItemForExport[] = [
+      { name: 'Zero Qty', section: 'F&B', qty: 0, unitPrice: 100, categoryMarkupPct: 0.55, categoryId: 'markup-catering', taxType: 'food' },
+      { name: 'Zero Price', section: 'F&B', qty: 5, unitPrice: 0, categoryMarkupPct: 0.55, categoryId: 'markup-catering', taxType: 'food' },
+    ];
+    const text = buildDetailedCopyText(items, makeSummary(), 50, 'Test');
+    expect(text).not.toContain('Zero Qty');
+    expect(text).not.toContain('Zero Price');
   });
 });
 
