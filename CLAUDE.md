@@ -191,6 +191,7 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-05-12 | Leads list: flat start_date-sorted list replaces scan-batch grouping | Alex (end user) wants events sorted by start date, not grouped by when the scanner ingested them. Scan batch grouping was an implementation detail that leaked into the UI. NEW badge (24h rolling window, copper pill) + "N new today" toggle button replace section headers for new-lead visibility. Sort applies universally — no isManual branch. | Keep scan batch groups with sort option (rejected — confusing to users), dot/badge only with no filter shortcut (rejected — no quick access to today's leads) |
 | 2026-05-13 | isRevenueItem flag on LineItem: ourCost=0, clientCost=qty×unitPrice (no markup) | Coordinator Fee and similar QC-owned fees have no vendor. Setting ourCost=0 naturally excludes them from totalVendorCosts in margin analysis — no special margin logic needed. | Separate margin deduction path (more code, same result) |
 | 2026-05-13 | Copy Numbers now uses buildDetailedCopyText (per-item rows + section subtotals) | Team uses Copy Numbers output for invoicing — they need individual line items, not grouped category totals. buildCopyText (grouped) is kept for potential future use. | Modify in-place (would break existing behavior); remove old function (might be needed later) |
+| 2026-05-13 | Show Math toggle: showMath state lives in each builder, SummaryMathRates passed to panels | Math display is purely presentational; no new engine logic needed. SummaryMathRates carries rate data the builder already owns (fee overrides, programConfig rates). Panels back-calculate nothing — they receive rates and display formulas. MarginPanel derives totalClient from existing margin fields. | Context (prop drilling past 2 levels avoided by passing rates object); per-row expand/collapse (toggle-all is simpler for an internal audit tool) |
 
 ## Gotchas Log
 
@@ -237,6 +238,7 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Leads list: replaced scan-batch grouping with flat start_date-sorted list; sort is universal (no isManual branch); NEW badge (copper pill, 24h rolling) inline next to client name; "N new today" toggle button in tab bar filters to recent leads
 - [x] Revenue item flag (is_revenue_item): migration 021, isRevenueItem on LineItem/LocalLineItem, ourCost=0 in engine, "Rev/Rev ✓" toggle in LineItemRow — 5 new pricing tests (144 total)
 - [x] Copy Numbers now exports per-item detail: item name, qty, unit price, our cost, client cost; section subtotals; then summary fees + total — 13 new export tests
+- [x] Show Math toggle on all three builders: per-item formulas (our cost, markup, client cost), summary panel rate/base formulas, margin panel revenue/margin/true-net derivations
 
 ### Remaining
 - [ ] **Run `npm run dedup`** to clean up any duplicate leads created before the dedup logic was in place
@@ -254,3 +256,4 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - Scanner deployment is the top priority — see Remaining above for exact steps.
 - Consider running the optional DB backfill to populate gdp_advisor/gdp_coordinator/third_party/lead_source_type for existing rows.
 - After scanner is live and backfill is run, real-proposal validation is the best next feature step.
+- Show Math toggle is live on all three builders (venue/AV/decor). No further work needed unless the team has feedback after trying it.
