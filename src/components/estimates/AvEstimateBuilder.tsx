@@ -413,6 +413,16 @@ export default function AvEstimateBuilder({
           {/* Attachments */}
           <AttachmentsPanel estimateId={estimate.id} estimateType="av" onPopulateLineItems={handlePopulateFromExtraction} />
 
+          {/* Guest count mismatch banner */}
+          {program.guest_count > 0 && lineItems.filter((li) => li.qty > 0 && li.qty !== program.guest_count).length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-md px-4 py-2 text-sm text-amber-800">
+              {(() => {
+                const n = lineItems.filter((li) => li.qty > 0 && li.qty !== program.guest_count).length;
+                return `⚠ ${n} line item${n !== 1 ? 's have' : ' has'} a different quantity than the event guest count (${program.guest_count})`;
+              })()}
+            </div>
+          )}
+
           {/* Line item sections */}
           <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-6">
             {AV_SECTIONS.map(({ name: sectionName, label, taxType }) => (
@@ -423,6 +433,7 @@ export default function AvEstimateBuilder({
                 items={lineItems.filter((li) => li.section === sectionName)}
                 markups={markups}
                 defaultTaxType={taxType}
+                guestCount={program.guest_count}
                 onChange={(id, patch) => {
                   handleItemChange(id, patch);
                   if (patch.categoryId !== undefined || patch.taxType !== undefined) {

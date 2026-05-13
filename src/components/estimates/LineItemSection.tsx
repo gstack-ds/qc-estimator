@@ -15,6 +15,7 @@ interface Props {
   markups: DbMarkup[];
   location: Location | null;
   defaultTaxType: TaxType;
+  guestCount?: number;
   onChange: (id: string, patch: Partial<LocalLineItem>) => void;
   onBlur: (id: string) => void;
   onDelete: (id: string) => void;
@@ -38,7 +39,7 @@ const SECTION_LABELS: Record<string, string> = {
   'Rentals - Non-Taxable': 'Non-Taxable Rental Fees',
 };
 
-export default function LineItemSection({ section, label, items, markups, location, defaultTaxType, onChange, onBlur, onDelete, onAdd, onAddFromTemplate, onSaveAsTemplate, showMath }: Props) {
+export default function LineItemSection({ section, label, items, markups, location, defaultTaxType, guestCount, onChange, onBlur, onDelete, onAdd, onAddFromTemplate, onSaveAsTemplate, showMath }: Props) {
   const isFB = section === 'F&B';
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
@@ -83,6 +84,7 @@ export default function LineItemSection({ section, label, items, markups, locati
               markups={markups}
               location={location}
               showTaxToggle={isFB}
+              guestCount={guestCount}
               onChange={onChange}
               onBlur={onBlur}
               onDelete={onDelete}

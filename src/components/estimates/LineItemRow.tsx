@@ -10,6 +10,7 @@ interface Props {
   markups: DbMarkup[];
   location: Location | null;
   showTaxToggle: boolean;  // only for F&B section
+  guestCount?: number;
   onChange: (id: string, patch: Partial<LocalLineItem>) => void;
   onBlur: (id: string) => void;
   onDelete: (id: string) => void;
@@ -43,7 +44,7 @@ function fmtM(v: number) {
 
 const inputClass = 'border border-brand-cream rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper focus:border-brand-brown bg-white text-brand-charcoal w-full';
 
-export default function LineItemRow({ item, markups, location, showTaxToggle, onChange, onBlur, onDelete, onSaveAsTemplate, showMath }: Props) {
+export default function LineItemRow({ item, markups, location, showTaxToggle, guestCount, onChange, onBlur, onDelete, onSaveAsTemplate, showMath }: Props) {
   const [savedTemplate, setSavedTemplate] = useState(false);
   const isCustom = item.categoryId === 'custom';
   const isRevenue = item.isRevenueItem === true;
@@ -56,6 +57,7 @@ export default function LineItemRow({ item, markups, location, showTaxToggle, on
 
   const markupOverridden = !isCustom && item.categoryMarkupPct !== item.defaultMarkupPct;
   const markupDisplayPct = parseFloat((item.categoryMarkupPct * 100).toFixed(2));
+  const showQtyWarning = (guestCount ?? 0) > 0 && item.qty > 0 && item.qty !== guestCount;
 
   function handleCategoryChange(categoryId: string) {
     if (categoryId === 'custom') {
@@ -124,16 +126,26 @@ export default function LineItemRow({ item, markups, location, showTaxToggle, on
       </div>
 
       {/* Qty */}
-      <input
-        type="number"
-        min="0"
-        step="1"
-        value={item.qty === 0 ? '' : item.qty}
-        onChange={(e) => onChange(item.id, { qty: parseFloat(e.target.value) || 0 })}
-        onBlur={() => onBlur(item.id)}
-        className={inputClass + ' text-right'}
-        placeholder="1"
-      />
+      <div className="relative">
+        <input
+          type="number"
+          min="0"
+          step="1"
+          value={item.qty === 0 ? '' : item.qty}
+          onChange={(e) => onChange(item.id, { qty: parseFloat(e.target.value) || 0 })}
+          onBlur={() => onBlur(item.id)}
+          className={inputClass + ' text-right' + (showQtyWarning ? ' border-amber-400 bg-amber-50' : '')}
+          placeholder="1"
+        />
+        {showQtyWarning && (
+          <span
+            className="absolute -top-1.5 -right-1.5 text-amber-500 text-[11px] leading-none pointer-events-none select-none"
+            title={`Qty (${item.qty}) differs from event guest count (${guestCount})`}
+          >
+            ⚠
+          </span>
+        )}
+      </div>
 
       {/* Unit price (our cost) */}
       <div className="relative">
