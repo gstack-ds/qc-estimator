@@ -251,7 +251,6 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- Run migration 021 in Supabase production: `ALTER TABLE estimate_line_items ADD COLUMN IF NOT EXISTS is_revenue_item BOOLEAN NOT NULL DEFAULT FALSE`
 - Scanner deployment is the top priority — see Remaining above for exact steps.
 - Consider running the optional DB backfill to populate gdp_advisor/gdp_coordinator/third_party/lead_source_type for existing rows.
 - After scanner is live and backfill is run, real-proposal validation is the best next feature step.
