@@ -20,6 +20,7 @@ interface Props {
   onAdd: (section: LocalSection, taxType: TaxType) => void;
   onAddFromTemplate?: (section: LocalSection, template: DbTemplate) => void;
   onSaveAsTemplate?: (id: string) => Promise<void>;
+  showMath?: boolean;
 }
 
 const SECTION_LABELS: Record<string, string> = {
@@ -36,7 +37,7 @@ const SECTION_LABELS: Record<string, string> = {
   'Rentals - Non-Taxable': 'Non-Taxable Rental Fees',
 };
 
-export default function LineItemSection({ section, label, items, markups, defaultTaxType, onChange, onBlur, onDelete, onAdd, onAddFromTemplate, onSaveAsTemplate }: Props) {
+export default function LineItemSection({ section, label, items, markups, defaultTaxType, onChange, onBlur, onDelete, onAdd, onAddFromTemplate, onSaveAsTemplate, showMath }: Props) {
   const isFB = section === 'F&B';
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
@@ -83,6 +84,7 @@ export default function LineItemSection({ section, label, items, markups, defaul
               onBlur={onBlur}
               onDelete={onDelete}
               onSaveAsTemplate={onSaveAsTemplate}
+              showMath={showMath}
             />
           </div>
         </div>

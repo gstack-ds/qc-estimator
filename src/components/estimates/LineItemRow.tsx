@@ -13,6 +13,7 @@ interface Props {
   onBlur: (id: string) => void;
   onDelete: (id: string) => void;
   onSaveAsTemplate?: (id: string) => Promise<void>;
+  showMath?: boolean;
 }
 
 function fmt(val: number) {
@@ -20,9 +21,13 @@ function fmt(val: number) {
   return '$' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function fmtM(v: number) {
+  return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 const inputClass = 'border border-brand-cream rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper focus:border-brand-brown bg-white text-brand-charcoal w-full';
 
-export default function LineItemRow({ item, markups, showTaxToggle, onChange, onBlur, onDelete, onSaveAsTemplate }: Props) {
+export default function LineItemRow({ item, markups, showTaxToggle, onChange, onBlur, onDelete, onSaveAsTemplate, showMath }: Props) {
   const [savedTemplate, setSavedTemplate] = useState(false);
   const isCustom = item.categoryId === 'custom';
   const isRevenue = item.isRevenueItem === true;
@@ -66,7 +71,8 @@ export default function LineItemRow({ item, markups, showTaxToggle, onChange, on
   }
 
   return (
-    <div className="grid items-center gap-2 py-1.5 border-b border-brand-cream/40 last:border-0" style={{ gridTemplateColumns: '2fr 60px 90px 130px 60px 80px 80px 20px 20px' }}>
+    <div className="border-b border-brand-cream/40 last:border-0">
+    <div className="grid items-center gap-2 py-1.5" style={{ gridTemplateColumns: '2fr 60px 90px 130px 60px 80px 80px 20px 20px' }}>
       {/* Name + Label + Revenue toggle */}
       <div className="flex flex-col gap-0.5">
         <input
@@ -208,6 +214,17 @@ export default function LineItemRow({ item, markups, showTaxToggle, onChange, on
       >
         ×
       </button>
+    </div>
+    {showMath && item.qty > 0 && item.unitPrice > 0 && (
+      <div className="text-[11px] text-brand-silver/60 pb-1 px-1.5 -mt-0.5">
+        {isRevenue
+          ? `Revenue item — vendor cost $0 · client cost: ${item.qty} × $${fmtM(item.unitPrice)} = $${fmtM(clientCost)}`
+          : isCustom
+            ? `Our cost: ${item.qty} × $${fmtM(item.unitPrice)} = $${fmtM(ourCost)} · Custom price: $${fmtM(item.customClientUnitPrice ?? 0)}/unit × ${item.qty} = $${fmtM(clientCost)}`
+            : `Our cost: ${item.qty} × $${fmtM(item.unitPrice)} = $${fmtM(ourCost)} · Markup ${markupDisplayPct}%${markupOverridden ? ` (overridden from ${(item.defaultMarkupPct * 100).toFixed(0)}%)` : ''} → client cost: $${fmtM(clientCost)}`
+        }
+      </div>
+    )}
     </div>
   );
 }

@@ -167,6 +167,7 @@ export default function DecorEstimateBuilder({
   const [saveError, setSaveError] = useState<string | null>(null);
   const savingRef = useRef(0);
   const [travelExpenses, setTravelExpenses] = useState(0);
+  const [showMath, setShowMath] = useState(false);
 
   // ─── Engine ─────────────────────────────────────────────
 
@@ -190,6 +191,17 @@ export default function DecorEstimateBuilder({
     () => calculateMarginAnalysis(summary, programConfig, tiersList, travelExpenses),
     [summary, programConfig, tiersList, travelExpenses]
   );
+
+  const mathRates = useMemo(() => ({
+    serviceChargeRate: 0,
+    gratuityRate: 0,
+    adminFeeRate: 0,
+    ccProcessingFee: programConfig.ccProcessingFee,
+    clientCommissionRate: programConfig.clientCommission,
+    foodTaxRate: programConfig.location.foodTaxRate,
+    alcoholTaxRate: programConfig.location.alcoholTaxRate,
+    generalTaxRate: programConfig.location.generalTaxRate,
+  }), [programConfig]);
 
   // Sub-section client totals for summary panel breakdown
   const floralTaxableClient = useMemo(() => subtotalClient(lineItems, 'Florals - Taxable'), [lineItems]);
@@ -459,6 +471,7 @@ export default function DecorEstimateBuilder({
               onAdd={handleAddItem}
               onAddFromTemplate={handleAddFromTemplate}
               onSaveAsTemplate={handleSaveAsTemplate}
+              showMath={showMath}
             />
           </div>
         )}
@@ -489,6 +502,12 @@ export default function DecorEstimateBuilder({
             onImport={handleImportItems}
           />
           <ExportButtons programId={program.id} programName={program.name} estimateName={name} summary={summary} guestCount={program.guest_count} estimateType="decor" lineItems={lineItems} markups={markups} />
+          <button
+            onClick={() => setShowMath(v => !v)}
+            className={`text-xs px-2.5 py-1 rounded border transition-colors ${showMath ? 'border-brand-copper/60 bg-brand-offwhite text-brand-brown' : 'border-brand-cream bg-white text-brand-charcoal/70 hover:text-brand-charcoal hover:bg-brand-offwhite'}`}
+          >
+            {showMath ? 'Hide Math' : 'Show Math'}
+          </button>
           <div className="text-xs">
             {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
             {saveState === 'saved' && <span className="text-green-600">Saved</span>}
@@ -559,8 +578,10 @@ export default function DecorEstimateBuilder({
             floralNonTaxableClient={floralNonTaxableClient}
             rentalsTaxableClient={rentalsTaxableClient}
             rentalsNonTaxableClient={rentalsNonTaxableClient}
+            showMath={showMath}
+            mathRates={mathRates}
           />
-          <MarginPanel margin={marginAnalysis} />
+          <MarginPanel margin={marginAnalysis} showMath={showMath} />
         </div>
       </div>
     </div>

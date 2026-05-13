@@ -135,6 +135,19 @@ export interface MarginAnalysis {
   trueNetHealth: NetHealth;
 }
 
+// ─── Show Math rates (passed to summary panels for formula display) ──────────
+
+export interface SummaryMathRates {
+  serviceChargeRate: number;
+  gratuityRate: number;
+  adminFeeRate: number;
+  ccProcessingFee: number;
+  clientCommissionRate: number;
+  foodTaxRate: number;
+  alcoholTaxRate: number;
+  generalTaxRate: number;
+}
+
 // ─── Comparison ──────────────────────────────────────────
 
 export interface ScenarioComparison {

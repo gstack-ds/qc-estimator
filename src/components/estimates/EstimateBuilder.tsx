@@ -191,6 +191,7 @@ export default function EstimateBuilder({
   const [saveError, setSaveError] = useState<string | null>(null);
   const savingRef = useRef(0);
   const [travelExpenses, setTravelExpenses] = useState(0);
+  const [showMath, setShowMath] = useState(false);
 
   const [linkedVenueId, setLinkedVenueId] = useState<string | null>(estimate.venue_id);
   const [linkedSpaceId, setLinkedSpaceId] = useState<string | null>(estimate.venue_space_id);
@@ -275,6 +276,17 @@ export default function EstimateBuilder({
     () => calculateMarginAnalysis(summary, programConfig, tiersList, travelExpenses),
     [summary, programConfig, tiersList, travelExpenses]
   );
+
+  const mathRates = useMemo(() => ({
+    serviceChargeRate: resolveOverride(est.serviceChargeOverride, program.service_charge_default),
+    gratuityRate: resolveOverride(est.gratuityOverride, program.gratuity_default),
+    adminFeeRate: resolveOverride(est.adminFeeOverride, program.admin_fee_default),
+    ccProcessingFee: programConfig.ccProcessingFee,
+    clientCommissionRate: programConfig.clientCommission,
+    foodTaxRate: programConfig.location.foodTaxRate,
+    alcoholTaxRate: programConfig.location.alcoholTaxRate,
+    generalTaxRate: programConfig.location.generalTaxRate,
+  }), [est, program, programConfig]);
 
   // ─── Cache total (debounced 2s) ───────────────────────────
 
@@ -580,6 +592,12 @@ export default function EstimateBuilder({
             onImport={handleImportItems}
           />
           <ExportButtons programId={program.id} programName={program.name} estimateName={est.name} summary={summary} guestCount={program.guest_count} lineItems={lineItems} markups={markups} />
+          <button
+            onClick={() => setShowMath(v => !v)}
+            className={`text-xs px-2.5 py-1 rounded border transition-colors ${showMath ? 'border-brand-copper/60 bg-brand-offwhite text-brand-brown' : 'border-brand-cream bg-white text-brand-charcoal/70 hover:text-brand-charcoal hover:bg-brand-offwhite'}`}
+          >
+            {showMath ? 'Hide Math' : 'Show Math'}
+          </button>
           <div className="text-xs flex items-center gap-3">
             {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
             {saveState === 'saved' && <span className="text-green-600">Saved</span>}
@@ -774,6 +792,7 @@ export default function EstimateBuilder({
                 onAdd={handleAddItem}
                 onAddFromTemplate={handleAddFromTemplate}
                 onSaveAsTemplate={handleSaveAsTemplate}
+                showMath={showMath}
               />
             ))}
           </div>
@@ -789,8 +808,8 @@ export default function EstimateBuilder({
 
         {/* Right sidebar — summary + margin */}
         <div className="w-72 flex-shrink-0 border-l border-brand-cream bg-brand-offwhite overflow-y-auto p-4 space-y-4">
-          <SummaryPanel summary={summary} guestCount={program.guest_count} fbMinimum={est.fbMinimum} />
-          <MarginPanel margin={marginAnalysis} />
+          <SummaryPanel summary={summary} guestCount={program.guest_count} fbMinimum={est.fbMinimum} showMath={showMath} mathRates={mathRates} />
+          <MarginPanel margin={marginAnalysis} showMath={showMath} />
         </div>
       </div>
     </div>

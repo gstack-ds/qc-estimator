@@ -133,6 +133,7 @@ export default function AvEstimateBuilder({
   const [saveError, setSaveError] = useState<string | null>(null);
   const savingRef = useRef(0);
   const [travelExpenses, setTravelExpenses] = useState(0);
+  const [showMath, setShowMath] = useState(false);
 
   // ─── Engine ─────────────────────────────────────────────
 
@@ -156,6 +157,17 @@ export default function AvEstimateBuilder({
     () => calculateMarginAnalysis(summary, programConfig, tiersList, travelExpenses),
     [summary, programConfig, tiersList, travelExpenses]
   );
+
+  const mathRates = useMemo(() => ({
+    serviceChargeRate: 0,
+    gratuityRate: 0,
+    adminFeeRate: 0,
+    ccProcessingFee: programConfig.ccProcessingFee,
+    clientCommissionRate: programConfig.clientCommission,
+    foodTaxRate: programConfig.location.foodTaxRate,
+    alcoholTaxRate: programConfig.location.alcoholTaxRate,
+    generalTaxRate: programConfig.location.generalTaxRate,
+  }), [programConfig]);
 
   // ─── Cache total (debounced 2s) ───────────────────────────
 
@@ -365,6 +377,12 @@ export default function AvEstimateBuilder({
             onImport={handleImportItems}
           />
           <ExportButtons programId={program.id} programName={program.name} estimateName={name} summary={summary} guestCount={program.guest_count} estimateType="av" lineItems={lineItems} markups={markups} />
+          <button
+            onClick={() => setShowMath(v => !v)}
+            className={`text-xs px-2.5 py-1 rounded border transition-colors ${showMath ? 'border-brand-copper/60 bg-brand-offwhite text-brand-brown' : 'border-brand-cream bg-white text-brand-charcoal/70 hover:text-brand-charcoal hover:bg-brand-offwhite'}`}
+          >
+            {showMath ? 'Hide Math' : 'Show Math'}
+          </button>
           <div className="text-xs">
             {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
             {saveState === 'saved' && <span className="text-green-600">Saved</span>}
@@ -416,6 +434,7 @@ export default function AvEstimateBuilder({
                 onAdd={handleAddItem}
                 onAddFromTemplate={handleAddFromTemplate}
                 onSaveAsTemplate={handleSaveAsTemplate}
+                showMath={showMath}
               />
             ))}
           </div>
@@ -431,8 +450,8 @@ export default function AvEstimateBuilder({
 
         {/* Right sidebar */}
         <div className="w-72 flex-shrink-0 border-l border-brand-cream bg-brand-offwhite overflow-y-auto p-4 space-y-4">
-          <AvSummaryPanel summary={summary} guestCount={program.guest_count} />
-          <MarginPanel margin={marginAnalysis} />
+          <AvSummaryPanel summary={summary} guestCount={program.guest_count} showMath={showMath} mathRates={mathRates} />
+          <MarginPanel margin={marginAnalysis} showMath={showMath} />
         </div>
       </div>
     </div>

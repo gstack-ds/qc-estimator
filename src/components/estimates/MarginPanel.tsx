@@ -2,6 +2,7 @@ import type { MarginAnalysis } from '@/types';
 
 interface Props {
   margin: MarginAnalysis;
+  showMath?: boolean;
 }
 
 const MARGIN_COLORS: Record<string, string> = {
@@ -25,7 +26,10 @@ function pct(val: number) {
   return (val * 100).toFixed(1) + '%';
 }
 
-export default function MarginPanel({ margin }: Props) {
+export default function MarginPanel({ margin, showMath }: Props) {
+  const totalClient = margin.totalVendorCosts + margin.clientCommissionAmount + margin.gdpCommissionAmount + margin.thirdPartyCommissionsTotal + margin.qcRevenue;
+  const math = (s: string) => showMath ? <div className="text-[11px] text-brand-silver/60 -mt-0.5 pb-0.5">{s}</div> : null;
+
   return (
     <div className="bg-brand-cream border border-brand-copper/30 rounded-lg p-4 space-y-3">
       <div>
@@ -42,6 +46,7 @@ export default function MarginPanel({ margin }: Props) {
           <span>Vendor Costs</span>
           <span className="tabular-nums">{fmt(margin.totalVendorCosts)}</span>
         </div>
+        {math('Sum of vendor unit costs (revenue items excluded)')}
         <div className="flex justify-between text-brand-charcoal/70">
           <span>Client Commission ({pct(margin.clientCommissionAmount / (margin.qcRevenue + margin.clientCommissionAmount + margin.gdpCommissionAmount + margin.totalVendorCosts || 1))})</span>
           <span className="tabular-nums">{fmt(margin.clientCommissionAmount)}</span>
@@ -63,6 +68,7 @@ export default function MarginPanel({ margin }: Props) {
           <span>QC Revenue</span>
           <span className="tabular-nums">{margin.qcRevenue < 0 ? '-' : ''}{fmt(margin.qcRevenue)}</span>
         </div>
+        {math(`$${fmt(totalClient)} total − $${fmt(margin.totalVendorCosts)} costs − $${fmt(margin.clientCommissionAmount + margin.gdpCommissionAmount + margin.thirdPartyCommissionsTotal)} commissions`)}
 
         <div className="flex items-center justify-between">
           <span className="text-brand-charcoal/70">QC Margin</span>
@@ -73,6 +79,7 @@ export default function MarginPanel({ margin }: Props) {
             </span>
           </div>
         </div>
+        {math(`$${fmt(margin.qcRevenue)} ÷ $${fmt(totalClient)} total`)}
       </div>
 
       <div className="border-t border-brand-copper/20 pt-3 space-y-1.5 text-sm">
@@ -85,6 +92,7 @@ export default function MarginPanel({ margin }: Props) {
           <span>OpEx Estimate</span>
           <span className="tabular-nums">{fmt(margin.opExEstimate)}</span>
         </div>
+        {math(`${margin.estimatedTeamHours} hrs × $90/hr`)}
         {margin.travelExpenses > 0 && (
           <div className="flex justify-between text-brand-charcoal/70">
             <span>Travel</span>
@@ -100,6 +108,7 @@ export default function MarginPanel({ margin }: Props) {
             </span>
           </div>
         </div>
+        {math(`$${fmt(margin.qcRevenue)} QC Revenue − $${fmt(margin.opExEstimate)} OpEx${margin.travelExpenses > 0 ? ` − $${fmt(margin.travelExpenses)} travel` : ''}`)}
       </div>
     </div>
   );

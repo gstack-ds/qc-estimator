@@ -1,8 +1,17 @@
-import type { EstimateSummary } from '@/types';
+import type { EstimateSummary, SummaryMathRates } from '@/types';
 
 interface Props {
   summary: EstimateSummary;
   guestCount: number;
+  showMath?: boolean;
+  mathRates?: SummaryMathRates;
+}
+
+function fmtM(v: number) {
+  return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function pctM(rate: number) {
+  return +(rate * 100).toFixed(2) + '%';
 }
 
 function fmt(val: number) {
@@ -13,25 +22,31 @@ function fmtPP(val: number) {
   return val === 0 ? '—' : '$' + val.toLocaleString('en-US');
 }
 
-function Row({ label, value, pp, bold, indent, dim }: {
+function Row({ label, value, pp, bold, indent, dim, math, showMath }: {
   label: string; value: number; pp?: number; bold?: boolean; indent?: boolean; dim?: boolean;
+  math?: string; showMath?: boolean;
 }) {
   if (value === 0 && !bold) return null;
   return (
-    <div className={`flex justify-between py-1 text-sm ${
-      bold
-        ? 'font-semibold border-t border-brand-cream mt-1 pt-2 text-brand-charcoal'
-        : dim
-        ? 'text-brand-silver'
-        : 'text-brand-charcoal/80'
-    } ${indent ? 'pl-3' : ''}`}>
-      <span>{label}</span>
-      <div className="text-right">
-        <span className="tabular-nums">{fmt(value)}</span>
-        {pp !== undefined && pp > 0 && (
-          <span className="text-xs text-brand-silver ml-2 tabular-nums">{fmtPP(pp)}/pp</span>
-        )}
+    <div>
+      <div className={`flex justify-between py-1 text-sm ${
+        bold
+          ? 'font-semibold border-t border-brand-cream mt-1 pt-2 text-brand-charcoal'
+          : dim
+          ? 'text-brand-silver'
+          : 'text-brand-charcoal/80'
+      } ${indent ? 'pl-3' : ''}`}>
+        <span>{label}</span>
+        <div className="text-right">
+          <span className="tabular-nums">{fmt(value)}</span>
+          {pp !== undefined && pp > 0 && (
+            <span className="text-xs text-brand-silver ml-2 tabular-nums">{fmtPP(pp)}/pp</span>
+          )}
+        </div>
       </div>
+      {showMath && math && (
+        <div className="text-[11px] text-brand-silver/60 pl-3 -mt-0.5 pb-0.5">{math}</div>
+      )}
     </div>
   );
 }
@@ -40,8 +55,9 @@ function Divider() {
   return <div className="border-t border-brand-cream/60 my-1.5" />;
 }
 
-export default function AvSummaryPanel({ summary, guestCount }: Props) {
+export default function AvSummaryPanel({ summary, guestCount, showMath, mathRates }: Props) {
   const pp = (val: number) => guestCount > 0 ? Math.ceil(val / guestCount) : 0;
+  const markupRevenue = summary.subtotalClient - summary.equipmentTax;
 
   return (
     <div className="bg-white border border-brand-cream rounded-lg p-4 space-y-0.5">
@@ -50,20 +66,24 @@ export default function AvSummaryPanel({ summary, guestCount }: Props) {
       </h3>
 
       {/* Taxable AV */}
-      <Row label="Taxable AV Equipment" value={summary.equipmentSubtotalClient} pp={pp(summary.equipmentSubtotalClient)} />
-      <Row label="Sales Tax" value={summary.equipmentTax} indent dim />
+      <Row label="Taxable AV Equipment" value={summary.equipmentSubtotalClient} pp={pp(summary.equipmentSubtotalClient)} showMath={showMath} />
+      <Row label="Sales Tax" value={summary.equipmentTax} indent dim showMath={showMath}
+        math={mathRates ? `$${fmtM(summary.equipmentSubtotalClient)} × ${pctM(mathRates.generalTaxRate)}` : undefined}
+      />
 
       <Divider />
 
       {/* Non-Taxable AV */}
-      <Row label="Non-Taxable AV Labor" value={summary.qcStaffingSubtotalClient} pp={pp(summary.qcStaffingSubtotalClient)} />
+      <Row label="Non-Taxable AV Labor" value={summary.qcStaffingSubtotalClient} pp={pp(summary.qcStaffingSubtotalClient)} showMath={showMath} />
 
       <Divider />
 
       {/* Totals */}
-      <Row label="Subtotal" value={summary.subtotalClient} bold />
-      <Row label="Production Fee" value={summary.productionFee} />
-      <Row label="Total Estimate" value={summary.totalClient} bold pp={pp(summary.totalClient)} />
+      <Row label="Subtotal" value={summary.subtotalClient} bold showMath={showMath} />
+      <Row label="Production Fee" value={summary.productionFee} showMath={showMath}
+        math={mathRates ? `$${fmtM(summary.subtotalClient)} × ${pctM(mathRates.ccProcessingFee)} CC + $${fmtM(markupRevenue)} × ${pctM(mathRates.clientCommissionRate)} commission` : undefined}
+      />
+      <Row label="Total Estimate" value={summary.totalClient} bold pp={pp(summary.totalClient)} showMath={showMath} />
     </div>
   );
 }
