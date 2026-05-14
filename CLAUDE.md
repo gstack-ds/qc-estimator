@@ -254,20 +254,19 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Mobile responsive pass: MobileNav hamburger (layout.tsx), LeadsList card view (md:hidden), programs list/detail overflow fixes
 - [x] Historical leads backfill migration: 022_backfill_migration_020_columns.sql — normalizes source_advisor/source_coordinator/third_party_company/lead_source → new 020 UI columns for existing rows
 - [x] Proposal validation tests: tests/unit/proposal-validation.test.ts — 3 scenarios, 20 tests, engine-computed expected values with TODO markers for Excel verification
+- [x] Migration 022 run in production — gdp_advisor, gdp_coordinator, third_party, lead_source_type backfilled for all historical leads
+- [x] PM2 scanner deployed and confirmed working on Gary's PC — fires at 7am, 11am, 2pm, 4pm ET; logs show successful scans
+- [x] Scan Now button confirmed working in production — Vercel env vars for Gmail and Anthropic are set
+- [x] All leads features shipped: inline editing, lead detail, lead-to-program linking, status tabs, flat start_date sort, NEW badges, date range filter, archive old, delete, 60s auto-poll
+- [x] Mobile responsive: hamburger nav, leads card view on mobile (<768px)
 
 ### Remaining
-- [ ] **Run `npm run dedup`** to clean up any duplicate leads created before the dedup logic was in place
-- [ ] **Run migration 022 in production** to backfill gdp_advisor/gdp_coordinator/third_party/lead_source_type for existing leads (replaces the old manual UPDATE suggestion)
-- [ ] Set up Gmail OAuth credentials + run `npm run auth` to get refresh token for scanner
-- [ ] Deploy scanner daemon to Mac with PM2: `npm run auth` → `npm run build:scanner` → `pm2 start ecosystem.config.js`
-  - Env vars needed: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, NOTIFY_EMAIL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY
-- [ ] After scanner is live: run `npm run backfill` once to import last 12 months of INITIAL LEAD emails
-- [ ] **Validate proposal-validation.test.ts against Excel** — enter the same inputs in QC_Estimate_Template_2026.xlsx, compare to EXPECTED_* values, update if engine has bugs (see tests/unit/proposal-validation.test.ts for the 3 scenarios)
+- [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs
 - [ ] PDF/Canva export — format for client-facing proposals
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- Scanner deployment is the top priority — see Remaining above for exact steps.
-- Run migration 022 in production (Supabase dashboard → SQL editor) to backfill the leads table.
-- Validate proposal-validation.test.ts against Excel — this is the highest-value quality check now that the engine has been through multiple formula changes.
-- Mobile pass is done for leads/programs. Get team feedback before doing further mobile work on estimates pages.
+- Proposal validation against Excel is the highest-value quality check — engine has been through multiple formula changes and needs ground-truth verification.
+- PDF/Canva export is the next major feature for the team.
+- Scanner is live and working. Run `npm run dedup` if duplicate leads accumulate.
+- Estimates/pricing pages are desktop-only by design — no mobile work planned there.
