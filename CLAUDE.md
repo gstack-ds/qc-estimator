@@ -196,6 +196,9 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-05-13 | MarginPanel redesigned as 'use client' waterfall with expandable sections | New formula requires showing individual cost buckets. vendorCosts and commissions are expandable via useState chevron toggles. Requires `summary: EstimateSummary` prop to show section-level vendor cost breakdown (F&B, Equipment, Venue, Staffing). TransportationEstimateBuilder had to extract `fakeSummary` to a separate useMemo to pass it as a prop. | Read-only server component (rejected — can't show expand/collapse without client state) |
 | 2026-05-13 | Tax column in LineItemRow/LineItemSection: passes `location: Location` from programConfig down | Need tax rate + location name per item. `Location` is already in programConfig (available in all three builders). Helper `shortLocationName()` strips state abbrev and parenthetical to fit in 100px column. Two-line display: rate on top, abbreviated name below. | Tooltip-only (rejected — user wanted both visible); separate taxRates object (Location already has all fields needed) |
 | 2026-05-13 | Program P&L panel: buildEstimateCard refactored to buildEstimateData returning {card, pnlRow} | Avoids double engine computation. pnlRow includes billing, vendorCosts, taxes, commissions, qcMargin, marginPct for each budgeted estimate. Panel only renders when include_in_budget estimates exist. | Separate loop re-running engine (wasteful); extending EstimateCard with PnL fields (bloats the card interface used everywhere) |
+| 2026-05-13 | Guest count mismatch warning: amber ⚠ overlay on Qty input + banner above line items | Visual only — team intentionally uses different quantities sometimes. Warning fires when item.qty > 0 && item.qty !== program.guest_count (after effectiveProgram resolution). guestCount threaded as optional prop through LineItemSection → LineItemRow. | Error/blocker (rejected — too aggressive), tooltip-only (rejected — user wanted banner visibility) |
+| 2026-05-13 | Mobile responsive: MobileNav client component, leads card view, programs overflow fix | MobileNav (hamburger, charcoal dropdown) shown on md:hidden; desktop nav hidden on mobile. LeadCard component mirrors table data for mobile. md:hidden card / hidden md:block table pattern. ProgramsTable gets overflow-x-auto + min-w-[600px]. | Separate mobile pages (overkill), table scroll on mobile (unusable with 17 columns) |
+| 2026-05-13 | Proposal validation tests use engine-computed expected values, not Excel ground truth yet | Three scenarios with TODO markers. Tests pass as regression anchors against current engine. Gary validates against Excel to find discrepancies — if Excel differs, EXPECTED_* constants are the bug location. | Hardcode 0 (tests always fail), skip until Excel validation (no regression coverage) |
 
 ## Gotchas Log
 
@@ -219,6 +222,7 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-05-05 | `import 'dotenv/config'` in scanner resolves .env from process.cwd(), not the script dir | PM2 may not set cwd correctly. Use `dotenv.config({ path: path.resolve(__dirname, '..', '.env') })` for reliable resolution. |
 | 2026-05-05 | Client component importing runtime values from queries.ts breaks the build | queries.ts imports server.ts (next/headers) — any runtime import in a client component pulls that chain in. Extract constants with no server deps into a separate file (src/lib/leads/constants.ts) and import from there instead. |
 | 2026-05-05 | Migration 017 + 020 created parallel column sets for the same data | Migration 017 created source_advisor/source_coordinator/third_party_company/lead_source. Migration 020 added gdp_advisor/gdp_coordinator/third_party/lead_source_type as new columns. Both exist in DB. Scanner was writing to old, UI reading from new → data invisible in dropdowns. Fix: writer.ts explicitly maps new cols. Historical rows may need a one-time UPDATE backfill. |
+| 2026-05-13 | Proposal validation EXPECTED_* values: manually computed via algebra, not by running engine | Engine subtotalClient INCLUDES vendor-side taxes (foodTaxOur etc.) per engine code. vendorCostsBase = subtotalOur - vendorTaxesTotal. ccProcessingAmount uses tax-inclusive subtotalClient. Algebraic verify: qcRevenue = markup + markupRevenue*clientComm - gdpComm - thirdParty. Get this wrong and test values look right but aren't. |
 
 ## Current TODOs
 
@@ -246,21 +250,24 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Margin formula fix: new formula (vendorCostsBase + taxes + CC + GDP + thirdParty + qcMargin = totalClient); 8 new tests (152 total); MarginPanel redesigned as waterfall with expandable Vendor Costs and Commissions sections
 - [x] Tax column on all line item tables: shows rate + short location name (100px column); non-taxable items show "Non-taxable"
 - [x] Program P&L panel: collapsible table on program page for all Include-in-Budget estimates; shows billing, vendor costs, taxes, commissions, QC margin, margin% with health colors; totals row at bottom
+- [x] Guest count mismatch warning: amber ⚠ overlay on Qty input + banner above line items in all three builders (visual only, 172 tests passing)
+- [x] Mobile responsive pass: MobileNav hamburger (layout.tsx), LeadsList card view (md:hidden), programs list/detail overflow fixes
+- [x] Historical leads backfill migration: 022_backfill_migration_020_columns.sql — normalizes source_advisor/source_coordinator/third_party_company/lead_source → new 020 UI columns for existing rows
+- [x] Proposal validation tests: tests/unit/proposal-validation.test.ts — 3 scenarios, 20 tests, engine-computed expected values with TODO markers for Excel verification
 
 ### Remaining
 - [ ] **Run `npm run dedup`** to clean up any duplicate leads created before the dedup logic was in place
-- [ ] **Optional backfill**: `UPDATE leads SET gdp_advisor = source_advisor, gdp_coordinator = source_coordinator, third_party = third_party_company, lead_source_type = lead_source WHERE gdp_advisor IS NULL` — populates new UI columns for existing scanner-imported leads (with manual normalization as needed)
+- [ ] **Run migration 022 in production** to backfill gdp_advisor/gdp_coordinator/third_party/lead_source_type for existing leads (replaces the old manual UPDATE suggestion)
 - [ ] Set up Gmail OAuth credentials + run `npm run auth` to get refresh token for scanner
 - [ ] Deploy scanner daemon to Mac with PM2: `npm run auth` → `npm run build:scanner` → `pm2 start ecosystem.config.js`
   - Env vars needed: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, NOTIFY_EMAIL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY
 - [ ] After scanner is live: run `npm run backfill` once to import last 12 months of INITIAL LEAD emails
-- [ ] Validate against 3-5 real historical proposals — compare engine output to Excel for same inputs
+- [ ] **Validate proposal-validation.test.ts against Excel** — enter the same inputs in QC_Estimate_Template_2026.xlsx, compare to EXPECTED_* values, update if engine has bugs (see tests/unit/proposal-validation.test.ts for the 3 scenarios)
 - [ ] PDF/Canva export — format for client-facing proposals
-- [ ] Mobile polish — currently optimized for desktop/tablet only
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
 - Scanner deployment is the top priority — see Remaining above for exact steps.
-- Consider running the optional DB backfill to populate gdp_advisor/gdp_coordinator/third_party/lead_source_type for existing rows.
-- After scanner is live and backfill is run, real-proposal validation is the best next feature step.
-- Three pricing/margin changes from 2026-05-13 session are fully deployed: margin formula fix, Tax column, Program P&L panel. Get team feedback on these before further engine changes.
+- Run migration 022 in production (Supabase dashboard → SQL editor) to backfill the leads table.
+- Validate proposal-validation.test.ts against Excel — this is the highest-value quality check now that the engine has been through multiple formula changes.
+- Mobile pass is done for leads/programs. Get team feedback before doing further mobile work on estimates pages.
