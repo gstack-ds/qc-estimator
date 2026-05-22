@@ -199,6 +199,9 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-05-13 | Guest count mismatch warning: amber ⚠ overlay on Qty input + banner above line items | Visual only — team intentionally uses different quantities sometimes. Warning fires when item.qty > 0 && item.qty !== program.guest_count (after effectiveProgram resolution). guestCount threaded as optional prop through LineItemSection → LineItemRow. | Error/blocker (rejected — too aggressive), tooltip-only (rejected — user wanted banner visibility) |
 | 2026-05-13 | Mobile responsive: MobileNav client component, leads card view, programs overflow fix | MobileNav (hamburger, charcoal dropdown) shown on md:hidden; desktop nav hidden on mobile. LeadCard component mirrors table data for mobile. md:hidden card / hidden md:block table pattern. ProgramsTable gets overflow-x-auto + min-w-[600px]. | Separate mobile pages (overkill), table scroll on mobile (unusable with 17 columns) |
 | 2026-05-13 | Proposal validation tests use engine-computed expected values, not Excel ground truth yet | Three scenarios with TODO markers. Tests pass as regression anchors against current engine. Gary validates against Excel to find discrepancies — if Excel differs, EXPECTED_* constants are the bug location. | Hardcode 0 (tests always fail), skip until Excel validation (no regression coverage) |
+| 2026-05-22 | Client discount: applied after all fees, reduces totalClient and QC margin directly | discountAmount = totalClientPreDiscount × value (percent) or flat value. productionFee is computed on pre-discount subtotalClient — discount does not affect vendor costs or fees. migration 023 adds discount_type + discount_value to estimates. | Apply before productionFee (distorts fee calc), separate discount estimate (extra DB row) |
+| 2026-05-22 | PDF proposal: @react-pdf/renderer with dynamic import inside click handler | Library can't be imported at module level (SSR crash). serverComponentsExternalPackages in next.config.js prevents Next.js from bundling it server-side. Dynamic `import()` inside handleExportPdf loads it only client-side on demand. ProposalDocument called as a function (not JSX) to avoid module-level JSX evaluation inside the dynamic import. | pdf-lib (lower-level, more verbose), server action (can't stream a blob download) |
+| 2026-05-22 | Move line items: SECTION_DEFAULT_TAX record maps each LocalSection to its taxType default | When moving an item to a new section, both section and taxType are updated atomically so the engine re-prices correctly (F&B items use per-item taxType; equipment uses blanket generalTaxRate on the bucket). Selection state is a Set<string> of IDs in each builder; cleared after move completes. | UI-only section rename without taxType update (incorrect pricing); global context for selection (prop drilling depth ≤ 2, not worth context) |
 
 ## Gotchas Log
 
@@ -259,14 +262,17 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Scan Now button confirmed working in production — Vercel env vars for Gmail and Anthropic are set
 - [x] All leads features shipped: inline editing, lead detail, lead-to-program linking, status tabs, flat start_date sort, NEW badges, date range filter, archive old, delete, 60s auto-poll
 - [x] Mobile responsive: hamburger nav, leads card view on mobile (<768px)
+- [x] Client discount: migration 023, engine (discountAmount after all fees), UI toggle + input in all 3 builders, summary panels, margin panel Show Math — 10 new pricing tests (182 total)
+- [x] PDF proposal export: @react-pdf/renderer, ProposalDocument component (header, metadata, line items by section, totals block), ExportButtons "Export Proposal PDF" button with dynamic import
+- [x] Move line items between categories: checkboxes on rows, action bar with section dropdown, SECTION_DEFAULT_TAX for taxType update on move — all 3 builders
 
 ### Remaining
 - [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs
-- [ ] PDF/Canva export — format for client-facing proposals
+- [ ] **Run migration 023 in production** — `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS discount_type TEXT CHECK (discount_type IN ('percent', 'flat')), ADD COLUMN IF NOT EXISTS discount_value NUMERIC(12,2) NOT NULL DEFAULT 0;`
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- Proposal validation against Excel is the highest-value quality check — engine has been through multiple formula changes and needs ground-truth verification.
-- PDF/Canva export is the next major feature for the team.
+- Run migration 023 in production (supabase/migrations/023_client_discount.sql) before testing discount on live data.
+- Proposal validation against Excel is the highest-value quality check.
 - Scanner is live and working. Run `npm run dedup` if duplicate leads accumulate.
 - Estimates/pricing pages are desktop-only by design — no mobile work planned there.
