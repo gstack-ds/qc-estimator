@@ -14,6 +14,9 @@ const BRAND_SILVER = '#A9AEB4';
 const styles = StyleSheet.create({
   page: { fontFamily: 'Helvetica', fontSize: 10, color: BRAND_CHARCOAL, padding: 48, lineHeight: 1.4 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, paddingBottom: 16, borderBottomWidth: 1.5, borderBottomColor: BRAND_CREAM },
+  logoPlaceholder: { width: 56, height: 56, backgroundColor: BRAND_CREAM, borderWidth: 1, borderColor: BRAND_SILVER, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', marginRight: 14 },
+  logoPlaceholderText: { fontSize: 7, color: BRAND_SILVER, fontFamily: 'Helvetica-Bold', letterSpacing: 0.5 },
+  headerLeft: { flexDirection: 'row', alignItems: 'flex-start' },
   companyName: { fontSize: 18, fontFamily: 'Helvetica-Bold', color: BRAND_CHARCOAL, letterSpacing: 0.5 },
   companyTagline: { fontSize: 8, color: BRAND_BROWN, marginTop: 3, letterSpacing: 0.8, textTransform: 'uppercase' },
   contactBlock: { alignItems: 'flex-end' },
@@ -110,13 +113,18 @@ export default function ProposalDocument({
       <Page size="LETTER" style={styles.page}>
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.companyName}>Quill Creative Event Design</Text>
-            <Text style={styles.companyTagline}>Corporate Event Planning</Text>
+          <View style={styles.headerLeft}>
+            <View style={styles.logoPlaceholder}>
+              <Text style={styles.logoPlaceholderText}>LOGO</Text>
+            </View>
+            <View>
+              <Text style={styles.companyName}>Quill Creative Event Design</Text>
+              <Text style={styles.companyTagline}>Corporate Event Planning</Text>
+            </View>
           </View>
           <View style={styles.contactBlock}>
-            <Text style={styles.contactLine}>(315) 569-9847</Text>
-            <Text style={styles.contactLine}>alex@qceventdesign.com</Text>
+            <Text style={styles.contactLine}>(803) 792-9338</Text>
+            <Text style={styles.contactLine}>events@qceventdesign.com</Text>
           </View>
         </View>
 
@@ -239,7 +247,7 @@ export default function ProposalDocument({
 
         {/* Footer */}
         <View style={styles.footer} fixed>
-          <Text style={styles.footerText}>Quill Creative Event Design · (315) 569-9847 · alex@qceventdesign.com</Text>
+          <Text style={styles.footerText}>Quill Creative Event Design · (803) 792-9338 · events@qceventdesign.com</Text>
           <Text style={styles.footerText}>{estimateName}</Text>
         </View>
       </Page>
