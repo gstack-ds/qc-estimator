@@ -1,6 +1,6 @@
 // Client-facing proposal PDF document — rendered by @react-pdf/renderer
 // Import this file ONLY via dynamic import() inside client event handlers to avoid SSR issues.
-import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
 import type { EstimateSummary } from '@/types';
 import type { LineItemForExport } from '@/lib/utils/export';
 import { itemClientCost } from '@/lib/utils/export';
@@ -14,9 +14,8 @@ const BRAND_SILVER = '#A9AEB4';
 const styles = StyleSheet.create({
   page: { fontFamily: 'Helvetica', fontSize: 10, color: BRAND_CHARCOAL, padding: 48, lineHeight: 1.4 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, paddingBottom: 16, borderBottomWidth: 1.5, borderBottomColor: BRAND_CREAM },
-  logoPlaceholder: { width: 56, height: 56, backgroundColor: BRAND_CREAM, borderWidth: 1, borderColor: BRAND_SILVER, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', marginRight: 14 },
-  logoPlaceholderText: { fontSize: 7, color: BRAND_SILVER, fontFamily: 'Helvetica-Bold', letterSpacing: 0.5 },
-  headerLeft: { flexDirection: 'row', alignItems: 'flex-start' },
+  logo: { width: 60, height: 60, marginRight: 14 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center' },
   companyName: { fontSize: 18, fontFamily: 'Helvetica-Bold', color: BRAND_CHARCOAL, letterSpacing: 0.5 },
   companyTagline: { fontSize: 8, color: BRAND_BROWN, marginTop: 3, letterSpacing: 0.8, textTransform: 'uppercase' },
   contactBlock: { alignItems: 'flex-end' },
@@ -87,6 +86,7 @@ export interface ProposalDocumentProps {
   estimateType: 'venue' | 'av' | 'decor';
   proposalDate: string;
   taxExempt?: boolean;
+  logoSrc?: string;
 }
 
 export default function ProposalDocument({
@@ -100,6 +100,7 @@ export default function ProposalDocument({
   lineItems,
   proposalDate,
   taxExempt = false,
+  logoSrc,
 }: ProposalDocumentProps) {
   const proposalNumber = estimateId.slice(0, 8).toUpperCase();
 
@@ -114,9 +115,7 @@ export default function ProposalDocument({
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <View style={styles.logoPlaceholder}>
-              <Text style={styles.logoPlaceholderText}>LOGO</Text>
-            </View>
+            {logoSrc && <Image src={logoSrc} style={styles.logo} />}
             <View>
               <Text style={styles.companyName}>Quill Creative Event Design</Text>
               <Text style={styles.companyTagline}>Corporate Event Planning</Text>

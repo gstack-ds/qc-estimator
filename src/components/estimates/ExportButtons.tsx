@@ -71,6 +71,7 @@ export default function ExportButtons({
         import('@/components/export/ProposalDocument'),
       ]);
       const proposalDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      const logoSrc = window.location.origin + '/images/logo-badge.png';
       const element = ProposalDocument({
         estimateId,
         estimateName,
@@ -83,6 +84,7 @@ export default function ExportButtons({
         estimateType,
         proposalDate,
         taxExempt,
+        logoSrc,
       });
       const blob = await pdf(element).toBlob();
       const url = URL.createObjectURL(blob);
