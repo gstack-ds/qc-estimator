@@ -265,14 +265,13 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Client discount: migration 023, engine (discountAmount after all fees), UI toggle + input in all 3 builders, summary panels, margin panel Show Math — 10 new pricing tests (182 total)
 - [x] PDF proposal export: @react-pdf/renderer, ProposalDocument component (header, metadata, line items by section, totals block), ExportButtons "Export Proposal PDF" button with dynamic import
 - [x] Move line items between categories: checkboxes on rows, action bar with section dropdown, SECTION_DEFAULT_TAX for taxType update on move — all 3 builders
+- [x] Migration 023 run in production — discount_type + discount_value columns live
 
 ### Remaining
 - [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs
-- [ ] **Run migration 023 in production** — `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS discount_type TEXT CHECK (discount_type IN ('percent', 'flat')), ADD COLUMN IF NOT EXISTS discount_value NUMERIC(12,2) NOT NULL DEFAULT 0;`
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- Run migration 023 in production (supabase/migrations/023_client_discount.sql) before testing discount on live data.
 - Proposal validation against Excel is the highest-value quality check.
 - Scanner is live and working. Run `npm run dedup` if duplicate leads accumulate.
 - Estimates/pricing pages are desktop-only by design — no mobile work planned there.
