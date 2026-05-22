@@ -64,6 +64,8 @@ interface LocalEstimate {
   serviceChargeOverride: number | null;
   gratuityOverride: number | null;
   adminFeeOverride: number | null;
+  discountType: 'percent' | 'flat' | null;
+  discountValue: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -178,7 +180,11 @@ export default function EstimateBuilder({
     serviceChargeOverride: estimate.service_charge_override,
     gratuityOverride: estimate.gratuity_override,
     adminFeeOverride: estimate.admin_fee_override,
+    discountType: estimate.discount_type ?? null,
+    discountValue: estimate.discount_value ?? 0,
   });
+
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
 
   // Line items state
   const [lineItems, setLineItems] = useState<LocalLineItem[]>(
@@ -265,6 +271,9 @@ export default function EstimateBuilder({
     gratuity: resolveOverride(est.gratuityOverride, program.gratuity_default),
     adminFee: resolveOverride(est.adminFeeOverride, program.admin_fee_default),
     lineItems: toEngineLineItems(lineItems),
+    discount: est.discountType && est.discountValue > 0
+      ? { type: est.discountType, value: est.discountValue }
+      : null,
   }), [est, lineItems, program]);
 
   const summary = useMemo(
@@ -330,6 +339,8 @@ export default function EstimateBuilder({
       service_charge_override: merged.serviceChargeOverride,
       gratuity_override: merged.gratuityOverride,
       admin_fee_override: merged.adminFeeOverride,
+      discount_type: merged.discountType,
+      discount_value: merged.discountValue,
     }));
   }
 
@@ -449,6 +460,47 @@ export default function EstimateBuilder({
     setLineItems((prev) => [...prev, ...imported]);
     imported.forEach((item) => setTimeout(() => handleItemSave(item.id), 0));
   }, [handleItemSave]);
+
+  // ─── Category move ────────────────────────────────────────
+
+  const SECTION_DEFAULT_TAX: Record<LocalSection, TaxType> = {
+    'F&B': 'food',
+    'Equipment & Staffing': 'general',
+    'Venue Fees': 'general',
+    'Non-Taxable Staffing': 'none',
+    'Florals - Taxable': 'general',
+    'Florals - Non-Taxable': 'none',
+    'Rentals - Seating': 'general',
+    'Rentals - Lounge': 'general',
+    'Rentals - Tables': 'general',
+    'Rentals - Rugs & Accessories': 'general',
+    'Rentals - Non-Taxable': 'none',
+  };
+
+  const handleToggleSelect = useCallback((id: string) => {
+    setSelectedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleMoveToSection = useCallback((targetSection: LocalSection) => {
+    const ids = new Set(selectedItems);
+    const taxType = SECTION_DEFAULT_TAX[targetSection];
+    setLineItems((prev) => {
+      const next = prev.map((item) =>
+        ids.has(item.id) ? { ...item, section: targetSection, taxType } : item
+      );
+      lineItemsRef.current = next;
+      return next;
+    });
+    for (const id of ids) {
+      setTimeout(() => handleItemSave(id), 0);
+    }
+    setSelectedItems(new Set());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedItems, handleItemSave]);
 
   const handlePopulateFromExtraction = useCallback((data: ExtractedData) => {
     const cateringMarkup = markups.find((m) => m.name === 'Catering & F&B');
@@ -591,7 +643,18 @@ export default function EstimateBuilder({
             markups={markups}
             onImport={handleImportItems}
           />
-          <ExportButtons programId={program.id} programName={program.name} estimateName={est.name} summary={summary} guestCount={program.guest_count} lineItems={lineItems} markups={markups} />
+          <ExportButtons
+            programId={program.id}
+            programName={program.name}
+            estimateId={estimate.id}
+            estimateName={est.name}
+            clientName={program.client_name}
+            clientCompany={program.company_name}
+            summary={summary}
+            guestCount={program.guest_count}
+            lineItems={lineItems}
+            markups={markups}
+          />
           <button
             onClick={() => setShowMath(v => !v)}
             className={`text-xs px-2.5 py-1 rounded border transition-colors ${showMath ? 'border-brand-copper/60 bg-brand-offwhite text-brand-brown' : 'border-brand-cream bg-white text-brand-charcoal/70 hover:text-brand-charcoal hover:bg-brand-offwhite'}`}
@@ -767,6 +830,50 @@ export default function EstimateBuilder({
                 </div>
               </div>
             </div>
+
+            {/* Client Discount */}
+            <div className="flex items-center gap-3 pt-1">
+              <label className={labelClass + ' mb-0'}>Client Discount</label>
+              <div className="flex items-center gap-1.5 border border-brand-cream rounded overflow-hidden text-xs">
+                <button
+                  type="button"
+                  onClick={() => { const t: 'percent' | 'flat' = est.discountType === 'percent' ? 'flat' : 'percent'; updateEstField({ discountType: t }); saveEstimate({ discountType: t }); }}
+                  className={`px-2 py-1 transition-colors ${est.discountType === 'percent' ? 'bg-brand-brown text-white' : 'text-brand-silver hover:bg-brand-offwhite'}`}
+                >%</button>
+                <button
+                  type="button"
+                  onClick={() => { const t: 'percent' | 'flat' = est.discountType === 'flat' ? 'percent' : 'flat'; updateEstField({ discountType: t }); saveEstimate({ discountType: t }); }}
+                  className={`px-2 py-1 transition-colors ${est.discountType === 'flat' ? 'bg-brand-brown text-white' : 'text-brand-silver hover:bg-brand-offwhite'}`}
+                >$</button>
+              </div>
+              <div className="relative w-28">
+                {est.discountType === 'flat' && <span className="absolute left-2 top-1.5 text-gray-400 text-sm pointer-events-none">$</span>}
+                <input
+                  type="number"
+                  min="0"
+                  step={est.discountType === 'percent' ? '0.5' : '1'}
+                  value={est.discountValue === 0 ? '' : (est.discountType === 'percent' ? parseFloat((est.discountValue * 100).toFixed(4)) : est.discountValue)}
+                  onChange={(e) => {
+                    const raw = parseFloat(e.target.value) || 0;
+                    const val = est.discountType === 'percent' ? raw / 100 : raw;
+                    updateEstField({ discountValue: val });
+                  }}
+                  onBlur={() => saveEstimate({ discountValue: est.discountValue })}
+                  className={fieldClass + (est.discountType === 'flat' ? ' pl-5' : '') + (est.discountValue > 0 ? ' border-brand-copper bg-brand-offwhite' : '')}
+                  placeholder="0"
+                  disabled={!est.discountType}
+                />
+                {est.discountType === 'percent' && <span className="absolute right-2 top-1.5 text-brand-silver text-xs pointer-events-none">%</span>}
+              </div>
+              {est.discountValue > 0 && <span className="text-xs text-brand-copper">−${Math.round(summary.discountAmount).toLocaleString()}</span>}
+              {(est.discountType || est.discountValue > 0) && (
+                <button
+                  type="button"
+                  className="text-xs text-brand-silver/60 hover:text-red-500 transition-colors"
+                  onClick={() => { updateEstField({ discountType: null, discountValue: 0 }); saveEstimate({ discountType: null, discountValue: 0 }); }}
+                >Clear</button>
+              )}
+            </div>
           </div>
 
           {/* Attachments */}
@@ -784,6 +891,27 @@ export default function EstimateBuilder({
 
           {/* Line item sections */}
           <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-6">
+            {/* Move action bar */}
+            {selectedItems.size > 0 && (
+              <div className="flex items-center gap-3 bg-brand-offwhite border border-brand-copper/30 rounded px-3 py-2 text-sm">
+                <span className="text-brand-charcoal font-medium">{selectedItems.size} selected</span>
+                <span className="text-brand-silver">·</span>
+                <span className="text-brand-charcoal/70">Move to:</span>
+                <select
+                  className="border border-brand-cream rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper bg-white text-brand-charcoal"
+                  defaultValue=""
+                  onChange={(e) => { if (e.target.value) handleMoveToSection(e.target.value as LocalSection); }}
+                >
+                  <option value="" disabled>— Section —</option>
+                  {sections.map(({ name: s }) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <button
+                  type="button"
+                  className="text-xs text-brand-silver/60 hover:text-red-500 ml-auto transition-colors"
+                  onClick={() => setSelectedItems(new Set())}
+                >Clear selection</button>
+              </div>
+            )}
             {sections.map(({ name: sectionName, taxType }) => (
               <LineItemSection
                 key={sectionName}
@@ -792,6 +920,8 @@ export default function EstimateBuilder({
                 markups={markups}
                 defaultTaxType={taxType}
                 guestCount={program.guest_count}
+                selectedItems={selectedItems}
+                onToggleSelect={handleToggleSelect}
                 onChange={(id, patch) => {
                   handleItemChange(id, patch);
                   if (patch.categoryId !== undefined || patch.taxType !== undefined) {

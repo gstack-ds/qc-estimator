@@ -52,6 +52,7 @@ function makeSummary(overrides: Partial<EstimateSummary> = {}): EstimateSummary 
     fbShortfall: 0,
     vendorTaxesTotal: 0,
     revenueItemsClientTotal: 0,
+    discountAmount: 0,
     ...overrides,
   };
 }

@@ -16,7 +16,10 @@ export type { LineItemForExport, MarkupForExport };
 interface Props {
   programId: string;
   programName: string;
+  estimateId: string;
   estimateName: string;
+  clientName?: string | null;
+  clientCompany?: string | null;
   summary: EstimateSummary;
   guestCount: number;
   estimateType?: 'venue' | 'av' | 'decor';
@@ -29,7 +32,10 @@ interface Props {
 export default function ExportButtons({
   programId: _programId,
   programName,
+  estimateId,
   estimateName,
+  clientName,
+  clientCompany,
   summary,
   guestCount,
   estimateType = 'venue',
@@ -39,6 +45,7 @@ export default function ExportButtons({
   const [copyLabel, setCopyLabel] = useState<'Copy Numbers' | 'Copied!'>('Copy Numbers');
   const [copyItemsLabel, setCopyItemsLabel] = useState<'Copy Line Items' | 'Copied!'>('Copy Line Items');
   const [exporting, setExporting] = useState(false);
+  const [pdfExporting, setPdfExporting] = useState(false);
 
   async function handleCopy() {
     const text = buildDetailedCopyText(lineItems, summary, guestCount, estimateName);
@@ -52,6 +59,43 @@ export default function ExportButtons({
     await navigator.clipboard.writeText(text);
     setCopyItemsLabel('Copied!');
     setTimeout(() => setCopyItemsLabel('Copy Line Items'), 2000);
+  }
+
+  async function handleExportPdf() {
+    setPdfExporting(true);
+    try {
+      const [{ pdf }, { default: ProposalDocument }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/export/ProposalDocument'),
+      ]);
+      const proposalDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      const element = ProposalDocument({
+        estimateId,
+        estimateName,
+        programName,
+        clientName,
+        clientCompany,
+        guestCount,
+        summary,
+        lineItems,
+        estimateType,
+        proposalDate,
+      });
+      const blob = await pdf(element).toBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const safeName = (estimateName || programName || 'proposal').replace(/[^\w\s-]/g, '').trim();
+      a.download = `${safeName}_proposal.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    } finally {
+      setPdfExporting(false);
+    }
   }
 
   async function handleExcel() {
@@ -112,6 +156,9 @@ export default function ExportButtons({
       </button>
       <button onClick={handleExcel} disabled={exporting} className={btnClass + (exporting ? ' opacity-50' : '')}>
         {exporting ? 'Exporting…' : 'Export to Excel'}
+      </button>
+      <button onClick={handleExportPdf} disabled={pdfExporting} className={btnClass + (pdfExporting ? ' opacity-50' : '')}>
+        {pdfExporting ? 'Generating PDF…' : 'Export Proposal PDF'}
       </button>
     </div>
   );

@@ -16,6 +16,8 @@ interface Props {
   location: Location | null;
   defaultTaxType: TaxType;
   guestCount?: number;
+  selectedItems?: Set<string>;
+  onToggleSelect?: (id: string) => void;
   onChange: (id: string, patch: Partial<LocalLineItem>) => void;
   onBlur: (id: string) => void;
   onDelete: (id: string) => void;
@@ -39,7 +41,7 @@ const SECTION_LABELS: Record<string, string> = {
   'Rentals - Non-Taxable': 'Non-Taxable Rental Fees',
 };
 
-export default function LineItemSection({ section, label, items, markups, location, defaultTaxType, guestCount, onChange, onBlur, onDelete, onAdd, onAddFromTemplate, onSaveAsTemplate, showMath }: Props) {
+export default function LineItemSection({ section, label, items, markups, location, defaultTaxType, guestCount, selectedItems, onToggleSelect, onChange, onBlur, onDelete, onAdd, onAddFromTemplate, onSaveAsTemplate, showMath }: Props) {
   const isFB = section === 'F&B';
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
@@ -72,6 +74,15 @@ export default function LineItemSection({ section, label, items, markups, locati
 
       {items.map((item) => (
         <div key={item.id} className="flex items-center gap-1">
+          {onToggleSelect && (
+            <input
+              type="checkbox"
+              checked={selectedItems?.has(item.id) ?? false}
+              onChange={() => onToggleSelect(item.id)}
+              className="flex-shrink-0 accent-brand-copper cursor-pointer"
+              title="Select for bulk move"
+            />
+          )}
           {isFB && (
             <FbTaxToggle
               taxType={item.taxType}

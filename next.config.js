@@ -5,6 +5,7 @@ const nextConfig = {
       allowedOrigins: ['localhost:3000'],
       bodySizeLimit: '10mb',
     },
+    serverComponentsExternalPackages: ['@react-pdf/renderer'],
   },
 };
 

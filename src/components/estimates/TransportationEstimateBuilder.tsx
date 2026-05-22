@@ -169,7 +169,7 @@ export default function TransportationEstimateBuilder({
     productionFee: summary.productionFee,
     totalOur: summary.subtotalOur, totalClient: summary.totalClient,
     pricePerPerson: 0, fbMinimumMet: true, fbShortfall: 0,
-    vendorTaxesTotal: 0, revenueItemsClientTotal: 0,
+    vendorTaxesTotal: 0, revenueItemsClientTotal: 0, discountAmount: 0,
   }), [summary]);
 
   const margin = useMemo<MarginAnalysis>(() => {

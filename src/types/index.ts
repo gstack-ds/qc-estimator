@@ -78,6 +78,7 @@ export interface VenueEstimateInput {
   gratuity: FeeOption;            // override or default
   adminFee: FeeOption;            // override or default
   lineItems: LineItem[];
+  discount?: { type: 'percent' | 'flat'; value: number } | null;
 }
 
 export interface EstimateSummary {
@@ -117,6 +118,8 @@ export interface EstimateSummary {
   // F&B minimum
   fbMinimumMet: boolean;
   fbShortfall: number;
+  // Discount (0 when no discount applied)
+  discountAmount: number;
 }
 
 // ─── Margin Analysis ─────────────────────────────────────

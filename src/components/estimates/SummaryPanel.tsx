@@ -112,6 +112,12 @@ export default function SummaryPanel({ summary, guestCount, fbMinimum, showMath,
       <Row label="Production Fee" value={summary.productionFee} showMath={showMath}
         math={mathRates ? `$${fmtM(summary.subtotalClient)} × ${pctM(mathRates.ccProcessingFee)} CC + $${fmtM(markupRevenue)} × ${pctM(mathRates.clientCommissionRate)} commission` : undefined}
       />
+      {summary.discountAmount > 0 && (
+        <div className="flex justify-between py-1 text-sm text-brand-copper">
+          <span>Client Discount</span>
+          <span className="tabular-nums">-{fmt(summary.discountAmount)}</span>
+        </div>
+      )}
       <Row label="Total Estimate" value={summary.totalClient} bold pp={pp(summary.totalClient)} showMath={showMath} />
 
       {/* F&B Minimum */}

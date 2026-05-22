@@ -140,9 +140,17 @@ export function calculateVenueEstimate(
     subtotalClient * config.ccProcessingFee +
     markupRevenue * config.clientCommission;
 
-  // Totals
+  // Totals (pre-discount)
   const totalOur = subtotalOur + productionFee;
-  const totalClient = subtotalClient + productionFee;
+  const totalClientPreDiscount = subtotalClient + productionFee;
+
+  // Discount applied after all fees — reduces client billing and therefore QC margin
+  const discountAmount = input.discount
+    ? (input.discount.type === 'percent'
+        ? totalClientPreDiscount * input.discount.value
+        : input.discount.value)
+    : 0;
+  const totalClient = totalClientPreDiscount - discountAmount;
 
   // Per person
   const pricePerPerson = config.guestCount > 0
@@ -174,6 +182,7 @@ export function calculateVenueEstimate(
     vendorTaxesTotal, revenueItemsClientTotal,
     pricePerPerson,
     fbMinimumMet, fbShortfall,
+    discountAmount,
   };
 }
 

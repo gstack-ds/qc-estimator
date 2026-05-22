@@ -115,7 +115,7 @@ function buildEstimateData(
       productionFee: transportSummary.productionFee,
       totalOur: agg.total_our, totalClient: transportSummary.totalClient,
       pricePerPerson: 0, fbMinimumMet: true, fbShortfall: 0,
-      vendorTaxesTotal: 0, revenueItemsClientTotal: 0,
+      vendorTaxesTotal: 0, revenueItemsClientTotal: 0, discountAmount: 0,
     };
     const transportConfig: ProgramConfig = { ...config, clientCommission: transportCommission, gdpCommissionEnabled: false, thirdPartyCommissions: [] };
     const margin = calculateMarginAnalysis(fakeSummary, transportConfig, tiers);
@@ -141,8 +141,11 @@ function buildEstimateData(
   const gr = estimate.gratuity_override ?? config.gratuityDefault;
   const af = estimate.admin_fee_override ?? config.adminFeeDefault;
 
+  const discount = estimate.discount_type && estimate.discount_value > 0
+    ? { type: estimate.discount_type, value: estimate.discount_value }
+    : null;
   const summary = calculateVenueEstimate(
-    { name: estimate.name, fbMinimum: estimate.fb_minimum, isVenueTaxable: estimate.is_venue_taxable, serviceCharge: sc, gratuity: gr, adminFee: af, lineItems },
+    { name: estimate.name, fbMinimum: estimate.fb_minimum, isVenueTaxable: estimate.is_venue_taxable, serviceCharge: sc, gratuity: gr, adminFee: af, lineItems, discount },
     config,
   );
   const margin = calculateMarginAnalysis(summary, config, tiers);

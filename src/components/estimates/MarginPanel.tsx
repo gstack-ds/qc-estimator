@@ -58,7 +58,7 @@ export default function MarginPanel({ margin, summary, showMath }: Props) {
           <span>Total Client Billing</span>
           <span className="tabular-nums">{fmt(summary.totalClient)}</span>
         </div>
-        {math(`subtotal $${Math.round(summary.subtotalClient).toLocaleString()} + production fee $${Math.round(summary.productionFee).toLocaleString()}`)}
+        {math(`subtotal $${Math.round(summary.subtotalClient).toLocaleString()} + production fee $${Math.round(summary.productionFee).toLocaleString()}${summary.discountAmount > 0 ? ` − discount $${Math.round(summary.discountAmount).toLocaleString()}` : ''}`)}
 
         {/* Vendor Costs (expandable) */}
         <div>

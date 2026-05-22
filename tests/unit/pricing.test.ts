@@ -508,3 +508,175 @@ describe('lookupTeamHours', () => {
     expect(lookupTeamHours(30000, TEAM_HOURS_TIERS)).toBe(40);
   });
 });
+
+// ─── Client Discount ─────────────────────────────────────
+
+describe('client discount', () => {
+  // Single general-taxable item: ourCost=$1000, markup=85%, clientCost=$1850
+  // equipmentSubtotalClient = 1850, tax = 1850×0.0725 = 134.125
+  // subtotalClient = 1850 + 134.125 = 1984.125
+  // productionFee = 1984.125×0.035 + (1984.125 - 134.125)×0.05
+  //               = 69.44... + 1850×0.05 = 69.44 + 92.5 = 161.94...
+  // totalClientPreDiscount = 1984.125 + 161.94... ≈ 2146.07
+  const baseInput: VenueEstimateInput = {
+    name: 'Discount Test',
+    fbMinimum: 0, isVenueTaxable: false, serviceCharge: 0, gratuity: 0, adminFee: 0,
+    lineItems: [
+      { id: 'a', section: 'Equipment & Staffing', name: 'Item A', qty: 1, unitPrice: 1000, categoryMarkupPct: 0.85, taxType: 'general', isRevenueItem: false },
+    ],
+  };
+  const noDiscountConfig: ProgramConfig = { ...BASE_CONFIG, gdpCommissionEnabled: false, clientCommission: 0.05 };
+
+  it('discountAmount is 0 when no discount', () => {
+    const s = calculateVenueEstimate(baseInput, noDiscountConfig);
+    expect(s.discountAmount).toBe(0);
+    expect(s.totalClient).toBeCloseTo(s.subtotalClient + s.productionFee);
+  });
+
+  it('flat discount reduces totalClient by exact amount', () => {
+    const input = { ...baseInput, discount: { type: 'flat' as const, value: 200 } };
+    const s = calculateVenueEstimate(input, noDiscountConfig);
+    expect(s.discountAmount).toBe(200);
+    // totalClient = (subtotalClient + productionFee) − discountAmount
+    const preDiscount = s.subtotalClient + s.productionFee;
+    expect(s.totalClient).toBeCloseTo(preDiscount - 200);
+  });
+
+  it('percent discount reduces totalClient by correct proportion', () => {
+    const input = { ...baseInput, discount: { type: 'percent' as const, value: 0.10 } };
+    const s = calculateVenueEstimate(input, noDiscountConfig);
+    const noDiscount = calculateVenueEstimate(baseInput, noDiscountConfig);
+    const preDiscount = noDiscount.subtotalClient + noDiscount.productionFee;
+    expect(s.discountAmount).toBeCloseTo(preDiscount * 0.10);
+    expect(s.totalClient).toBeCloseTo(preDiscount * 0.90);
+  });
+
+  it('discount does not affect equipmentSubtotalClient or productionFee', () => {
+    const flat = calculateVenueEstimate({ ...baseInput, discount: { type: 'flat' as const, value: 300 } }, noDiscountConfig);
+    const none = calculateVenueEstimate(baseInput, noDiscountConfig);
+    expect(flat.equipmentSubtotalClient).toBeCloseTo(none.equipmentSubtotalClient);
+    expect(flat.productionFee).toBeCloseTo(none.productionFee);
+  });
+
+  it('discount reduces qcRevenue by the discount amount', () => {
+    const flat = calculateVenueEstimate({ ...baseInput, discount: { type: 'flat' as const, value: 250 } }, noDiscountConfig);
+    const none = calculateVenueEstimate(baseInput, noDiscountConfig);
+    const mFlat = calculateMarginAnalysis(flat, noDiscountConfig, TEAM_HOURS_TIERS, 0);
+    const mNone = calculateMarginAnalysis(none, noDiscountConfig, TEAM_HOURS_TIERS, 0);
+    expect(mNone.qcRevenue - mFlat.qcRevenue).toBeCloseTo(250);
+  });
+
+  it('zero discount value behaves identically to no discount', () => {
+    const zeroDiscount = calculateVenueEstimate({ ...baseInput, discount: { type: 'percent' as const, value: 0 } }, noDiscountConfig);
+    const noDiscount = calculateVenueEstimate(baseInput, noDiscountConfig);
+    // Note: discount.value = 0 still computes discountAmount as 0
+    expect(zeroDiscount.totalClient).toBeCloseTo(noDiscount.totalClient);
+    expect(zeroDiscount.discountAmount).toBe(0);
+  });
+
+  it('null discount input behaves identically to no discount', () => {
+    const nullDiscount = calculateVenueEstimate({ ...baseInput, discount: null }, noDiscountConfig);
+    const noDiscount = calculateVenueEstimate(baseInput, noDiscountConfig);
+    expect(nullDiscount.totalClient).toBeCloseTo(noDiscount.totalClient);
+    expect(nullDiscount.discountAmount).toBe(0);
+  });
+});
+
+// ─── Category Move (client-side logic) ───────────────────
+// Category move is UI state logic — when an item moves to a new section both
+// its section and taxType are updated. These tests verify the engine correctly
+// prices items after those updates.
+//
+// Engine tax model:
+//  - F&B items: individual taxType matters (food → foodTaxRate, alcohol → alcoholTaxRate)
+//  - Equipment items ('Equipment & Staffing' + Decor taxable): blanket generalTaxRate
+//    applied to the whole equipmentSubtotalClient bucket
+//  - Non-taxable items ('Non-Taxable Staffing' + Decor non-taxable): no tax
+
+describe('category move: taxType changes with section', () => {
+  const splitTaxConfig: ProgramConfig = {
+    ...BASE_CONFIG,
+    location: { id: 't', name: 'Test', foodTaxRate: 0.10, alcoholTaxRate: 0.08, generalTaxRate: 0.07 },
+    gdpCommissionEnabled: false,
+    clientCommission: 0,
+    ccProcessingFee: 0,
+  };
+
+  it('moving item from F&B (food) to Equipment & Staffing changes from foodTax to equipmentTax', () => {
+    // F&B taxType='food' → foodTax = clientCost × foodTaxRate; equipmentTax = 0
+    // Equipment taxType='general' → foodTax = 0; equipmentTax = clientCost × generalTaxRate
+    const fbInput: VenueEstimateInput = {
+      name: 'Move Test',
+      fbMinimum: 0, isVenueTaxable: false, serviceCharge: 0, gratuity: 0, adminFee: 0,
+      lineItems: [
+        { id: 'x', section: 'F&B', name: 'Item', qty: 1, unitPrice: 1000, categoryMarkupPct: 0.55, taxType: 'food', isRevenueItem: false },
+      ],
+    };
+    const equipInput: VenueEstimateInput = {
+      ...fbInput,
+      lineItems: [
+        { id: 'x', section: 'Equipment & Staffing', name: 'Item', qty: 1, unitPrice: 1000, categoryMarkupPct: 0.55, taxType: 'general', isRevenueItem: false },
+      ],
+    };
+    const fbSummary = calculateVenueEstimate(fbInput, splitTaxConfig);
+    const equipSummary = calculateVenueEstimate(equipInput, splitTaxConfig);
+    const clientCost = 1000 * 1.55; // = 1550
+    // F&B: foodTax = 1550 × 10%, equipmentTax = 0
+    expect(fbSummary.foodTax).toBeCloseTo(clientCost * 0.10);
+    expect(fbSummary.equipmentTax).toBe(0);
+    // Equipment: equipmentTax = 1550 × 7%, foodTax = 0
+    expect(equipSummary.equipmentTax).toBeCloseTo(clientCost * 0.07);
+    expect(equipSummary.foodTax).toBe(0);
+  });
+
+  it('moving item from Equipment to Non-Taxable Staffing removes equipment tax', () => {
+    // AV item: 1 × $500 × 1.65 = $825 clientCost
+    const taxableInput: VenueEstimateInput = {
+      name: 'Tax Test',
+      fbMinimum: 0, isVenueTaxable: false, serviceCharge: 0, gratuity: 0, adminFee: 0,
+      lineItems: [
+        { id: 'y', section: 'Equipment & Staffing', name: 'AV', qty: 1, unitPrice: 500, categoryMarkupPct: 0.65, taxType: 'general', isRevenueItem: false },
+      ],
+    };
+    const nonTaxableInput: VenueEstimateInput = {
+      ...taxableInput,
+      lineItems: [
+        { id: 'y', section: 'Non-Taxable Staffing', name: 'AV', qty: 1, unitPrice: 500, categoryMarkupPct: 0.65, taxType: 'none', isRevenueItem: false },
+      ],
+    };
+    const taxable = calculateVenueEstimate(taxableInput, splitTaxConfig);
+    const nonTaxable = calculateVenueEstimate(nonTaxableInput, splitTaxConfig);
+    const clientCost = 500 * 1.65; // = 825
+    expect(taxable.equipmentTax).toBeCloseTo(clientCost * 0.07);
+    expect(nonTaxable.equipmentTax).toBe(0);
+    // Item moved to qcStaffing bucket — client cost preserved
+    expect(taxable.equipmentSubtotalClient).toBeCloseTo(clientCost);
+    expect(nonTaxable.qcStaffingSubtotalClient).toBeCloseTo(clientCost);
+    expect(nonTaxable.equipmentSubtotalClient).toBe(0);
+  });
+
+  it('moving between Decor sections: Florals-Taxable → Florals-Non-Taxable removes tax', () => {
+    // Flowers: 3 × $200 × 1.85 = $1110 clientCost
+    const taxableInput: VenueEstimateInput = {
+      name: 'Floral Move',
+      fbMinimum: 0, isVenueTaxable: false, serviceCharge: 0, gratuity: 0, adminFee: 0,
+      lineItems: [
+        { id: 'z', section: 'Florals - Taxable', name: 'Flowers', qty: 3, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'general', isRevenueItem: false },
+      ],
+    };
+    const nonTaxableInput: VenueEstimateInput = {
+      ...taxableInput,
+      lineItems: [
+        { id: 'z', section: 'Florals - Non-Taxable', name: 'Flowers', qty: 3, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'none', isRevenueItem: false },
+      ],
+    };
+    const before = calculateVenueEstimate(taxableInput, splitTaxConfig);
+    const after = calculateVenueEstimate(nonTaxableInput, splitTaxConfig);
+    const clientCost = 3 * 200 * 1.85; // = 1110
+    // Tax removed when moved to non-taxable; client cost preserved in qcStaffing bucket
+    expect(before.equipmentTax).toBeCloseTo(clientCost * 0.07);
+    expect(after.equipmentTax).toBe(0);
+    expect(before.equipmentSubtotalClient).toBeCloseTo(clientCost);
+    expect(after.qcStaffingSubtotalClient).toBeCloseTo(clientCost);
+  });
+});

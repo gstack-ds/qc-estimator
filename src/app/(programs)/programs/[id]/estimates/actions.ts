@@ -18,6 +18,8 @@ export async function updateEstimate(id: string, programId: string, data: Partia
   venue_contact: string | null;
   menu_notes: string | null;
   include_in_budget: boolean;
+  discount_type: 'percent' | 'flat' | null;
+  discount_value: number;
 }>) {
   const supabase = await createClient();
   const { error } = await supabase.from('estimates').update(data).eq('id', id);
@@ -73,6 +75,8 @@ export async function duplicateEstimate(sourceId: string, programId: string) {
       gratuity_override: source.gratuity_override,
       admin_fee_override: source.admin_fee_override,
       include_in_budget: source.include_in_budget,
+      discount_type: source.discount_type ?? null,
+      discount_value: source.discount_value ?? 0,
       sort_order: count ?? 0,
     })
     .select('id')
