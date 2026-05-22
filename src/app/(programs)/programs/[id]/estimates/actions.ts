@@ -20,6 +20,7 @@ export async function updateEstimate(id: string, programId: string, data: Partia
   include_in_budget: boolean;
   discount_type: 'percent' | 'flat' | null;
   discount_value: number;
+  tax_exempt: boolean;
 }>) {
   const supabase = await createClient();
   const { error } = await supabase.from('estimates').update(data).eq('id', id);

@@ -680,3 +680,80 @@ describe('category move: taxType changes with section', () => {
     expect(after.qcStaffingSubtotalClient).toBeCloseTo(clientCost);
   });
 });
+
+// ─── Tax Exempt ───────────────────────────────────────────
+
+describe('calculateVenueEstimate — taxExempt', () => {
+  const taxableInput: VenueEstimateInput = {
+    name: 'Exempt Test',
+    fbMinimum: 0,
+    isVenueTaxable: true,
+    serviceCharge: 0.20,
+    gratuity: 0,
+    adminFee: 0,
+    lineItems: [
+      { id: '1', section: 'F&B', name: 'Food', qty: 10, unitPrice: 100, categoryMarkupPct: 0.55, taxType: 'food' },
+      { id: '2', section: 'F&B', name: 'Bar', qty: 10, unitPrice: 50, categoryMarkupPct: 0.55, taxType: 'alcohol' },
+      { id: '3', section: 'Equipment & Staffing', name: 'AV', qty: 1, unitPrice: 500, categoryMarkupPct: 0.65, taxType: 'general' },
+      { id: '4', section: 'Venue Fees', name: 'Room', qty: 1, unitPrice: 1000, categoryMarkupPct: 0.60, taxType: 'general' },
+      { id: '5', section: 'Non-Taxable Staffing', name: 'Staff', qty: 1, unitPrice: 200, categoryMarkupPct: 0.90, taxType: 'none' },
+    ],
+  };
+
+  it('all tax fields are zero when taxExempt is true', () => {
+    const result = calculateVenueEstimate({ ...taxableInput, taxExempt: true }, BASE_CONFIG);
+    expect(result.foodTax).toBe(0);
+    expect(result.alcoholTax).toBe(0);
+    expect(result.equipmentTax).toBe(0);
+    expect(result.venueTax).toBe(0);
+    expect(result.vendorTaxesTotal).toBe(0);
+  });
+
+  it('line item costs are unchanged by taxExempt (only tax is zeroed)', () => {
+    const exempt = calculateVenueEstimate({ ...taxableInput, taxExempt: true }, BASE_CONFIG);
+    const normal = calculateVenueEstimate({ ...taxableInput, taxExempt: false }, BASE_CONFIG);
+    expect(exempt.fbSubtotalClient).toBeCloseTo(normal.fbSubtotalClient);
+    expect(exempt.equipmentSubtotalClient).toBeCloseTo(normal.equipmentSubtotalClient);
+    expect(exempt.venueSubtotalClient).toBeCloseTo(normal.venueSubtotalClient);
+  });
+
+  it('totalClient is lower when taxExempt (taxes excluded from billing)', () => {
+    const exempt = calculateVenueEstimate({ ...taxableInput, taxExempt: true }, BASE_CONFIG);
+    const normal = calculateVenueEstimate({ ...taxableInput, taxExempt: false }, BASE_CONFIG);
+    expect(exempt.totalClient).toBeLessThan(normal.totalClient);
+  });
+
+  it('taxExempt=false behaves identically to omitting the flag', () => {
+    const withFalse = calculateVenueEstimate({ ...taxableInput, taxExempt: false }, BASE_CONFIG);
+    const withOmit = calculateVenueEstimate(taxableInput, BASE_CONFIG);
+    expect(withFalse.totalClient).toBeCloseTo(withOmit.totalClient);
+    expect(withFalse.foodTax).toBeCloseTo(withOmit.foodTax);
+  });
+
+  it('margin totalTaxes is zero when taxExempt is true', () => {
+    const summary = calculateVenueEstimate({ ...taxableInput, taxExempt: true }, BASE_CONFIG);
+    const margin = calculateMarginAnalysis(summary, BASE_CONFIG, TEAM_HOURS_TIERS, 0);
+    expect(margin.totalTaxes).toBe(0);
+  });
+
+  it('qcRevenue is higher when taxExempt because client total is lower but vendor costs are unchanged', () => {
+    const exemptSummary = calculateVenueEstimate({ ...taxableInput, taxExempt: true }, BASE_CONFIG);
+    const normalSummary = calculateVenueEstimate({ ...taxableInput, taxExempt: false }, BASE_CONFIG);
+    const noCommConfig: ProgramConfig = { ...BASE_CONFIG, ccProcessingFee: 0, clientCommission: 0, gdpCommissionEnabled: false };
+    const exemptMargin = calculateMarginAnalysis(exemptSummary, noCommConfig, TEAM_HOURS_TIERS, 0);
+    const normalMargin = calculateMarginAnalysis(normalSummary, noCommConfig, TEAM_HOURS_TIERS, 0);
+    expect(exemptMargin.vendorCostsBase).toBeCloseTo(normalMargin.vendorCostsBase);
+  });
+
+  it('tax-exempt estimate with high-tax location still shows zero tax', () => {
+    const highTaxConfig: ProgramConfig = {
+      ...BASE_CONFIG,
+      location: { id: 'h', name: 'High Tax', foodTaxRate: 0.15, alcoholTaxRate: 0.15, generalTaxRate: 0.15 },
+    };
+    const result = calculateVenueEstimate({ ...taxableInput, taxExempt: true }, highTaxConfig);
+    expect(result.foodTax).toBe(0);
+    expect(result.alcoholTax).toBe(0);
+    expect(result.equipmentTax).toBe(0);
+    expect(result.venueTax).toBe(0);
+  });
+});

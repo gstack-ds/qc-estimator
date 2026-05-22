@@ -16,6 +16,7 @@ interface Props {
   onDelete: (id: string) => void;
   onSaveAsTemplate?: (id: string) => Promise<void>;
   showMath?: boolean;
+  taxExempt?: boolean;
 }
 
 function shortLocationName(name: string): string {
@@ -44,7 +45,7 @@ function fmtM(v: number) {
 
 const inputClass = 'border border-brand-cream rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper focus:border-brand-brown bg-white text-brand-charcoal w-full';
 
-export default function LineItemRow({ item, markups, location, showTaxToggle, guestCount, onChange, onBlur, onDelete, onSaveAsTemplate, showMath }: Props) {
+export default function LineItemRow({ item, markups, location, showTaxToggle, guestCount, onChange, onBlur, onDelete, onSaveAsTemplate, showMath, taxExempt }: Props) {
   const [savedTemplate, setSavedTemplate] = useState(false);
   const isCustom = item.categoryId === 'custom';
   const isRevenue = item.isRevenueItem === true;
@@ -176,7 +177,9 @@ export default function LineItemRow({ item, markups, location, showTaxToggle, gu
       </select>
 
       {/* Tax */}
-      {(() => {
+      {taxExempt ? (
+        <div className="text-xs font-medium text-amber-600">Exempt</div>
+      ) : (() => {
         const t = taxLabel(item.taxType, location);
         return t ? (
           <div className="leading-tight" title={`${t.rate} — ${location?.name ?? ''}`}>

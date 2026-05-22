@@ -66,6 +66,7 @@ interface LocalEstimate {
   adminFeeOverride: number | null;
   discountType: 'percent' | 'flat' | null;
   discountValue: number;
+  taxExempt: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -182,6 +183,7 @@ export default function EstimateBuilder({
     adminFeeOverride: estimate.admin_fee_override,
     discountType: estimate.discount_type ?? null,
     discountValue: estimate.discount_value ?? 0,
+    taxExempt: estimate.tax_exempt ?? false,
   });
 
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -274,6 +276,7 @@ export default function EstimateBuilder({
     discount: est.discountType && est.discountValue > 0
       ? { type: est.discountType, value: est.discountValue }
       : null,
+    taxExempt: est.taxExempt,
   }), [est, lineItems, program]);
 
   const summary = useMemo(
@@ -341,6 +344,7 @@ export default function EstimateBuilder({
       admin_fee_override: merged.adminFeeOverride,
       discount_type: merged.discountType,
       discount_value: merged.discountValue,
+      tax_exempt: merged.taxExempt,
     }));
   }
 
@@ -654,6 +658,7 @@ export default function EstimateBuilder({
             guestCount={program.guest_count}
             lineItems={lineItems}
             markups={markups}
+            taxExempt={est.taxExempt}
           />
           <button
             onClick={() => setShowMath(v => !v)}
@@ -874,6 +879,25 @@ export default function EstimateBuilder({
                 >Clear</button>
               )}
             </div>
+            {/* Tax Exempt */}
+            <div className="flex items-center gap-3 pt-1">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={est.taxExempt}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    updateEstField({ taxExempt: next });
+                    saveEstimate({ taxExempt: next });
+                  }}
+                  className="w-4 h-4 rounded border-brand-cream accent-brand-brown cursor-pointer"
+                />
+                <span className="text-sm text-gray-700">Tax Exempt</span>
+              </label>
+              {est.taxExempt && (
+                <span className="text-[10px] font-bold tracking-widest px-2 py-0.5 rounded border border-amber-400 bg-amber-50 text-amber-700 uppercase">TAX EXEMPT</span>
+              )}
+            </div>
           </div>
 
           {/* Attachments */}
@@ -935,6 +959,7 @@ export default function EstimateBuilder({
                 onSaveAsTemplate={handleSaveAsTemplate}
                 location={programConfig.location}
                 showMath={showMath}
+                taxExempt={est.taxExempt}
               />
             ))}
           </div>

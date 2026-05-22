@@ -125,6 +125,7 @@ export default function AvEstimateBuilder({
   const [name, setName] = useState(estimate.name);
   const [discountType, setDiscountType] = useState<'percent' | 'flat' | null>(estimate.discount_type ?? null);
   const [discountValue, setDiscountValue] = useState(estimate.discount_value ?? 0);
+  const [taxExempt, setTaxExempt] = useState(estimate.tax_exempt ?? false);
   const [lineItems, setLineItems] = useState<LocalLineItem[]>(
     dbLineItems.map((item) => dbItemToLocal(item, markups))
   );
@@ -151,10 +152,11 @@ export default function AvEstimateBuilder({
         adminFee: 0,
         lineItems: toEngineLineItems(lineItems),
         discount: discountType && discountValue > 0 ? { type: discountType, value: discountValue } : null,
+        taxExempt,
       },
       programConfig
     ),
-    [name, lineItems, programConfig, discountType, discountValue]
+    [name, lineItems, programConfig, discountType, discountValue, taxExempt]
   );
 
   const marginAnalysis = useMemo(
@@ -205,6 +207,10 @@ export default function AvEstimateBuilder({
 
   async function saveDiscount(type: 'percent' | 'flat' | null, value: number) {
     await withSave(() => updateEstimate(estimate.id, program.id, { discount_type: type, discount_value: value }));
+  }
+
+  async function saveTaxExempt(val: boolean) {
+    await withSave(() => updateEstimate(estimate.id, program.id, { tax_exempt: val }));
   }
 
   // ─── Line item mutations ──────────────────────────────────
@@ -420,6 +426,7 @@ export default function AvEstimateBuilder({
             estimateType="av"
             lineItems={lineItems}
             markups={markups}
+            taxExempt={taxExempt}
           />
           <button
             onClick={() => setShowMath(v => !v)}
@@ -465,6 +472,20 @@ export default function AvEstimateBuilder({
               </div>
               {discountValue > 0 && <span className="text-xs text-brand-copper">−${Math.round(summary.discountAmount).toLocaleString()}</span>}
               {(discountType || discountValue > 0) && <button type="button" className="text-xs text-brand-silver/60 hover:text-red-500 transition-colors" onClick={() => { setDiscountType(null); setDiscountValue(0); saveDiscount(null, 0); }}>Clear</button>}
+            </div>
+            <div className="flex items-center gap-3 mt-3">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={taxExempt}
+                  onChange={(e) => { const next = e.target.checked; setTaxExempt(next); saveTaxExempt(next); }}
+                  className="w-4 h-4 rounded border-brand-cream accent-brand-brown cursor-pointer"
+                />
+                <span className="text-sm text-gray-700">Tax Exempt</span>
+              </label>
+              {taxExempt && (
+                <span className="text-[10px] font-bold tracking-widest px-2 py-0.5 rounded border border-amber-400 bg-amber-50 text-amber-700 uppercase">TAX EXEMPT</span>
+              )}
             </div>
           </div>
 
@@ -519,6 +540,7 @@ export default function AvEstimateBuilder({
                 onSaveAsTemplate={handleSaveAsTemplate}
                 location={programConfig.location}
                 showMath={showMath}
+                taxExempt={taxExempt}
               />
             ))}
           </div>

@@ -79,6 +79,7 @@ export interface VenueEstimateInput {
   adminFee: FeeOption;            // override or default
   lineItems: LineItem[];
   discount?: { type: 'percent' | 'flat'; value: number } | null;
+  taxExempt?: boolean;
 }
 
 export interface EstimateSummary {

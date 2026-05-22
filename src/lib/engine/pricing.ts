@@ -85,23 +85,25 @@ export function calculateVenueEstimate(
   // Tax — food items
   const foodItems = fb.filter((li) => li.taxType === 'food');
   const fbFoodSubtotalClient = foodItems.reduce((s, li) => s + li.clientCost, 0);
-  const foodTaxOur = foodItems.reduce((s, li) => s + li.ourCost * li.taxRate, 0);
-  const foodTax = foodItems.reduce((s, li) => s + li.clientCost * li.taxRate, 0);
-
-  // Tax — alcohol items
   const alcoholItems = fb.filter((li) => li.taxType === 'alcohol');
   const fbAlcoholSubtotalClient = alcoholItems.reduce((s, li) => s + li.clientCost, 0);
-  const alcoholTaxOur = alcoholItems.reduce((s, li) => s + li.ourCost * li.taxRate, 0);
-  const alcoholTax = alcoholItems.reduce((s, li) => s + li.clientCost * li.taxRate, 0);
+
+  const tm = input.taxExempt ? 0 : 1;
+  const foodTaxOur = tm * foodItems.reduce((s, li) => s + li.ourCost * li.taxRate, 0);
+  const foodTax = tm * foodItems.reduce((s, li) => s + li.clientCost * li.taxRate, 0);
+
+  // Tax — alcohol items
+  const alcoholTaxOur = tm * alcoholItems.reduce((s, li) => s + li.ourCost * li.taxRate, 0);
+  const alcoholTax = tm * alcoholItems.reduce((s, li) => s + li.clientCost * li.taxRate, 0);
 
   // Tax — equipment (general sales tax)
-  const equipmentTaxOur = equipmentSubtotalOur * config.location.generalTaxRate;
-  const equipmentTax = equipmentSubtotalClient * config.location.generalTaxRate;
+  const equipmentTaxOur = tm * equipmentSubtotalOur * config.location.generalTaxRate;
+  const equipmentTax = tm * equipmentSubtotalClient * config.location.generalTaxRate;
 
   // Tax — venue (if taxable)
   const venueTaxRate = input.isVenueTaxable ? config.location.generalTaxRate : 0;
-  const venueTaxOur = venueSubtotalOur * venueTaxRate;
-  const venueTax = venueSubtotalClient * venueTaxRate;
+  const venueTaxOur = tm * venueSubtotalOur * venueTaxRate;
+  const venueTax = tm * venueSubtotalClient * venueTaxRate;
 
   // Restaurant fees (applied to F&B subtotals)
   const serviceChargeRate = parseFeeRate(input.serviceCharge);

@@ -83,6 +83,7 @@ export interface ProposalDocumentProps {
   lineItems: LineItemForExport[];
   estimateType: 'venue' | 'av' | 'decor';
   proposalDate: string;
+  taxExempt?: boolean;
 }
 
 export default function ProposalDocument({
@@ -95,6 +96,7 @@ export default function ProposalDocument({
   summary,
   lineItems,
   proposalDate,
+  taxExempt = false,
 }: ProposalDocumentProps) {
   const proposalNumber = estimateId.slice(0, 8).toUpperCase();
 
@@ -159,13 +161,13 @@ export default function ProposalDocument({
                   ? item.customClientUnitPrice
                   : item.unitPrice * (1 + item.categoryMarkupPct);
                 const taxRate = item.taxType === 'none' ? 0 : 0.0725; // display only; exact rates from engine
-                const taxAmt = clientTotal * taxRate;
+                const taxColLabel = taxExempt ? 'Exempt' : (item.taxType === 'none' ? '—' : `${(taxRate * 100).toFixed(2)}%`);
                 return (
                   <View key={idx} style={[styles.row, idx % 2 === 1 ? styles.rowAlt : {}]}>
                     <Text style={[styles.cell, styles.colItem]}>{item.name}</Text>
                     <Text style={[styles.cell, styles.colQty]}>{item.qty}</Text>
                     <Text style={[styles.cell, styles.colPrice]}>{fmt(unitPrice)}</Text>
-                    <Text style={[styles.cellDim, styles.colTax]}>{item.taxType === 'none' ? '—' : `${(taxRate * 100).toFixed(2)}%`}</Text>
+                    <Text style={[styles.cellDim, styles.colTax]}>{taxColLabel}</Text>
                     <Text style={[styles.cell, styles.colTotal]}>{fmt(clientTotal)}</Text>
                   </View>
                 );
@@ -182,7 +184,12 @@ export default function ProposalDocument({
               <Text style={styles.totalsValue}>{fmtRound(preTaxSubtotal)}</Text>
             </View>
           )}
-          {totalTax > 0 && (
+          {taxExempt ? (
+            <View style={styles.totalsRow}>
+              <Text style={styles.totalsLabel}>Tax</Text>
+              <Text style={styles.totalsValue}>Tax Exempt</Text>
+            </View>
+          ) : totalTax > 0 && (
             <View style={styles.totalsRow}>
               <Text style={styles.totalsLabel}>Tax</Text>
               <Text style={styles.totalsValue}>{fmtRound(totalTax)}</Text>

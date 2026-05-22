@@ -152,6 +152,7 @@ export default function DecorEstimateBuilder({
   const [name, setName] = useState(estimate.name);
   const [discountType, setDiscountType] = useState<'percent' | 'flat' | null>(estimate.discount_type ?? null);
   const [discountValue, setDiscountValue] = useState(estimate.discount_value ?? 0);
+  const [taxExempt, setTaxExempt] = useState(estimate.tax_exempt ?? false);
   const [lineItems, setLineItems] = useState<LocalLineItem[]>(
     dbLineItems.map((item) => dbItemToLocal(item, markups))
   );
@@ -185,10 +186,11 @@ export default function DecorEstimateBuilder({
         adminFee: 0,
         lineItems: toEngineLineItems(lineItems),
         discount: discountType && discountValue > 0 ? { type: discountType, value: discountValue } : null,
+        taxExempt,
       },
       programConfig
     ),
-    [name, lineItems, programConfig, discountType, discountValue]
+    [name, lineItems, programConfig, discountType, discountValue, taxExempt]
   );
 
   const marginAnalysis = useMemo(
@@ -249,6 +251,10 @@ export default function DecorEstimateBuilder({
 
   async function saveDiscount(type: 'percent' | 'flat' | null, value: number) {
     await withSave(() => updateEstimate(estimate.id, program.id, { discount_type: type, discount_value: value }));
+  }
+
+  async function saveTaxExempt(val: boolean) {
+    await withSave(() => updateEstimate(estimate.id, program.id, { tax_exempt: val }));
   }
 
   // ─── Line item mutations ──────────────────────────────────
@@ -508,6 +514,7 @@ export default function DecorEstimateBuilder({
               showMath={showMath}
               selectedItems={selectedItems}
               onToggleSelect={handleToggleSelect}
+              taxExempt={taxExempt}
             />
           </div>
         )}
@@ -537,7 +544,7 @@ export default function DecorEstimateBuilder({
             markups={markups}
             onImport={handleImportItems}
           />
-          <ExportButtons programId={program.id} programName={program.name} estimateId={estimate.id} estimateName={name} clientName={program.client_name} clientCompany={program.company_name} summary={summary} guestCount={program.guest_count} estimateType="decor" lineItems={lineItems} markups={markups} />
+          <ExportButtons programId={program.id} programName={program.name} estimateId={estimate.id} estimateName={name} clientName={program.client_name} clientCompany={program.company_name} summary={summary} guestCount={program.guest_count} estimateType="decor" lineItems={lineItems} markups={markups} taxExempt={taxExempt} />
           <button
             onClick={() => setShowMath(v => !v)}
             className={`text-xs px-2.5 py-1 rounded border transition-colors ${showMath ? 'border-brand-copper/60 bg-brand-offwhite text-brand-brown' : 'border-brand-cream bg-white text-brand-charcoal/70 hover:text-brand-charcoal hover:bg-brand-offwhite'}`}
@@ -612,6 +619,22 @@ export default function DecorEstimateBuilder({
               className="text-xs text-brand-silver hover:text-brand-charcoal underline underline-offset-2 self-start"
             >+ Add Client Discount</button>
           )}
+
+          {/* Tax Exempt */}
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={taxExempt}
+                onChange={(e) => { const next = e.target.checked; setTaxExempt(next); saveTaxExempt(next); }}
+                className="w-4 h-4 rounded border-brand-cream accent-brand-brown cursor-pointer"
+              />
+              <span className="text-sm text-gray-700">Tax Exempt</span>
+            </label>
+            {taxExempt && (
+              <span className="text-[10px] font-bold tracking-widest px-2 py-0.5 rounded border border-amber-400 bg-amber-50 text-amber-700 uppercase">TAX EXEMPT</span>
+            )}
+          </div>
 
           {/* Attachments */}
           <AttachmentsPanel estimateId={estimate.id} estimateType="decor" onPopulateLineItems={handlePopulateFromExtraction} />

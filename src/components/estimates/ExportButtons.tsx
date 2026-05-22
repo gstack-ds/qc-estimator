@@ -25,6 +25,7 @@ interface Props {
   estimateType?: 'venue' | 'av' | 'decor';
   lineItems: LineItemForExport[];
   markups: MarkupForExport[];
+  taxExempt?: boolean;
 }
 
 // ─── Component ────────────────────────────────────────────
@@ -41,6 +42,7 @@ export default function ExportButtons({
   estimateType = 'venue',
   lineItems,
   markups,
+  taxExempt = false,
 }: Props) {
   const [copyLabel, setCopyLabel] = useState<'Copy Numbers' | 'Copied!'>('Copy Numbers');
   const [copyItemsLabel, setCopyItemsLabel] = useState<'Copy Line Items' | 'Copied!'>('Copy Line Items');
@@ -80,6 +82,7 @@ export default function ExportButtons({
         lineItems,
         estimateType,
         proposalDate,
+        taxExempt,
       });
       const blob = await pdf(element).toBlob();
       const url = URL.createObjectURL(blob);
