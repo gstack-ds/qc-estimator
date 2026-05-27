@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { EstimateSummary, SummaryMathRates } from '@/types';
 
 interface Props {
@@ -24,7 +25,7 @@ function fmtPP(val: number) {
 }
 
 function Row({ label, value, pp, bold, indent, dim, math, showMath }: {
-  label: string; value: number; pp?: number; bold?: boolean; indent?: boolean; dim?: boolean;
+  label: ReactNode; value: number; pp?: number; bold?: boolean; indent?: boolean; dim?: boolean;
   math?: string; showMath?: boolean;
 }) {
   if (value === 0 && !bold) return null;
@@ -109,7 +110,20 @@ export default function SummaryPanel({ summary, guestCount, fbMinimum, showMath,
 
       {/* Totals */}
       <Row label="Subtotal" value={summary.subtotalClient} bold showMath={showMath} />
-      <Row label="Production Fee" value={summary.productionFee} showMath={showMath}
+      <Row
+        label={
+          <span className="flex items-center gap-1">
+            Production Fee
+            <span className="relative group/pf cursor-help">
+              <span className="text-brand-silver/50 text-[10px] border border-brand-silver/30 rounded-full w-3.5 h-3.5 inline-flex items-center justify-center leading-none select-none">i</span>
+              <span className="absolute bottom-full left-0 mb-1.5 w-56 bg-brand-charcoal text-white text-[11px] px-2.5 py-2 rounded shadow-lg opacity-0 group-hover/pf:opacity-100 transition-opacity pointer-events-none z-50 whitespace-normal leading-relaxed">
+                Production Fee = CC Processing % on subtotal + Client Commission % on markup revenue. Automatically calculated.
+              </span>
+            </span>
+          </span>
+        }
+        value={summary.productionFee}
+        showMath={showMath}
         math={mathRates ? `$${fmtM(summary.subtotalClient)} × ${pctM(mathRates.ccProcessingFee)} CC + $${fmtM(markupRevenue)} × ${pctM(mathRates.clientCommissionRate)} commission` : undefined}
       />
       {summary.discountAmount > 0 && (
