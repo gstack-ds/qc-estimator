@@ -222,20 +222,21 @@ export function calculateMarginAnalysis(
 
   const clientCommissionAmount = markupRevenue * config.clientCommission;
   const gdpCommissionAmount = config.gdpCommissionEnabled
-    ? markupRevenue * config.gdpCommissionRate
+    ? summary.totalClient * config.gdpCommissionRate
     : 0;
   const thirdPartyCommissionsTotal = (config.thirdPartyCommissions ?? [])
     .reduce((s, c) => s + markupRevenue * c.rate, 0);
 
-  // New formula: taxes and CC processing are pass-throughs that cancel out algebraically.
-  // Client commission is QC revenue (not a deduction). GDP and third-party are true costs.
+  // Formula: CC and clientCommission are pass-throughs that cancel algebraically.
+  // GDP and third-party commissions are true costs deducted from QC margin.
+  // Simplified: qcRevenue = markup − gdpCommission − thirdPartyCommissions − discount
   const vendorCostsBase = summary.subtotalOur - summary.vendorTaxesTotal;
   const totalTaxes = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax;
   const ccProcessingAmount = summary.subtotalClient * config.ccProcessingFee;
 
   const qcRevenue = summary.totalClient
     - vendorCostsBase - totalTaxes - ccProcessingAmount
-    - gdpCommissionAmount - thirdPartyCommissionsTotal;
+    - clientCommissionAmount - gdpCommissionAmount - thirdPartyCommissionsTotal;
 
   const totalVendorCosts = vendorCostsBase;
   const qcMarginPct = summary.totalClient > 0 ? qcRevenue / summary.totalClient : 0;

@@ -34,7 +34,7 @@ export default function MarginPanel({ margin, summary, showMath }: Props) {
   const [commExpanded, setCommExpanded] = useState(false);
 
   const fbAndFees = summary.fbSubtotalOur + summary.serviceChargeOur + summary.gratuityOur + summary.adminFeeOur;
-  const totalComm = margin.ccProcessingAmount + margin.gdpCommissionAmount + margin.thirdPartyCommissionsTotal;
+  const totalComm = margin.ccProcessingAmount + margin.clientCommissionAmount + margin.gdpCommissionAmount + margin.thirdPartyCommissionsTotal;
 
   const math = (s: string) =>
     showMath ? <div className="text-[11px] text-brand-silver/60 -mt-0.5 pb-0.5 pl-3">{s}</div> : null;
@@ -125,10 +125,18 @@ export default function MarginPanel({ margin, summary, showMath }: Props) {
           </button>
           {commExpanded && (
             <div className="pl-4 space-y-0.5 pb-1">
-              <div className="flex justify-between text-xs text-brand-charcoal/60 py-0.5">
-                <span>CC Processing ({pct(margin.ccProcessingAmount / (summary.subtotalClient || 1))})</span>
-                <span className="tabular-nums">{fmt(margin.ccProcessingAmount)}</span>
-              </div>
+              {margin.ccProcessingAmount > 0 && (
+                <div className="flex justify-between text-xs text-brand-charcoal/60 py-0.5">
+                  <span>CC Processing ({pct(margin.ccProcessingAmount / (summary.subtotalClient || 1))})</span>
+                  <span className="tabular-nums">{fmt(margin.ccProcessingAmount)}</span>
+                </div>
+              )}
+              {margin.clientCommissionAmount > 0 && (
+                <div className="flex justify-between text-xs text-brand-charcoal/60 py-0.5">
+                  <span>Production Fee (pass-through)</span>
+                  <span className="tabular-nums">{fmt(margin.clientCommissionAmount)}</span>
+                </div>
+              )}
               {margin.gdpCommissionAmount > 0 && (
                 <div className="flex justify-between text-xs text-brand-charcoal/60 py-0.5">
                   <span>GDP Commission (6.5%)</span>

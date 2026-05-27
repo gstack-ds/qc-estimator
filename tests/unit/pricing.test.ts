@@ -441,17 +441,17 @@ describe('calculateMarginAnalysis — new formula', () => {
     expect(margin.ccProcessingAmount).toBeCloseTo(1984.125 * 0.035);
   });
 
-  it('qcRevenue = totalClient − vendorCostsBase − totalTaxes − ccProcessing − gdpComm', () => {
+  it('qcRevenue = totalClient − vendorCostsBase − totalTaxes − ccProcessing − clientComm − gdpComm', () => {
     const summary = calculateVenueEstimate(simpleDecorInput, BASE_CONFIG);
     const margin = calculateMarginAnalysis(summary, BASE_CONFIG, TEAM_HOURS_TIERS, 0);
     const expected = summary.totalClient
       - margin.vendorCostsBase - margin.totalTaxes
-      - margin.ccProcessingAmount - margin.gdpCommissionAmount;
+      - margin.ccProcessingAmount - margin.clientCommissionAmount - margin.gdpCommissionAmount;
     expect(margin.qcRevenue).toBeCloseTo(expected);
-    expect(margin.qcRevenue).toBeCloseTo(822.25);
+    expect(margin.qcRevenue).toBeCloseTo(710.51);
   });
 
-  it('client commission is NOT deducted — higher commission increases qcRevenue', () => {
+  it('client commission cancels exactly — qcRevenue is independent of commission rate', () => {
     const noGdpHigh: ProgramConfig = { ...BASE_CONFIG, gdpCommissionEnabled: false, clientCommission: 0.10 };
     const noGdpZero: ProgramConfig = { ...BASE_CONFIG, gdpCommissionEnabled: false, clientCommission: 0 };
 
@@ -462,18 +462,19 @@ describe('calculateMarginAnalysis — new formula', () => {
       calculateVenueEstimate(simpleDecorInput, noGdpZero), noGdpZero, TEAM_HOURS_TIERS, 0,
     );
 
-    expect(marginHigh.qcRevenue).toBeGreaterThan(marginZero.qcRevenue);
-    // difference = 1850 × 0.10 = 185 (client commission is pure QC earnings)
-    expect(marginHigh.qcRevenue - marginZero.qcRevenue).toBeCloseTo(1850 * 0.10);
+    // clientCommission adds to totalClient (via productionFee) and is also deducted — they cancel exactly
+    expect(marginHigh.qcRevenue).toBeCloseTo(marginZero.qcRevenue);
   });
 
-  it('taxes are a pure pass-through — qcRevenue identical at 0% and 10% tax rates', () => {
+  it('taxes are a pure pass-through (no GDP) — qcRevenue identical at 0% and 10% tax rates', () => {
     const zeroTaxConfig: ProgramConfig = {
       ...BASE_CONFIG,
+      gdpCommissionEnabled: false,
       location: { id: 'z', name: 'No Tax', foodTaxRate: 0, alcoholTaxRate: 0, generalTaxRate: 0 },
     };
     const highTaxConfig: ProgramConfig = {
       ...BASE_CONFIG,
+      gdpCommissionEnabled: false,
       location: { id: 'h', name: 'High Tax', foodTaxRate: 0.10, alcoholTaxRate: 0.10, generalTaxRate: 0.10 },
     };
 
@@ -484,6 +485,7 @@ describe('calculateMarginAnalysis — new formula', () => {
       calculateVenueEstimate(simpleDecorInput, highTaxConfig), highTaxConfig, TEAM_HOURS_TIERS, 0,
     );
 
+    // Taxes pass through when GDP is off; with GDP on, higher taxes raise totalClient → higher GDP commission
     expect(marginZero.qcRevenue).toBeCloseTo(marginHigh.qcRevenue);
   });
 
@@ -497,6 +499,82 @@ describe('calculateMarginAnalysis — new formula', () => {
     const summary = calculateVenueEstimate(simpleDecorInput, BASE_CONFIG);
     // equipmentTaxOur = 1000 × 0.0725 = 72.5
     expect(summary.vendorTaxesTotal).toBeCloseTo(72.5);
+  });
+});
+
+// ─── Bug #5: GDP base fix + clientCommission deduction ───────────────────────
+// Real estimate (May 2026): app showed Commissions $0, Margin $901 (41%).
+// Two bugs: (1) GDP used markupRevenue base instead of totalClient,
+//           (2) clientCommissionAmount was not deducted from qcRevenue.
+// Expected after fix: commissions deducted, Margin ≈ $697.
+
+describe('calculateMarginAnalysis — bug #5: GDP base and clientCommission deduction', () => {
+  const avInput: VenueEstimateInput = {
+    name: 'AV estimate',
+    fbMinimum: 0, isVenueTaxable: false, serviceCharge: 0, gratuity: 0, adminFee: 0,
+    lineItems: [
+      { id: '1', section: 'AV & Production', taxBucket: 'equipment', name: 'LED Wall', qty: 1, unitPrice: 1000, categoryMarkupPct: 0.65, taxType: 'none' },
+    ],
+  };
+
+  const avConfig: ProgramConfig = {
+    guestCount: 100,
+    location: { id: 'loc', name: 'Test', foodTaxRate: 0, alcoholTaxRate: 0, generalTaxRate: 0 },
+    ccProcessingFee: 0,
+    clientCommission: 0.03,
+    gdpCommissionEnabled: true,
+    gdpCommissionRate: 0.065,
+    serviceChargeDefault: 0, gratuityDefault: 0, adminFeeDefault: 0,
+    thirdPartyCommissions: [],
+  };
+
+  // ourCost=1000, clientCost=1650, markupRevenue=1650
+  // productionFee = 1650 × 0.03 = 49.50
+  // totalClient = 1699.50
+  // GDP (correct) = 1699.50 × 0.065 = 110.47
+  // clientCommissionAmount = 49.50
+  // qcRevenue = 1699.50 − 1000 − 0 − 0 − 49.50 − 110.47 = 539.53
+  //           = markup(650) − GDP(110.47)
+
+  it('gdpCommissionAmount uses totalClient as base, not markupRevenue', () => {
+    const summary = calculateVenueEstimate(avInput, avConfig);
+    const margin = calculateMarginAnalysis(summary, avConfig, TEAM_HOURS_TIERS, 0);
+    expect(margin.gdpCommissionAmount).toBeCloseTo(summary.totalClient * avConfig.gdpCommissionRate);
+    expect(margin.gdpCommissionAmount).not.toBeCloseTo(1650 * avConfig.gdpCommissionRate);
+  });
+
+  it('clientCommissionAmount is deducted from qcRevenue', () => {
+    const summary = calculateVenueEstimate(avInput, avConfig);
+    const margin = calculateMarginAnalysis(summary, avConfig, TEAM_HOURS_TIERS, 0);
+    const expected = summary.totalClient
+      - margin.vendorCostsBase - margin.totalTaxes
+      - margin.ccProcessingAmount - margin.clientCommissionAmount
+      - margin.gdpCommissionAmount - margin.thirdPartyCommissionsTotal;
+    expect(margin.qcRevenue).toBeCloseTo(expected);
+  });
+
+  it('qcRevenue equals markup minus GDP (algebraic identity, no taxes, ccFee=0)', () => {
+    const summary = calculateVenueEstimate(avInput, avConfig);
+    const margin = calculateMarginAnalysis(summary, avConfig, TEAM_HOURS_TIERS, 0);
+    const markup = summary.equipmentSubtotalClient - summary.equipmentSubtotalOur;
+    expect(margin.qcRevenue).toBeCloseTo(markup - margin.gdpCommissionAmount);
+    expect(margin.qcRevenue).toBeCloseTo(539.53);
+  });
+
+  it('gdpCommissionAmount and clientCommissionAmount are both non-zero', () => {
+    const summary = calculateVenueEstimate(avInput, avConfig);
+    const margin = calculateMarginAnalysis(summary, avConfig, TEAM_HOURS_TIERS, 0);
+    expect(margin.gdpCommissionAmount).toBeGreaterThan(0);
+    expect(margin.clientCommissionAmount).toBeGreaterThan(0);
+  });
+
+  it('qcMarginPct is lower when GDP is enabled', () => {
+    const noGdpConfig: ProgramConfig = { ...avConfig, gdpCommissionEnabled: false };
+    const summaryGdp    = calculateVenueEstimate(avInput, avConfig);
+    const summaryNoGdp  = calculateVenueEstimate(avInput, noGdpConfig);
+    const marginGdp     = calculateMarginAnalysis(summaryGdp, avConfig, TEAM_HOURS_TIERS, 0);
+    const marginNoGdp   = calculateMarginAnalysis(summaryNoGdp, noGdpConfig, TEAM_HOURS_TIERS, 0);
+    expect(marginGdp.qcMarginPct).toBeLessThan(marginNoGdp.qcMarginPct);
   });
 });
 

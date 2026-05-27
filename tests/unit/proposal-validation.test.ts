@@ -56,7 +56,7 @@ describe('Proposal 1 — 50-guest F&B dinner, Charlotte, no restaurant fees (pla
   const EXPECTED_VENDOR_COSTS   = 4250.00;  // TODO: verify against Excel
   const EXPECTED_TOTAL_TAXES    =  477.59;  // TODO: verify against Excel
   const EXPECTED_CC_PROCESSING  =  247.28;  // TODO: verify against Excel
-  const EXPECTED_QC_MARGIN      = 2666.88;  // TODO: verify against Excel
+  const EXPECTED_QC_MARGIN      = 2337.50;  // TODO: verify against Excel — updated for bug #5 fix (clientComm now deducted)
 
   const config: ProgramConfig = {
     guestCount: 50,
@@ -129,8 +129,8 @@ describe('Proposal 2 — 100-guest F&B, DC, 20% SC + GDP commission (placeholder
   const EXPECTED_VENDOR_COSTS   = 13200.00; // TODO: verify against Excel
   const EXPECTED_TOTAL_TAXES    =  1705.00; // TODO: verify against Excel
   const EXPECTED_CC_PROCESSING  =   775.78; // TODO: verify against Excel
-  const EXPECTED_GDP_COMMISSION =  1329.90; // TODO: verify against Excel
-  const EXPECTED_QC_MARGIN      =  6953.10; // TODO: verify against Excel
+  const EXPECTED_GDP_COMMISSION =  1557.65; // TODO: verify against Excel — updated for bug #5 fix (GDP base = totalClient)
+  const EXPECTED_QC_MARGIN      =  5702.36; // TODO: verify against Excel — updated for bug #5 fix (clientComm deducted, GDP base fixed)
 
   const config: ProgramConfig = {
     guestCount: 100,
@@ -207,7 +207,7 @@ describe('Proposal 3 — 75-guest decor/rentals, Charlotte, no F&B (placeholder)
   const EXPECTED_VENDOR_COSTS   =  5000.00; // TODO: verify against Excel
   const EXPECTED_TOTAL_TAXES    =   563.33; // TODO: verify against Excel
   const EXPECTED_CC_PROCESSING  =   344.87; // TODO: verify against Excel
-  const EXPECTED_QC_MARGIN      =  4754.50; // TODO: verify against Excel
+  const EXPECTED_QC_MARGIN      =  4290.00; // TODO: verify against Excel — updated for bug #5 fix (clientComm now deducted)
 
   const config: ProgramConfig = {
     guestCount: 75,
