@@ -275,14 +275,13 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Staffing & Fees section in Decor builder — Non-Taxable Staffing bucket wired in
 - [x] Engine refactor — TaxBucket enum (fb/equipment/venue/staffing) replaces section-string matching; 5 new routing tests (194 total)
 - [x] Dynamic estimate sections (#2/#3/#4) — migration 025, estimate_sections table, per-estimate sections, inline rename (pencil icon), delete empty sections, Add Category button with name+bucket picker; all 3 builders; 0 TypeScript errors, 194 tests passing
+- [x] Migration 025 run in production — estimate_sections table + section_id FK on estimate_line_items live
+- [x] Bug #5 fix — GDP commission base corrected to totalClient; clientCommission deducted from QC margin; 199 tests passing
 
 ### Remaining
-- [ ] **Run migration 025 in production** — `supabase/migrations/025_estimate_sections.sql`
-- [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs
+- [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs (note: EXPECTED_QC_MARGIN values changed significantly with bug #5 fix)
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- Run migration 025 in production (estimate_sections table + section_id FK on line items).
-- After migration, test section rename/add/delete in the builder on a real estimate.
-- Proposal validation against Excel is the next quality check.
+- Proposal validation against Excel is the next quality check — EXPECTED_* values in proposal-validation.test.ts were updated for bug #5 but not yet verified against the workbook.
 - Scanner is live and working. Run `npm run dedup` if duplicate leads accumulate.
