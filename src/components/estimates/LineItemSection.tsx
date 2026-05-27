@@ -18,6 +18,7 @@ interface Props {
   guestCount?: number;
   selectedItems?: Set<string>;
   onToggleSelect?: (id: string) => void;
+  onToggleAllSelect?: (ids: string[], selected: boolean) => void;
   onChange: (id: string, patch: Partial<LocalLineItem>) => void;
   onBlur: (id: string) => void;
   onDelete: (id: string) => void;
@@ -42,15 +43,30 @@ const SECTION_LABELS: Record<string, string> = {
   'Rentals - Non-Taxable': 'Non-Taxable Rental Fees',
 };
 
-export default function LineItemSection({ section, label, items, markups, location, defaultTaxType, guestCount, selectedItems, onToggleSelect, onChange, onBlur, onDelete, onAdd, onAddFromTemplate, onSaveAsTemplate, showMath, taxExempt }: Props) {
+export default function LineItemSection({ section, label, items, markups, location, defaultTaxType, guestCount, selectedItems, onToggleSelect, onToggleAllSelect, onChange, onBlur, onDelete, onAdd, onAddFromTemplate, onSaveAsTemplate, showMath, taxExempt }: Props) {
   const isFB = section === 'F&B';
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+
+  const allSelected = items.length > 0 && items.every((item) => selectedItems?.has(item.id));
+  const someSelected = !allSelected && items.some((item) => selectedItems?.has(item.id));
 
   return (
     <div>
       {/* Section header */}
       <div className="flex items-center justify-between py-2 border-b border-brand-cream mb-1">
-        <h4 className="text-xs font-semibold text-brand-brown uppercase tracking-[0.08em]">{label ?? SECTION_LABELS[section]}</h4>
+        <div className="flex items-center gap-2">
+          {onToggleAllSelect && items.length > 0 && (
+            <input
+              type="checkbox"
+              ref={(el) => { if (el) el.indeterminate = someSelected; }}
+              checked={allSelected}
+              onChange={(e) => onToggleAllSelect(items.map((i) => i.id), e.target.checked)}
+              className="flex-shrink-0 accent-brand-copper cursor-pointer"
+              title={allSelected ? 'Deselect all in section' : 'Select all in section'}
+            />
+          )}
+          <h4 className="text-xs font-semibold text-brand-brown uppercase tracking-[0.08em]">{label ?? SECTION_LABELS[section]}</h4>
+        </div>
         {items.length > 0 && (
           <div className="grid text-xs font-medium text-brand-silver gap-2 pr-6" style={{ gridTemplateColumns: '2fr 60px 90px 130px 100px 60px 80px 80px 20px 20px' }}>
             <span></span>

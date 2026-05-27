@@ -383,6 +383,14 @@ export default function DecorEstimateBuilder({
     setSelectedItems((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   }, []);
 
+  const handleToggleAllInSection = useCallback((ids: string[], selected: boolean) => {
+    setSelectedItems((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) { if (selected) next.add(id); else next.delete(id); }
+      return next;
+    });
+  }, []);
+
   const handleMoveToSection = useCallback((targetSection: LocalSection) => {
     const ids = new Set(selectedItems);
     const taxType = SECTION_DEFAULT_TAX[targetSection];
@@ -514,6 +522,7 @@ export default function DecorEstimateBuilder({
               showMath={showMath}
               selectedItems={selectedItems}
               onToggleSelect={handleToggleSelect}
+              onToggleAllSelect={handleToggleAllInSection}
               taxExempt={taxExempt}
             />
           </div>
