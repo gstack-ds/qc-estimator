@@ -3,6 +3,7 @@ import {
   getProgram,
   getEstimatesForProgram,
   getEstimate,
+  getEstimateSections,
   getEvent,
   getLineItemsForEstimate,
   getMarkups,
@@ -14,6 +15,7 @@ import {
   getVenues,
   getAllVenueSpaces,
 } from '@/lib/supabase/queries';
+import { ensureDefaultSections } from '@/app/(programs)/programs/[id]/estimates/actions';
 import EstimateBuilder from '@/components/estimates/EstimateBuilder';
 import AvEstimateBuilder from '@/components/estimates/AvEstimateBuilder';
 import DecorEstimateBuilder from '@/components/estimates/DecorEstimateBuilder';
@@ -71,11 +73,19 @@ export default async function EstimatePage({ params }: Props) {
     );
   }
 
-  const [lineItems, initialTrips, venueSpaces] = await Promise.all([
+  const [lineItems, initialTrips, venueSpaces, rawSections] = await Promise.all([
     getLineItemsForEstimate(estimateId),
     getTripsForEstimate(estimateId),
     estimate.type === 'venue' ? getAllVenueSpaces() : Promise.resolve([]),
+    getEstimateSections(estimateId),
   ]);
+
+  // Lazy-seed default sections for estimates that predate migration 025
+  let dbSections = rawSections;
+  if (dbSections.length === 0 && estimate.type !== 'transportation') {
+    const { sections } = await ensureDefaultSections(estimateId, estimate.type as import('@/types').EstimateType);
+    dbSections = sections.map((s) => ({ ...s, tax_bucket: s.tax_bucket as 'fb' | 'equipment' | 'venue' | 'staffing' }));
+  }
 
   if (estimate.type === 'venue') {
     return (
@@ -86,6 +96,7 @@ export default async function EstimatePage({ params }: Props) {
           allEstimates={allEstimates}
           estimate={estimate}
           dbLineItems={lineItems}
+          dbSections={dbSections}
           markups={markups}
           tiers={tiers}
           travelRefs={travelRefs}
@@ -110,6 +121,7 @@ export default async function EstimatePage({ params }: Props) {
         allEstimates={allEstimates}
         estimate={estimate}
         dbLineItems={lineItems}
+        dbSections={dbSections}
         markups={markups}
         tiers={tiers}
         travelRefs={travelRefs}

@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { getLineItemsForEstimate } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { DbMarkup } from '@/lib/supabase/queries';
-import type { LocalLineItem, LocalSection } from './EstimateBuilder';
+import type { LocalLineItem } from './EstimateBuilder';
+import type { TaxType, TaxBucket } from '@/types';
 
 interface SourceEstimate {
   id: string;
@@ -15,6 +16,17 @@ interface Props {
   otherEstimates: SourceEstimate[];
   markups: DbMarkup[];
   onImport: (items: LocalLineItem[]) => void;
+}
+
+const STAFFING_SECTIONS = new Set(['Non-Taxable Staffing', 'Florals - Non-Taxable', 'Rentals - Non-Taxable']);
+const VENUE_SECTIONS = new Set(['Venue Fees']);
+const FB_SECTIONS = new Set(['F&B']);
+
+function sectionToTaxBucket(section: string): TaxBucket {
+  if (FB_SECTIONS.has(section)) return 'fb';
+  if (VENUE_SECTIONS.has(section)) return 'venue';
+  if (STAFFING_SECTIONS.has(section)) return 'staffing';
+  return 'equipment';
 }
 
 export default function CopyItemsFromButton({ currentEstimateId, otherEstimates, markups, onImport }: Props) {
@@ -48,7 +60,9 @@ export default function CopyItemsFromButton({ currentEstimateId, otherEstimates,
       const effectiveMarkupPct = isCustom ? 0 : (item.markup_override ?? defaultMarkupPct);
       return {
         id: `new-${Date.now()}-${Math.random()}`,
-        section: item.section as LocalSection,
+        sectionId: item.section_id ?? '',
+        section: item.section,
+        taxBucket: sectionToTaxBucket(item.section),
         name: item.name,
         label: item.label ?? undefined,
         qty: item.qty,
@@ -56,7 +70,7 @@ export default function CopyItemsFromButton({ currentEstimateId, otherEstimates,
         categoryId: isCustom ? 'custom' : (item.category_id ?? null),
         defaultMarkupPct,
         categoryMarkupPct: effectiveMarkupPct,
-        taxType: item.tax_type as import('@/types').TaxType,
+        taxType: item.tax_type as TaxType,
         customClientUnitPrice: isCustom ? item.custom_client_unit_price! : undefined,
         sortOrder: item.sort_order,
         isNew: true,

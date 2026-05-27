@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import Anthropic from '@anthropic-ai/sdk';
 import type { DocumentBlockParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
+import type { EstimateType, TaxBucket } from '@/types';
 
 // ─── Estimate details ─────────────────────────────────────
 
@@ -84,12 +85,32 @@ export async function duplicateEstimate(sourceId: string, programId: string) {
     .single();
   if (newErr) return { error: newErr.message, id: null };
 
+  // Copy sections, capturing old→new ID mapping for line item FK update
+  const { data: srcSections } = await supabase
+    .from('estimate_sections')
+    .select('id, name, tax_bucket, markup_pct, sort_order, is_built_in')
+    .eq('estimate_id', sourceId)
+    .order('sort_order');
+
+  const sectionIdMap = new Map<string, string>();
+  if (srcSections && srcSections.length > 0) {
+    const { data: newSections, error: secErr } = await supabase
+      .from('estimate_sections')
+      .insert(srcSections.map(({ id: _id, ...rest }) => ({ ...rest, estimate_id: newEstimate.id })))
+      .select('id, name');
+    if (secErr) return { error: secErr.message, id: null };
+    (newSections ?? []).forEach((ns, i) => {
+      sectionIdMap.set(srcSections[i].id, ns.id);
+    });
+  }
+
   // Copy line items
   if (lineItems && lineItems.length > 0) {
     const { error: copyErr } = await supabase.from('estimate_line_items').insert(
-      lineItems.map(({ id: _id, estimate_id: _eid, created_at: _ca, updated_at: _ua, ...rest }) => ({
+      lineItems.map(({ id: _id, estimate_id: _eid, created_at: _ca, updated_at: _ua, section_id, ...rest }) => ({
         ...rest,
         estimate_id: newEstimate.id,
+        section_id: section_id ? (sectionIdMap.get(section_id) ?? null) : null,
       }))
     );
     if (copyErr) return { error: copyErr.message, id: null };
@@ -110,12 +131,97 @@ export async function reorderEstimates(programId: string, updates: { id: string;
   return { error: null };
 }
 
+// ─── Estimate Sections ────────────────────────────────────
+
+const DEFAULT_SECTIONS: Record<EstimateType, Array<{ name: string; tax_bucket: TaxBucket; markup_pct: number; sort_order: number }>> = {
+  venue: [
+    { name: 'F&B', tax_bucket: 'fb', markup_pct: 0.55, sort_order: 0 },
+    { name: 'Equipment & Staffing', tax_bucket: 'equipment', markup_pct: 0.65, sort_order: 1 },
+    { name: 'Venue Fees', tax_bucket: 'venue', markup_pct: 0.60, sort_order: 2 },
+    { name: 'Non-Taxable Staffing', tax_bucket: 'staffing', markup_pct: 0.90, sort_order: 3 },
+  ],
+  av: [
+    { name: 'AV & Production', tax_bucket: 'equipment', markup_pct: 0.65, sort_order: 0 },
+    { name: 'Non-Taxable Staffing', tax_bucket: 'staffing', markup_pct: 0.90, sort_order: 1 },
+  ],
+  decor: [
+    { name: 'Florals - Taxable', tax_bucket: 'equipment', markup_pct: 0.85, sort_order: 0 },
+    { name: 'Florals - Non-Taxable', tax_bucket: 'staffing', markup_pct: 0.85, sort_order: 1 },
+    { name: 'Rentals - Seating', tax_bucket: 'equipment', markup_pct: 0.85, sort_order: 2 },
+    { name: 'Rentals - Lounge', tax_bucket: 'equipment', markup_pct: 0.85, sort_order: 3 },
+    { name: 'Rentals - Tables', tax_bucket: 'equipment', markup_pct: 0.85, sort_order: 4 },
+    { name: 'Rentals - Rugs & Accessories', tax_bucket: 'equipment', markup_pct: 0.85, sort_order: 5 },
+    { name: 'Rentals - Non-Taxable', tax_bucket: 'staffing', markup_pct: 0.85, sort_order: 6 },
+    { name: 'Non-Taxable Staffing', tax_bucket: 'staffing', markup_pct: 0.90, sort_order: 7 },
+  ],
+  transportation: [],
+};
+
+export interface DbEstimateSectionAction {
+  id: string;
+  estimate_id: string;
+  name: string;
+  tax_bucket: TaxBucket;
+  markup_pct: number;
+  sort_order: number;
+  is_built_in: boolean;
+}
+
+export async function ensureDefaultSections(estimateId: string, estimateType: EstimateType): Promise<{ sections: DbEstimateSectionAction[]; error: string | null }> {
+  const supabase = await createClient();
+  const defaults = DEFAULT_SECTIONS[estimateType];
+  if (defaults.length === 0) return { sections: [], error: null };
+
+  const { data, error } = await supabase
+    .from('estimate_sections')
+    .insert(defaults.map((s) => ({ ...s, estimate_id: estimateId, is_built_in: true })))
+    .select('id, estimate_id, name, tax_bucket, markup_pct, sort_order, is_built_in');
+  if (error) return { sections: [], error: error.message };
+  return { sections: data as DbEstimateSectionAction[], error: null };
+}
+
+export async function upsertSection(data: {
+  id?: string;
+  estimate_id: string;
+  name: string;
+  tax_bucket: TaxBucket;
+  markup_pct: number;
+  sort_order: number;
+  is_built_in?: boolean;
+}): Promise<{ error: string | null; section: DbEstimateSectionAction | null }> {
+  const supabase = await createClient();
+  const payload = {
+    estimate_id: data.estimate_id,
+    name: data.name,
+    tax_bucket: data.tax_bucket,
+    markup_pct: data.markup_pct,
+    sort_order: data.sort_order,
+    is_built_in: data.is_built_in ?? false,
+    ...(data.id ? { id: data.id } : {}),
+  };
+  const { data: row, error } = await supabase
+    .from('estimate_sections')
+    .upsert(payload, { onConflict: 'id' })
+    .select('id, estimate_id, name, tax_bucket, markup_pct, sort_order, is_built_in')
+    .single();
+  if (error) return { error: error.message, section: null };
+  return { error: null, section: row as DbEstimateSectionAction };
+}
+
+export async function deleteSection(id: string): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from('estimate_sections').delete().eq('id', id);
+  if (error) return { error: error.message };
+  return { error: null };
+}
+
 // ─── Line Items ──────────────────────────────────────────
 
 export async function upsertLineItem(data: {
   id?: string;
   estimate_id: string;
   section: string;
+  section_id?: string | null;
   name: string;
   label?: string | null;
   qty: number;
@@ -134,6 +240,7 @@ export async function upsertLineItem(data: {
       .from('estimate_line_items')
       .update({
         section: data.section,
+        section_id: data.section_id ?? null,
         name: data.name,
         label: data.label ?? null,
         qty: data.qty,
@@ -154,6 +261,7 @@ export async function upsertLineItem(data: {
       .insert({
         estimate_id: data.estimate_id,
         section: data.section,
+        section_id: data.section_id ?? null,
         name: data.name,
         label: data.label ?? null,
         qty: data.qty,
@@ -621,7 +729,7 @@ export async function getLineItemsForEstimate(estimateId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('estimate_line_items')
-    .select('id, section, name, label, qty, unit_price, category_id, tax_type, custom_client_unit_price, markup_override, is_revenue_item, sort_order')
+    .select('id, section, section_id, name, label, qty, unit_price, category_id, tax_type, custom_client_unit_price, markup_override, is_revenue_item, sort_order')
     .eq('estimate_id', estimateId)
     .order('sort_order');
   if (error) return { error: error.message, items: [] };

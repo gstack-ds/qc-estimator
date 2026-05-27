@@ -1,18 +1,19 @@
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import type { TaxType } from '@/types';
-import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation } from '@/lib/supabase/queries';
+import type { TaxType, TaxBucket } from '@/types';
+import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation, DbEstimateSection } from '@/lib/supabase/queries';
 import { calculateVenueEstimate, calculateMarginAnalysis } from '@/lib/engine/pricing';
 import type { ProgramConfig, TeamHoursTier } from '@/types';
 import EstimateNav from './EstimateNav';
 import CopyItemsFromButton from './CopyItemsFromButton';
 import LineItemSection from './LineItemSection';
+import type { LocalSectionDef } from './LineItemSection';
 import DecorSummaryPanel from './DecorSummaryPanel';
 import MarginPanel from './MarginPanel';
-import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
+import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { DbTemplate, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
-import type { LocalLineItem, LocalSection } from './EstimateBuilder';
+import type { LocalLineItem } from './EstimateBuilder';
 import TravelPanel from './TravelPanel';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
@@ -24,6 +25,7 @@ function toEngineLineItems(items: LocalLineItem[]) {
   return items.map((item) => ({
     id: item.id,
     section: item.section,
+    taxBucket: item.taxBucket,
     name: item.name,
     qty: item.qty,
     unitPrice: item.unitPrice,
@@ -68,14 +70,17 @@ function toTiers(tiers: DbTier[]): TeamHoursTier[] {
   }));
 }
 
-function dbItemToLocal(item: DbLineItem, markups: DbMarkup[]): LocalLineItem {
+function dbItemToLocal(item: DbLineItem, markups: DbMarkup[], sections: LocalSectionDef[]): LocalLineItem {
   const isCustom = item.custom_client_unit_price !== null;
   const markup = markups.find((m) => m.id === item.category_id);
   const defaultMarkupPct = isCustom ? 0 : (markup?.markup_pct ?? 0.5);
   const effectiveMarkupPct = isCustom ? 0 : (item.markup_override ?? defaultMarkupPct);
+  const sectionDef = sections.find((s) => s.id === item.section_id) ?? sections.find((s) => s.name === item.section);
   return {
     id: item.id,
-    section: item.section as LocalSection,
+    sectionId: sectionDef?.id ?? item.section_id ?? '',
+    section: sectionDef?.name ?? item.section,
+    taxBucket: sectionDef?.taxBucket ?? 'equipment',
     name: item.name,
     label: item.label ?? undefined,
     qty: item.qty,
@@ -90,45 +95,18 @@ function dbItemToLocal(item: DbLineItem, markups: DbMarkup[]): LocalLineItem {
   };
 }
 
-function subtotalClient(items: LocalLineItem[], section: LocalSection) {
-  return items
-    .filter((li) => li.section === section)
-    .reduce((sum, li) => {
-      const isCustom = li.categoryId === 'custom';
-      const client = isCustom && li.customClientUnitPrice !== undefined
-        ? li.qty * li.customClientUnitPrice
-        : li.qty * li.unitPrice * (1 + li.categoryMarkupPct);
-      return sum + client;
-    }, 0);
+function bucketDefaultTax(taxBucket: TaxBucket): TaxType {
+  if (taxBucket === 'fb') return 'food';
+  if (taxBucket === 'staffing') return 'none';
+  return 'general';
 }
 
-// ─── Sub-section definitions ──────────────────────────────
-
-interface SubSection {
-  section: LocalSection;
-  label: string;
-  taxType: TaxType;
-  defaultCategoryHint?: string;
+function itemClientCost(li: LocalLineItem): number {
+  if (li.categoryId === 'custom' && li.customClientUnitPrice !== undefined) {
+    return li.qty * li.customClientUnitPrice;
+  }
+  return li.qty * li.unitPrice * (1 + li.categoryMarkupPct);
 }
-
-const FLORAL_SECTIONS: SubSection[] = [
-  { section: 'Florals - Taxable', label: 'Taxable Floral Product', taxType: 'general' },
-  { section: 'Florals - Non-Taxable', label: 'Non-Taxable Floral Fees', taxType: 'none' },
-];
-
-const RENTAL_SECTIONS: SubSection[] = [
-  { section: 'Rentals - Seating', label: 'Seating', taxType: 'general' },
-  { section: 'Rentals - Lounge', label: 'Lounge', taxType: 'general' },
-  { section: 'Rentals - Tables', label: 'Tables', taxType: 'general' },
-  { section: 'Rentals - Rugs & Accessories', label: 'Rugs, Décor & Accessories', taxType: 'general' },
-  { section: 'Rentals - Non-Taxable', label: 'Non-Taxable Rental Fees', taxType: 'none' },
-];
-
-const STAFFING_SECTION: SubSection = {
-  section: 'Non-Taxable Staffing',
-  label: 'Staffing & Fees',
-  taxType: 'none',
-};
 
 // ─── Main Component ───────────────────────────────────────
 
@@ -138,6 +116,7 @@ interface Props {
   allEstimates: DbEstimate[];
   estimate: DbEstimate;
   dbLineItems: DbLineItem[];
+  dbSections: DbEstimateSection[];
   markups: DbMarkup[];
   tiers: DbTier[];
   travelRefs: TravelRefData;
@@ -147,30 +126,27 @@ interface Props {
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
-type OpenMap = Partial<Record<LocalSection, boolean>>;
-
 export default function DecorEstimateBuilder({
-  program, location, allEstimates, estimate, dbLineItems, markups, tiers, travelRefs, initialTrips, eventName,
+  program, location, allEstimates, estimate, dbLineItems, dbSections, markups, tiers, travelRefs, initialTrips, eventName,
 }: Props) {
   const programConfig = useMemo(() => toProgramConfig(program, location), [program, location]);
   const tiersList = useMemo(() => toTiers(tiers), [tiers]);
+
+  const [sections, setSections] = useState<LocalSectionDef[]>(
+    dbSections.map((s) => ({ id: s.id, name: s.name, taxBucket: s.tax_bucket, markupPct: s.markup_pct, isBuiltIn: s.is_built_in }))
+  );
 
   const [name, setName] = useState(estimate.name);
   const [discountType, setDiscountType] = useState<'percent' | 'flat' | null>(estimate.discount_type ?? null);
   const [discountValue, setDiscountValue] = useState(estimate.discount_value ?? 0);
   const [taxExempt, setTaxExempt] = useState(estimate.tax_exempt ?? false);
+
+  const initSections = dbSections.map((s) => ({ id: s.id, name: s.name, taxBucket: s.tax_bucket, markupPct: s.markup_pct, isBuiltIn: s.is_built_in }));
   const [lineItems, setLineItems] = useState<LocalLineItem[]>(
-    dbLineItems.map((item) => dbItemToLocal(item, markups))
+    dbLineItems.map((item) => dbItemToLocal(item, markups, initSections))
   );
   const lineItemsRef = useRef(lineItems);
   lineItemsRef.current = lineItems;
-
-  // All sub-sections open by default
-  const [openMap, setOpenMap] = useState<OpenMap>(() => {
-    const map: OpenMap = {};
-    [...FLORAL_SECTIONS, ...RENTAL_SECTIONS, STAFFING_SECTION].forEach((s) => { map[s.section] = true; });
-    return map;
-  });
 
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -179,6 +155,10 @@ export default function DecorEstimateBuilder({
   const [showMath, setShowMath] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [bulkMarkupInput, setBulkMarkupInput] = useState('');
+
+  const [showAddSection, setShowAddSection] = useState(false);
+  const [newSectionName, setNewSectionName] = useState('');
+  const [newSectionBucket, setNewSectionBucket] = useState<TaxBucket>('equipment');
 
   // ─── Engine ─────────────────────────────────────────────
 
@@ -216,16 +196,20 @@ export default function DecorEstimateBuilder({
     generalTaxRate: programConfig.location.generalTaxRate,
   }), [programConfig]);
 
-  // Sub-section client totals for summary panel breakdown
-  const floralTaxableClient = useMemo(() => subtotalClient(lineItems, 'Florals - Taxable'), [lineItems]);
-  const floralNonTaxableClient = useMemo(() => subtotalClient(lineItems, 'Florals - Non-Taxable'), [lineItems]);
-  const rentalsTaxableClient = useMemo(
-    () => ['Rentals - Seating', 'Rentals - Lounge', 'Rentals - Tables', 'Rentals - Rugs & Accessories']
-      .reduce((sum, s) => sum + subtotalClient(lineItems, s as LocalSection), 0),
+  // Compute summary panel breakdown values dynamically from sections
+  const floralTaxableClient = useMemo(
+    () => lineItems.filter((li) => li.taxBucket === 'equipment' && li.taxType !== 'none').reduce((s, li) => s + itemClientCost(li), 0),
     [lineItems]
   );
-  const rentalsNonTaxableClient = useMemo(() => subtotalClient(lineItems, 'Rentals - Non-Taxable'), [lineItems]);
-  const staffingTotal = useMemo(() => subtotalClient(lineItems, 'Non-Taxable Staffing'), [lineItems]);
+  const floralNonTaxableClient = useMemo(
+    () => lineItems.filter((li) => li.taxBucket === 'equipment' && li.taxType === 'none').reduce((s, li) => s + itemClientCost(li), 0),
+    [lineItems]
+  );
+  const rentalsTaxableClient = 0;
+  const rentalsNonTaxableClient = useMemo(
+    () => lineItems.filter((li) => li.taxBucket === 'staffing').reduce((s, li) => s + itemClientCost(li), 0),
+    [lineItems]
+  );
 
   // ─── Cache total ─────────────────────────────────────────
 
@@ -291,6 +275,7 @@ export default function DecorEstimateBuilder({
       id: item.isNew ? undefined : item.id,
       estimate_id: estimate.id,
       section: item.section,
+      section_id: item.sectionId || null,
       name: item.name || 'Item',
       label: item.label ?? null,
       qty: item.qty,
@@ -318,22 +303,23 @@ export default function DecorEstimateBuilder({
     }
   }, []);
 
-  const handleAddItem = useCallback((section: LocalSection, taxType: TaxType) => {
+  const handleAddItem = useCallback((sectionDef: LocalSectionDef, taxType: TaxType) => {
     const tempId = `new-${Date.now()}-${Math.random()}`;
     const maxOrder = lineItemsRef.current
-      .filter((li) => li.section === section)
+      .filter((li) => li.sectionId === sectionDef.id)
       .reduce((max, li) => Math.max(max, li.sortOrder), -1);
 
-    const defaultMarkupPct = section === 'Non-Taxable Staffing' ? 0.9 : 0.85;
     const newItem: LocalLineItem = {
       id: tempId,
-      section,
+      sectionId: sectionDef.id,
+      section: sectionDef.name,
+      taxBucket: sectionDef.taxBucket,
       name: '',
       qty: 1,
       unitPrice: 0,
       categoryId: null,
-      defaultMarkupPct,
-      categoryMarkupPct: defaultMarkupPct,
+      defaultMarkupPct: sectionDef.markupPct,
+      categoryMarkupPct: sectionDef.markupPct,
       taxType,
       sortOrder: maxOrder + 1,
       isNew: true,
@@ -354,14 +340,16 @@ export default function DecorEstimateBuilder({
     });
   }, []);
 
-  const handleAddFromTemplate = useCallback((section: LocalSection, template: DbTemplate) => {
+  const handleAddFromTemplate = useCallback((sectionDef: LocalSectionDef, template: DbTemplate) => {
     const tempId = `new-${Date.now()}-${Math.random()}`;
     const maxOrder = lineItemsRef.current
-      .filter((li) => li.section === section)
+      .filter((li) => li.sectionId === sectionDef.id)
       .reduce((max, li) => Math.max(max, li.sortOrder), -1);
     const newItem: LocalLineItem = {
       id: tempId,
-      section,
+      sectionId: sectionDef.id,
+      section: sectionDef.name,
+      taxBucket: sectionDef.taxBucket,
       name: template.name,
       qty: 1,
       unitPrice: template.default_unit_price,
@@ -380,13 +368,6 @@ export default function DecorEstimateBuilder({
     setLineItems((prev) => [...prev, ...imported]);
     imported.forEach((item) => setTimeout(() => handleItemSave(item.id), 0));
   }, [handleItemSave]);
-
-  const SECTION_DEFAULT_TAX: Record<LocalSection, TaxType> = {
-    'F&B': 'food', 'Equipment & Staffing': 'general', 'Venue Fees': 'general',
-    'Non-Taxable Staffing': 'none', 'Florals - Taxable': 'general', 'Florals - Non-Taxable': 'none',
-    'Rentals - Seating': 'general', 'Rentals - Lounge': 'general', 'Rentals - Tables': 'general',
-    'Rentals - Rugs & Accessories': 'general', 'Rentals - Non-Taxable': 'none',
-  };
 
   const handleToggleSelect = useCallback((id: string) => {
     setSelectedItems((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
@@ -418,58 +399,64 @@ export default function DecorEstimateBuilder({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bulkMarkupInput, selectedItems, handleItemSave]);
 
-  const handleMoveToSection = useCallback((targetSection: LocalSection) => {
+  const handleMoveToSection = useCallback((targetSectionId: string) => {
     const ids = new Set(selectedItems);
-    const taxType = SECTION_DEFAULT_TAX[targetSection];
+    const targetSectionDef = sections.find((s) => s.id === targetSectionId);
+    if (!targetSectionDef) return;
+    const taxType = bucketDefaultTax(targetSectionDef.taxBucket);
     setLineItems((prev) => {
-      const next = prev.map((item) => ids.has(item.id) ? { ...item, section: targetSection, taxType } : item);
+      const next = prev.map((item) =>
+        ids.has(item.id) ? { ...item, sectionId: targetSectionDef.id, section: targetSectionDef.name, taxBucket: targetSectionDef.taxBucket, taxType } : item
+      );
       lineItemsRef.current = next;
       return next;
     });
     for (const id of ids) setTimeout(() => handleItemSave(id), 0);
     setSelectedItems(new Set());
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedItems, handleItemSave]);
+  }, [selectedItems, sections, handleItemSave]);
 
   const handlePopulateFromExtraction = useCallback((data: ExtractedData) => {
     const decorMarkup = markups.find((m) => m.name === 'Décor & Design');
     const deliveryMarkup = markups.find((m) => m.name === 'Delivery & Logistics');
 
-    const sectionOrders: Partial<Record<LocalSection, number>> = {};
-    function nextOrder(section: LocalSection): number {
-      if (sectionOrders[section] === undefined) {
-        sectionOrders[section] = lineItemsRef.current
-          .filter((li) => li.section === section)
+    const equipSection = sections.find((s) => s.taxBucket === 'equipment');
+    const staffingSection = sections.find((s) => s.taxBucket === 'staffing');
+
+    const sectionOrders: Record<string, number> = {};
+    function nextOrder(sectionId: string): number {
+      if (sectionOrders[sectionId] === undefined) {
+        sectionOrders[sectionId] = lineItemsRef.current
+          .filter((li) => li.sectionId === sectionId)
           .reduce((max, li) => Math.max(max, li.sortOrder), -1) + 1;
       }
-      const order = sectionOrders[section] as number;
-      sectionOrders[section] = order + 1;
+      const order = sectionOrders[sectionId];
+      sectionOrders[sectionId] = order + 1;
       return order;
     }
 
     const toImport: LocalLineItem[] = (data.equipmentItems ?? []).map((item) => {
-      let section: LocalSection;
+      let sectionDef: LocalSectionDef | undefined;
       let markup: typeof decorMarkup;
       let taxType: TaxType;
 
       if (item.section === 'delivery') {
-        section = 'Florals - Non-Taxable';
+        sectionDef = staffingSection;
         markup = deliveryMarkup;
         taxType = 'none';
-      } else if (item.section === 'rentals') {
-        section = 'Rentals - Rugs & Accessories';
-        markup = decorMarkup;
-        taxType = 'general';
       } else {
-        // florals, lighting, signage, or any unrecognized section → Florals - Taxable
-        section = 'Florals - Taxable';
+        // florals, rentals, lighting, signage, or any unrecognized → equipment section
+        sectionDef = equipSection;
         markup = decorMarkup;
         taxType = 'general';
       }
 
+      if (!sectionDef) return null;
       return {
         id: `new-${Date.now()}-${Math.random()}`,
-        section,
+        sectionId: sectionDef.id,
+        section: sectionDef.name,
+        taxBucket: sectionDef.taxBucket,
         name: item.name,
         label: item.label ?? undefined,
         qty: item.qty ?? 1,
@@ -478,89 +465,56 @@ export default function DecorEstimateBuilder({
         defaultMarkupPct: markup?.markup_pct ?? 0.85,
         categoryMarkupPct: markup?.markup_pct ?? 0.85,
         taxType,
-        sortOrder: nextOrder(section),
+        sortOrder: nextOrder(sectionDef.id),
         isNew: true,
-      };
-    });
+      } as LocalLineItem;
+    }).filter((x): x is LocalLineItem => x !== null);
 
     handleImportItems(toImport);
-  }, [markups, handleImportItems]);
+  }, [markups, sections, handleImportItems]);
 
-  function toggleSection(section: LocalSection) {
-    setOpenMap((prev) => ({ ...prev, [section]: !prev[section] }));
-  }
+  // ─── Section management ───────────────────────────────────
+
+  const handleRenameSection = useCallback(async (sectionId: string, newName: string) => {
+    setSections((prev) => prev.map((s) => s.id === sectionId ? { ...s, name: newName } : s));
+    setLineItems((prev) => prev.map((li) => li.sectionId === sectionId ? { ...li, section: newName } : li));
+    const sectionDef = sections.find((s) => s.id === sectionId);
+    if (!sectionDef) return;
+    await upsertSection({ id: sectionId, estimate_id: estimate.id, name: newName, tax_bucket: sectionDef.taxBucket, markup_pct: sectionDef.markupPct, sort_order: sections.indexOf(sectionDef), is_built_in: sectionDef.isBuiltIn });
+    const idsToSave = lineItemsRef.current.filter((li) => li.sectionId === sectionId).map((li) => li.id);
+    for (const id of idsToSave) setTimeout(() => handleItemSave(id), 0);
+  }, [sections, estimate.id, handleItemSave]);
+
+  const handleDeleteSection = useCallback(async (sectionId: string) => {
+    const hasItems = lineItemsRef.current.some((li) => li.sectionId === sectionId);
+    if (hasItems) return;
+    setSections((prev) => prev.filter((s) => s.id !== sectionId));
+    await deleteSection(sectionId);
+  }, []);
+
+  const handleAddSection = useCallback(async () => {
+    const trimmed = newSectionName.trim();
+    if (!trimmed) return;
+    const markupPct = newSectionBucket === 'fb' ? 0.55 : newSectionBucket === 'venue' ? 0.60 : newSectionBucket === 'staffing' ? 0.90 : 0.85;
+    const result = await upsertSection({
+      estimate_id: estimate.id,
+      name: trimmed,
+      tax_bucket: newSectionBucket,
+      markup_pct: markupPct,
+      sort_order: sections.length,
+      is_built_in: false,
+    });
+    if (result.section) {
+      setSections((prev) => [...prev, { id: result.section!.id, name: result.section!.name, taxBucket: result.section!.tax_bucket, markupPct: result.section!.markup_pct, isBuiltIn: false }]);
+    }
+    setNewSectionName('');
+    setShowAddSection(false);
+  }, [newSectionName, newSectionBucket, sections.length, estimate.id]);
 
   // ─── Render helpers ───────────────────────────────────────
 
   const fieldClass = 'border border-brand-cream rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper focus:border-brand-brown bg-white text-brand-charcoal w-full';
   const labelClass = 'block text-xs font-medium text-brand-charcoal/60 tracking-wide mb-1';
-
-  function fmt(val: number) {
-    return val === 0 ? '' : '$' + Math.round(val).toLocaleString('en-US');
-  }
-
-  function renderSubSection(sub: SubSection) {
-    const items = lineItems.filter((li) => li.section === sub.section);
-    const isOpen = openMap[sub.section] !== false;
-    const total = subtotalClient(items, sub.section);
-
-    return (
-      <div key={sub.section} className="border border-brand-cream rounded-md overflow-hidden">
-        {/* Sub-section header */}
-        <button
-          type="button"
-          onClick={() => toggleSection(sub.section)}
-          className="w-full flex items-center justify-between px-4 py-2.5 bg-brand-offwhite hover:bg-brand-cream/40 transition-colors text-left"
-        >
-          <div className="flex items-center gap-2">
-            <span className={`text-brand-silver text-xs transition-transform ${isOpen ? 'rotate-90' : ''}`}>▶</span>
-            <span className="text-xs font-semibold text-brand-brown uppercase tracking-[0.08em]">{sub.label}</span>
-            <span className="text-xs text-brand-silver/70">
-              {items.length > 0 ? `${items.length} item${items.length !== 1 ? 's' : ''}` : ''}
-            </span>
-          </div>
-          {total > 0 && (
-            <span className="text-xs font-medium text-brand-charcoal tabular-nums">{fmt(total)}</span>
-          )}
-        </button>
-
-        {/* Sub-section content */}
-        {isOpen && (
-          <div className="px-4 pb-4 pt-2">
-            <LineItemSection
-              section={sub.section}
-              label={sub.label}
-              items={items}
-              markups={markups}
-              defaultTaxType={sub.taxType}
-              guestCount={program.guest_count}
-              onChange={(id, patch) => {
-                handleItemChange(id, patch);
-                if (patch.categoryId !== undefined || patch.taxType !== undefined) {
-                  setTimeout(() => handleItemSave(id), 0);
-                }
-              }}
-              onBlur={handleItemSave}
-              onDelete={handleItemDelete}
-              onAdd={handleAddItem}
-              onAddFromTemplate={handleAddFromTemplate}
-              onSaveAsTemplate={handleSaveAsTemplate}
-              location={programConfig.location}
-              showMath={showMath}
-              selectedItems={selectedItems}
-              onToggleSelect={handleToggleSelect}
-              onToggleAllSelect={handleToggleAllInSection}
-              taxExempt={taxExempt}
-            />
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Section totals for headers
-  const floralTotal = floralTaxableClient + floralNonTaxableClient;
-  const rentalsTotal = rentalsTaxableClient + rentalsNonTaxableClient;
 
   return (
     <div className="flex flex-col h-full">
@@ -685,77 +639,110 @@ export default function DecorEstimateBuilder({
             </div>
           )}
 
-          {/* Move items action bar */}
-          {selectedItems.size > 0 && (
-            <div className="bg-brand-offwhite border border-brand-copper/30 rounded-lg px-4 py-2.5 flex items-center gap-3 flex-wrap">
-              <span className="text-xs text-brand-charcoal/70">{selectedItems.size} item{selectedItems.size !== 1 ? 's' : ''} selected</span>
-              <span className="text-xs text-brand-silver">Move to:</span>
-              <select
-                className="text-xs border border-brand-cream rounded px-2 py-1 bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
-                defaultValue=""
-                onChange={(e) => { if (e.target.value) handleMoveToSection(e.target.value as LocalSection); }}
-              >
-                <option value="" disabled>Select section…</option>
-                {[...FLORAL_SECTIONS, ...RENTAL_SECTIONS, STAFFING_SECTION].map((s) => (
-                  <option key={s.section} value={s.section}>{s.label}</option>
-                ))}
-              </select>
-              <span className="text-xs text-brand-silver">·</span>
-              <span className="text-xs text-brand-charcoal/70">Set Markup:</span>
-              <div className="relative w-20">
-                <input
-                  type="number"
-                  min="0"
-                  max="500"
-                  step="1"
-                  value={bulkMarkupInput}
-                  onChange={(e) => setBulkMarkupInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleBulkMarkup(); }}
-                  placeholder="%"
-                  className="text-xs border border-brand-cream rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-copper bg-white text-brand-charcoal w-full text-right pr-5"
-                />
-                <span className="absolute right-2 top-1.5 text-brand-silver text-[10px] pointer-events-none">%</span>
+          {/* Line item sections */}
+          <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-6">
+            {/* Move items action bar */}
+            {selectedItems.size > 0 && (
+              <div className="bg-brand-offwhite border border-brand-copper/30 rounded-lg px-4 py-2.5 flex items-center gap-3 flex-wrap">
+                <span className="text-xs text-brand-charcoal/70">{selectedItems.size} item{selectedItems.size !== 1 ? 's' : ''} selected</span>
+                <span className="text-xs text-brand-silver">Move to:</span>
+                <select
+                  className="text-xs border border-brand-cream rounded px-2 py-1 bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
+                  defaultValue=""
+                  onChange={(e) => { if (e.target.value) handleMoveToSection(e.target.value); }}
+                >
+                  <option value="" disabled>Select section…</option>
+                  {sections.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+                <span className="text-xs text-brand-silver">·</span>
+                <span className="text-xs text-brand-charcoal/70">Set Markup:</span>
+                <div className="relative w-20">
+                  <input
+                    type="number"
+                    min="0"
+                    max="500"
+                    step="1"
+                    value={bulkMarkupInput}
+                    onChange={(e) => setBulkMarkupInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleBulkMarkup(); }}
+                    placeholder="%"
+                    className="text-xs border border-brand-cream rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-copper bg-white text-brand-charcoal w-full text-right pr-5"
+                  />
+                  <span className="absolute right-2 top-1.5 text-brand-silver text-[10px] pointer-events-none">%</span>
+                </div>
+                <button type="button" onClick={handleBulkMarkup} className="text-xs px-2 py-1 bg-brand-brown text-white rounded hover:bg-brand-charcoal transition-colors">Apply</button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedItems(new Set())}
+                  className="text-xs text-brand-silver hover:text-brand-charcoal ml-auto"
+                >Cancel</button>
               </div>
-              <button type="button" onClick={handleBulkMarkup} className="text-xs px-2 py-1 bg-brand-brown text-white rounded hover:bg-brand-charcoal transition-colors">Apply</button>
-              <button
-                type="button"
-                onClick={() => setSelectedItems(new Set())}
-                className="text-xs text-brand-silver hover:text-brand-charcoal ml-auto"
-              >Cancel</button>
-            </div>
-          )}
+            )}
 
-          {/* Florals section */}
-          <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-brand-cream">
-              <h3 className="font-serif text-base font-medium text-brand-charcoal">Florals</h3>
-              {floralTotal > 0 && (
-                <span className="text-sm font-medium text-brand-charcoal tabular-nums">{fmt(floralTotal)}</span>
+            {sections.map((sectionDef) => (
+              <LineItemSection
+                key={sectionDef.id}
+                sectionDef={sectionDef}
+                items={lineItems.filter((li) => li.sectionId === sectionDef.id)}
+                markups={markups}
+                defaultTaxType={bucketDefaultTax(sectionDef.taxBucket)}
+                guestCount={program.guest_count}
+                selectedItems={selectedItems}
+                onToggleSelect={handleToggleSelect}
+                onToggleAllSelect={handleToggleAllInSection}
+                onChange={(id, patch) => {
+                  handleItemChange(id, patch);
+                  if (patch.categoryId !== undefined || patch.taxType !== undefined) {
+                    setTimeout(() => handleItemSave(id), 0);
+                  }
+                }}
+                onBlur={handleItemSave}
+                onDelete={handleItemDelete}
+                onAdd={handleAddItem}
+                onAddFromTemplate={handleAddFromTemplate}
+                onSaveAsTemplate={handleSaveAsTemplate}
+                onRename={handleRenameSection}
+                onDeleteSection={handleDeleteSection}
+                location={programConfig.location}
+                showMath={showMath}
+                taxExempt={taxExempt}
+              />
+            ))}
+
+            {/* Add Section */}
+            <div className="pt-2 border-t border-brand-cream/60">
+              {showAddSection ? (
+                <div className="flex items-center gap-2 text-xs">
+                  <input
+                    type="text"
+                    autoFocus
+                    value={newSectionName}
+                    onChange={(e) => setNewSectionName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddSection(); if (e.key === 'Escape') setShowAddSection(false); }}
+                    placeholder="Section name"
+                    className="border border-brand-cream rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper bg-white w-40"
+                  />
+                  <select
+                    value={newSectionBucket}
+                    onChange={(e) => setNewSectionBucket(e.target.value as TaxBucket)}
+                    className="border border-brand-cream rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper bg-white"
+                  >
+                    <option value="fb">F&B (food/alcohol tax)</option>
+                    <option value="equipment">Equipment (general tax)</option>
+                    <option value="venue">Venue (general tax)</option>
+                    <option value="staffing">Staffing (non-taxable)</option>
+                  </select>
+                  <button type="button" onClick={handleAddSection} className="px-2 py-1 bg-brand-brown text-white rounded hover:bg-brand-charcoal transition-colors">Add</button>
+                  <button type="button" onClick={() => setShowAddSection(false)} className="text-brand-silver/60 hover:text-brand-charcoal transition-colors">Cancel</button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setShowAddSection(true)} className="text-xs text-brand-silver/60 hover:text-brand-charcoal transition-colors py-1">
+                  + Add category section
+                </button>
               )}
             </div>
-            {FLORAL_SECTIONS.map(renderSubSection)}
-          </div>
-
-          {/* Rentals & Lounge section */}
-          <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-brand-cream">
-              <h3 className="font-serif text-base font-medium text-brand-charcoal">Rentals & Lounge</h3>
-              {rentalsTotal > 0 && (
-                <span className="text-sm font-medium text-brand-charcoal tabular-nums">{fmt(rentalsTotal)}</span>
-              )}
-            </div>
-            {RENTAL_SECTIONS.map(renderSubSection)}
-          </div>
-
-          {/* Staffing & Fees section */}
-          <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-brand-cream">
-              <h3 className="font-serif text-base font-medium text-brand-charcoal">Staffing & Fees</h3>
-              {staffingTotal > 0 && (
-                <span className="text-sm font-medium text-brand-charcoal tabular-nums">{fmt(staffingTotal)}</span>
-              )}
-            </div>
-            {renderSubSection(STAFFING_SECTION)}
           </div>
 
           {/* Travel Expenses */}

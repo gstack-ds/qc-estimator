@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import type { TaxType } from '@/types';
-import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation } from '@/lib/supabase/queries';
+import type { TaxType, TaxBucket } from '@/types';
+import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation, DbEstimateSection } from '@/lib/supabase/queries';
 import {
   calculateVenueEstimate,
   calculateMarginAnalysis,
@@ -11,12 +11,13 @@ import type { ProgramConfig, TeamHoursTier } from '@/types';
 import EstimateNav from './EstimateNav';
 import CopyItemsFromButton from './CopyItemsFromButton';
 import LineItemSection from './LineItemSection';
+import type { LocalSectionDef } from './LineItemSection';
 import AvSummaryPanel from './AvSummaryPanel';
 import MarginPanel from './MarginPanel';
 import ExportButtons from './ExportButtons';
-import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
+import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { DbTemplate, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
-import type { LocalLineItem, LocalSection } from './EstimateBuilder';
+import type { LocalLineItem } from './EstimateBuilder';
 import TravelPanel from './TravelPanel';
 import AttachmentsPanel from './AttachmentsPanel';
 import type { TravelRefData, DbTrip } from '@/lib/supabase/queries';
@@ -27,6 +28,7 @@ function toEngineLineItems(items: LocalLineItem[]) {
   return items.map((item) => ({
     id: item.id,
     section: item.section,
+    taxBucket: item.taxBucket,
     name: item.name,
     qty: item.qty,
     unitPrice: item.unitPrice,
@@ -71,14 +73,17 @@ function toTiers(tiers: DbTier[]): TeamHoursTier[] {
   }));
 }
 
-function dbItemToLocal(item: DbLineItem, markups: DbMarkup[]): LocalLineItem {
+function dbItemToLocal(item: DbLineItem, markups: DbMarkup[], sections: LocalSectionDef[]): LocalLineItem {
   const isCustom = item.custom_client_unit_price !== null;
   const markup = markups.find((m) => m.id === item.category_id);
   const defaultMarkupPct = isCustom ? 0 : (markup?.markup_pct ?? 0.5);
   const effectiveMarkupPct = isCustom ? 0 : (item.markup_override ?? defaultMarkupPct);
+  const sectionDef = sections.find((s) => s.id === item.section_id) ?? sections.find((s) => s.name === item.section);
   return {
     id: item.id,
-    section: item.section as LocalSection,
+    sectionId: sectionDef?.id ?? item.section_id ?? '',
+    section: sectionDef?.name ?? item.section,
+    taxBucket: sectionDef?.taxBucket ?? 'equipment',
     name: item.name,
     label: item.label ?? undefined,
     qty: item.qty,
@@ -93,6 +98,12 @@ function dbItemToLocal(item: DbLineItem, markups: DbMarkup[]): LocalLineItem {
   };
 }
 
+function bucketDefaultTax(taxBucket: TaxBucket): TaxType {
+  if (taxBucket === 'fb') return 'food';
+  if (taxBucket === 'staffing') return 'none';
+  return 'general';
+}
+
 // ─── Main Component ───────────────────────────────────────
 
 interface Props {
@@ -101,6 +112,7 @@ interface Props {
   allEstimates: DbEstimate[];
   estimate: DbEstimate;
   dbLineItems: DbLineItem[];
+  dbSections: DbEstimateSection[];
   markups: DbMarkup[];
   tiers: DbTier[];
   travelRefs: TravelRefData;
@@ -110,24 +122,24 @@ interface Props {
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
-// AV sections map to existing engine section names
-const AV_SECTIONS: { name: LocalSection; label: string; taxType: TaxType }[] = [
-  { name: 'Equipment & Staffing', label: 'Taxable AV & Production Equipment', taxType: 'general' },
-  { name: 'Non-Taxable Staffing', label: 'Non-Taxable AV Fees & Labor', taxType: 'none' },
-];
-
 export default function AvEstimateBuilder({
-  program, location, allEstimates, estimate, dbLineItems, markups, tiers, travelRefs, initialTrips, eventName,
+  program, location, allEstimates, estimate, dbLineItems, dbSections, markups, tiers, travelRefs, initialTrips, eventName,
 }: Props) {
   const programConfig = useMemo(() => toProgramConfig(program, location), [program, location]);
   const tiersList = useMemo(() => toTiers(tiers), [tiers]);
+
+  const [sections, setSections] = useState<LocalSectionDef[]>(
+    dbSections.map((s) => ({ id: s.id, name: s.name, taxBucket: s.tax_bucket, markupPct: s.markup_pct, isBuiltIn: s.is_built_in }))
+  );
 
   const [name, setName] = useState(estimate.name);
   const [discountType, setDiscountType] = useState<'percent' | 'flat' | null>(estimate.discount_type ?? null);
   const [discountValue, setDiscountValue] = useState(estimate.discount_value ?? 0);
   const [taxExempt, setTaxExempt] = useState(estimate.tax_exempt ?? false);
+
+  const initSections = dbSections.map((s) => ({ id: s.id, name: s.name, taxBucket: s.tax_bucket, markupPct: s.markup_pct, isBuiltIn: s.is_built_in }));
   const [lineItems, setLineItems] = useState<LocalLineItem[]>(
-    dbLineItems.map((item) => dbItemToLocal(item, markups))
+    dbLineItems.map((item) => dbItemToLocal(item, markups, initSections))
   );
   const lineItemsRef = useRef(lineItems);
   lineItemsRef.current = lineItems;
@@ -139,6 +151,10 @@ export default function AvEstimateBuilder({
   const [showMath, setShowMath] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [bulkMarkupInput, setBulkMarkupInput] = useState('');
+
+  const [showAddSection, setShowAddSection] = useState(false);
+  const [newSectionName, setNewSectionName] = useState('');
+  const [newSectionBucket, setNewSectionBucket] = useState<TaxBucket>('equipment');
 
   // ─── Engine ─────────────────────────────────────────────
 
@@ -240,6 +256,7 @@ export default function AvEstimateBuilder({
       id: item.isNew ? undefined : item.id,
       estimate_id: estimate.id,
       section: item.section,
+      section_id: item.sectionId || null,
       name: item.name || 'Item',
       label: item.label ?? null,
       qty: item.qty,
@@ -267,21 +284,23 @@ export default function AvEstimateBuilder({
     }
   }, []);
 
-  const handleAddItem = useCallback((section: LocalSection, taxType: TaxType) => {
+  const handleAddItem = useCallback((sectionDef: LocalSectionDef, taxType: TaxType) => {
     const tempId = `new-${Date.now()}-${Math.random()}`;
     const maxOrder = lineItemsRef.current
-      .filter((li) => li.section === section)
+      .filter((li) => li.sectionId === sectionDef.id)
       .reduce((max, li) => Math.max(max, li.sortOrder), -1);
 
     const newItem: LocalLineItem = {
       id: tempId,
-      section,
+      sectionId: sectionDef.id,
+      section: sectionDef.name,
+      taxBucket: sectionDef.taxBucket,
       name: '',
       qty: 1,
       unitPrice: 0,
       categoryId: null,
-      defaultMarkupPct: 0.5,
-      categoryMarkupPct: 0.5,
+      defaultMarkupPct: sectionDef.markupPct,
+      categoryMarkupPct: sectionDef.markupPct,
       taxType,
       sortOrder: maxOrder + 1,
       isNew: true,
@@ -302,14 +321,16 @@ export default function AvEstimateBuilder({
     });
   }, []);
 
-  const handleAddFromTemplate = useCallback((section: LocalSection, template: DbTemplate) => {
+  const handleAddFromTemplate = useCallback((sectionDef: LocalSectionDef, template: DbTemplate) => {
     const tempId = `new-${Date.now()}-${Math.random()}`;
     const maxOrder = lineItemsRef.current
-      .filter((li) => li.section === section)
+      .filter((li) => li.sectionId === sectionDef.id)
       .reduce((max, li) => Math.max(max, li.sortOrder), -1);
     const newItem: LocalLineItem = {
       id: tempId,
-      section,
+      sectionId: sectionDef.id,
+      section: sectionDef.name,
+      taxBucket: sectionDef.taxBucket,
       name: template.name,
       qty: 1,
       unitPrice: template.default_unit_price,
@@ -328,13 +349,6 @@ export default function AvEstimateBuilder({
     setLineItems((prev) => [...prev, ...imported]);
     imported.forEach((item) => setTimeout(() => handleItemSave(item.id), 0));
   }, [handleItemSave]);
-
-  const SECTION_DEFAULT_TAX: Record<LocalSection, TaxType> = {
-    'F&B': 'food', 'Equipment & Staffing': 'general', 'Venue Fees': 'general',
-    'Non-Taxable Staffing': 'none', 'Florals - Taxable': 'general', 'Florals - Non-Taxable': 'none',
-    'Rentals - Seating': 'general', 'Rentals - Lounge': 'general', 'Rentals - Tables': 'general',
-    'Rentals - Rugs & Accessories': 'general', 'Rentals - Non-Taxable': 'none',
-  };
 
   const handleToggleSelect = useCallback((id: string) => {
     setSelectedItems((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
@@ -366,43 +380,53 @@ export default function AvEstimateBuilder({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bulkMarkupInput, selectedItems, handleItemSave]);
 
-  const handleMoveToSection = useCallback((targetSection: LocalSection) => {
+  const handleMoveToSection = useCallback((targetSectionId: string) => {
     const ids = new Set(selectedItems);
-    const taxType = SECTION_DEFAULT_TAX[targetSection];
+    const targetSectionDef = sections.find((s) => s.id === targetSectionId);
+    if (!targetSectionDef) return;
+    const taxType = bucketDefaultTax(targetSectionDef.taxBucket);
     setLineItems((prev) => {
-      const next = prev.map((item) => ids.has(item.id) ? { ...item, section: targetSection, taxType } : item);
+      const next = prev.map((item) =>
+        ids.has(item.id) ? { ...item, sectionId: targetSectionDef.id, section: targetSectionDef.name, taxBucket: targetSectionDef.taxBucket, taxType } : item
+      );
       lineItemsRef.current = next;
       return next;
     });
     for (const id of ids) setTimeout(() => handleItemSave(id), 0);
     setSelectedItems(new Set());
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedItems, handleItemSave]);
+  }, [selectedItems, sections, handleItemSave]);
 
   const handlePopulateFromExtraction = useCallback((data: ExtractedData) => {
     const avMarkup = markups.find((m) => m.name === 'AV & Production');
     const staffingMarkup = markups.find((m) => m.name === 'Staffing & Labor');
 
-    const sectionOrders: Partial<Record<LocalSection, number>> = {};
-    function nextOrder(section: LocalSection): number {
-      if (sectionOrders[section] === undefined) {
-        sectionOrders[section] = lineItemsRef.current
-          .filter((li) => li.section === section)
+    const equipSection = sections.find((s) => s.taxBucket === 'equipment');
+    const staffingSection = sections.find((s) => s.taxBucket === 'staffing');
+
+    const sectionOrders: Record<string, number> = {};
+    function nextOrder(sectionId: string): number {
+      if (sectionOrders[sectionId] === undefined) {
+        sectionOrders[sectionId] = lineItemsRef.current
+          .filter((li) => li.sectionId === sectionId)
           .reduce((max, li) => Math.max(max, li.sortOrder), -1) + 1;
       }
-      const order = sectionOrders[section] as number;
-      sectionOrders[section] = order + 1;
+      const order = sectionOrders[sectionId];
+      sectionOrders[sectionId] = order + 1;
       return order;
     }
 
     const toImport: LocalLineItem[] = (data.equipmentItems ?? []).map((item) => {
       const isLabor = item.section === 'labor';
-      const section: LocalSection = isLabor ? 'Non-Taxable Staffing' : 'Equipment & Staffing';
+      const sectionDef = isLabor ? staffingSection : equipSection;
       const markup = isLabor ? staffingMarkup : avMarkup;
       const taxType: TaxType = isLabor ? 'none' : 'general';
+      if (!sectionDef) return null;
       return {
         id: `new-${Date.now()}-${Math.random()}`,
-        section,
+        sectionId: sectionDef.id,
+        section: sectionDef.name,
+        taxBucket: sectionDef.taxBucket,
         name: item.name,
         qty: item.qty ?? 1,
         unitPrice: item.unitPrice ?? 0,
@@ -410,13 +434,51 @@ export default function AvEstimateBuilder({
         defaultMarkupPct: markup?.markup_pct ?? 0.5,
         categoryMarkupPct: markup?.markup_pct ?? 0.5,
         taxType,
-        sortOrder: nextOrder(section),
+        sortOrder: nextOrder(sectionDef.id),
         isNew: true,
-      };
-    });
+      } as LocalLineItem;
+    }).filter((x): x is LocalLineItem => x !== null);
 
     handleImportItems(toImport);
-  }, [markups, handleImportItems]);
+  }, [markups, sections, handleImportItems]);
+
+  // ─── Section management ───────────────────────────────────
+
+  const handleRenameSection = useCallback(async (sectionId: string, newName: string) => {
+    setSections((prev) => prev.map((s) => s.id === sectionId ? { ...s, name: newName } : s));
+    setLineItems((prev) => prev.map((li) => li.sectionId === sectionId ? { ...li, section: newName } : li));
+    const sectionDef = sections.find((s) => s.id === sectionId);
+    if (!sectionDef) return;
+    await upsertSection({ id: sectionId, estimate_id: estimate.id, name: newName, tax_bucket: sectionDef.taxBucket, markup_pct: sectionDef.markupPct, sort_order: sections.indexOf(sectionDef), is_built_in: sectionDef.isBuiltIn });
+    const idsToSave = lineItemsRef.current.filter((li) => li.sectionId === sectionId).map((li) => li.id);
+    for (const id of idsToSave) setTimeout(() => handleItemSave(id), 0);
+  }, [sections, estimate.id, handleItemSave]);
+
+  const handleDeleteSection = useCallback(async (sectionId: string) => {
+    const hasItems = lineItemsRef.current.some((li) => li.sectionId === sectionId);
+    if (hasItems) return;
+    setSections((prev) => prev.filter((s) => s.id !== sectionId));
+    await deleteSection(sectionId);
+  }, []);
+
+  const handleAddSection = useCallback(async () => {
+    const trimmed = newSectionName.trim();
+    if (!trimmed) return;
+    const markupPct = newSectionBucket === 'fb' ? 0.55 : newSectionBucket === 'venue' ? 0.60 : newSectionBucket === 'staffing' ? 0.90 : 0.65;
+    const result = await upsertSection({
+      estimate_id: estimate.id,
+      name: trimmed,
+      tax_bucket: newSectionBucket,
+      markup_pct: markupPct,
+      sort_order: sections.length,
+      is_built_in: false,
+    });
+    if (result.section) {
+      setSections((prev) => [...prev, { id: result.section!.id, name: result.section!.name, taxBucket: result.section!.tax_bucket, markupPct: result.section!.markup_pct, isBuiltIn: false }]);
+    }
+    setNewSectionName('');
+    setShowAddSection(false);
+  }, [newSectionName, newSectionBucket, sections.length, estimate.id]);
 
   // ─── Render ───────────────────────────────────────────────
 
@@ -536,9 +598,9 @@ export default function AvEstimateBuilder({
                 <span className="text-brand-charcoal font-medium">{selectedItems.size} selected</span>
                 <span className="text-brand-silver">·</span>
                 <span className="text-brand-charcoal/70">Move to:</span>
-                <select className="border border-brand-cream rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper bg-white text-brand-charcoal" defaultValue="" onChange={(e) => { if (e.target.value) handleMoveToSection(e.target.value as LocalSection); }}>
+                <select className="border border-brand-cream rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper bg-white text-brand-charcoal" defaultValue="" onChange={(e) => { if (e.target.value) handleMoveToSection(e.target.value); }}>
                   <option value="" disabled>— Section —</option>
-                  {AV_SECTIONS.map(({ name: s }) => <option key={s} value={s}>{s}</option>)}
+                  {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
                 <span className="text-brand-silver">·</span>
                 <span className="text-brand-charcoal/70">Set Markup:</span>
@@ -560,14 +622,13 @@ export default function AvEstimateBuilder({
                 <button type="button" className="text-xs text-brand-silver/60 hover:text-red-500 ml-auto transition-colors" onClick={() => setSelectedItems(new Set())}>Clear selection</button>
               </div>
             )}
-            {AV_SECTIONS.map(({ name: sectionName, label, taxType }) => (
+            {sections.map((sectionDef) => (
               <LineItemSection
-                key={sectionName}
-                section={sectionName}
-                label={label}
-                items={lineItems.filter((li) => li.section === sectionName)}
+                key={sectionDef.id}
+                sectionDef={sectionDef}
+                items={lineItems.filter((li) => li.sectionId === sectionDef.id)}
                 markups={markups}
-                defaultTaxType={taxType}
+                defaultTaxType={bucketDefaultTax(sectionDef.taxBucket)}
                 guestCount={program.guest_count}
                 selectedItems={selectedItems}
                 onToggleSelect={handleToggleSelect}
@@ -583,11 +644,45 @@ export default function AvEstimateBuilder({
                 onAdd={handleAddItem}
                 onAddFromTemplate={handleAddFromTemplate}
                 onSaveAsTemplate={handleSaveAsTemplate}
+                onRename={handleRenameSection}
+                onDeleteSection={handleDeleteSection}
                 location={programConfig.location}
                 showMath={showMath}
                 taxExempt={taxExempt}
               />
             ))}
+            {/* Add Section */}
+            <div className="pt-2 border-t border-brand-cream/60">
+              {showAddSection ? (
+                <div className="flex items-center gap-2 text-xs">
+                  <input
+                    type="text"
+                    autoFocus
+                    value={newSectionName}
+                    onChange={(e) => setNewSectionName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddSection(); if (e.key === 'Escape') setShowAddSection(false); }}
+                    placeholder="Section name"
+                    className="border border-brand-cream rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper bg-white w-40"
+                  />
+                  <select
+                    value={newSectionBucket}
+                    onChange={(e) => setNewSectionBucket(e.target.value as TaxBucket)}
+                    className="border border-brand-cream rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper bg-white"
+                  >
+                    <option value="fb">F&B (food/alcohol tax)</option>
+                    <option value="equipment">Equipment (general tax)</option>
+                    <option value="venue">Venue (general tax)</option>
+                    <option value="staffing">Staffing (non-taxable)</option>
+                  </select>
+                  <button type="button" onClick={handleAddSection} className="px-2 py-1 bg-brand-brown text-white rounded hover:bg-brand-charcoal transition-colors">Add</button>
+                  <button type="button" onClick={() => setShowAddSection(false)} className="text-brand-silver/60 hover:text-brand-charcoal transition-colors">Cancel</button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setShowAddSection(true)} className="text-xs text-brand-silver/60 hover:text-brand-charcoal transition-colors py-1">
+                  + Add category section
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Travel Expenses */}

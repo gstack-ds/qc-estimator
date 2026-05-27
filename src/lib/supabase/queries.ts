@@ -249,10 +249,57 @@ export async function getEstimate(id: string): Promise<DbEstimate | null> {
 
 // ─── Line Items ───────────────────────────────────────────
 
+// ─── Estimate Sections ────────────────────────────────────
+
+export interface DbEstimateSection {
+  id: string;
+  estimate_id: string;
+  name: string;
+  tax_bucket: 'fb' | 'equipment' | 'venue' | 'staffing';
+  markup_pct: number;
+  sort_order: number;
+  is_built_in: boolean;
+}
+
+const SECTION_FIELDS = 'id, estimate_id, name, tax_bucket, markup_pct, sort_order, is_built_in';
+
+export async function getEstimateSections(estimateId: string): Promise<DbEstimateSection[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('estimate_sections')
+    .select(SECTION_FIELDS)
+    .eq('estimate_id', estimateId)
+    .order('sort_order');
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function upsertEstimateSection(
+  section: Omit<DbEstimateSection, 'is_built_in'> & { is_built_in?: boolean }
+): Promise<DbEstimateSection> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('estimate_sections')
+    .upsert(section, { onConflict: 'id' })
+    .select(SECTION_FIELDS)
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function deleteEstimateSection(id: string): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase.from('estimate_sections').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+// ─── Line Items ───────────────────────────────────────────
+
 export interface DbLineItem {
   id: string;
   estimate_id: string;
   section: string;
+  section_id: string | null;
   name: string;
   label: string | null;
   qty: number;
@@ -268,7 +315,7 @@ export interface DbLineItem {
   updated_at: string;
 }
 
-const LINE_ITEM_FIELDS = 'id, estimate_id, section, name, label, qty, unit_price, category_id, tax_type, custom_client_unit_price, markup_override, is_revenue_item, notes, sort_order, created_at, updated_at';
+const LINE_ITEM_FIELDS = 'id, estimate_id, section, section_id, name, label, qty, unit_price, category_id, tax_type, custom_client_unit_price, markup_override, is_revenue_item, notes, sort_order, created_at, updated_at';
 
 export async function getLineItemsForEstimate(estimateId: string): Promise<DbLineItem[]> {
   const supabase = await createClient();

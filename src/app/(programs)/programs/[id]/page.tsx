@@ -66,6 +66,17 @@ function buildProgramConfig(program: {
   };
 }
 
+const FB_SECTIONS = new Set(['F&B']);
+const VENUE_SECTIONS = new Set(['Venue Fees']);
+const STAFFING_SECTIONS = new Set(['Non-Taxable Staffing', 'Florals - Non-Taxable', 'Rentals - Non-Taxable']);
+
+function sectionToTaxBucket(section: string): import('@/types').TaxBucket {
+  if (FB_SECTIONS.has(section)) return 'fb';
+  if (VENUE_SECTIONS.has(section)) return 'venue';
+  if (STAFFING_SECTIONS.has(section)) return 'staffing';
+  return 'equipment';
+}
+
 function buildLineItems(items: DbLineItem[], markups: DbMarkup[]): LineItem[] {
   return items.map((item) => {
     const markup = markups.find((m) => m.id === item.category_id);
@@ -74,6 +85,7 @@ function buildLineItems(items: DbLineItem[], markups: DbMarkup[]): LineItem[] {
     return {
       id: item.id,
       section: item.section,
+      taxBucket: sectionToTaxBucket(item.section),
       name: item.name,
       qty: item.qty,
       unitPrice: item.unit_price,
