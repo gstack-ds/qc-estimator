@@ -124,6 +124,12 @@ const RENTAL_SECTIONS: SubSection[] = [
   { section: 'Rentals - Non-Taxable', label: 'Non-Taxable Rental Fees', taxType: 'none' },
 ];
 
+const STAFFING_SECTION: SubSection = {
+  section: 'Non-Taxable Staffing',
+  label: 'Staffing & Fees',
+  taxType: 'none',
+};
+
 // ─── Main Component ───────────────────────────────────────
 
 interface Props {
@@ -162,7 +168,7 @@ export default function DecorEstimateBuilder({
   // All sub-sections open by default
   const [openMap, setOpenMap] = useState<OpenMap>(() => {
     const map: OpenMap = {};
-    [...FLORAL_SECTIONS, ...RENTAL_SECTIONS].forEach((s) => { map[s.section] = true; });
+    [...FLORAL_SECTIONS, ...RENTAL_SECTIONS, STAFFING_SECTION].forEach((s) => { map[s.section] = true; });
     return map;
   });
 
@@ -172,6 +178,7 @@ export default function DecorEstimateBuilder({
   const [travelExpenses, setTravelExpenses] = useState(0);
   const [showMath, setShowMath] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [bulkMarkupInput, setBulkMarkupInput] = useState('');
 
   // ─── Engine ─────────────────────────────────────────────
 
@@ -218,6 +225,7 @@ export default function DecorEstimateBuilder({
     [lineItems]
   );
   const rentalsNonTaxableClient = useMemo(() => subtotalClient(lineItems, 'Rentals - Non-Taxable'), [lineItems]);
+  const staffingTotal = useMemo(() => subtotalClient(lineItems, 'Non-Taxable Staffing'), [lineItems]);
 
   // ─── Cache total ─────────────────────────────────────────
 
@@ -316,6 +324,7 @@ export default function DecorEstimateBuilder({
       .filter((li) => li.section === section)
       .reduce((max, li) => Math.max(max, li.sortOrder), -1);
 
+    const defaultMarkupPct = section === 'Non-Taxable Staffing' ? 0.9 : 0.85;
     const newItem: LocalLineItem = {
       id: tempId,
       section,
@@ -323,8 +332,8 @@ export default function DecorEstimateBuilder({
       qty: 1,
       unitPrice: 0,
       categoryId: null,
-      defaultMarkupPct: 0.85,   // Décor & Design default
-      categoryMarkupPct: 0.85,
+      defaultMarkupPct,
+      categoryMarkupPct: defaultMarkupPct,
       taxType,
       sortOrder: maxOrder + 1,
       isNew: true,
@@ -390,6 +399,24 @@ export default function DecorEstimateBuilder({
       return next;
     });
   }, []);
+
+  const handleBulkMarkup = useCallback(() => {
+    const pct = parseFloat(bulkMarkupInput);
+    if (isNaN(pct) || pct < 0) return;
+    const newMarkup = pct / 100;
+    const ids = new Set(selectedItems);
+    setLineItems((prev) => {
+      const next = prev.map((item) =>
+        ids.has(item.id) ? { ...item, categoryMarkupPct: newMarkup } : item
+      );
+      lineItemsRef.current = next;
+      return next;
+    });
+    for (const id of ids) setTimeout(() => handleItemSave(id), 0);
+    setBulkMarkupInput('');
+    setSelectedItems(new Set());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bulkMarkupInput, selectedItems, handleItemSave]);
 
   const handleMoveToSection = useCallback((targetSection: LocalSection) => {
     const ids = new Set(selectedItems);
@@ -660,7 +687,7 @@ export default function DecorEstimateBuilder({
 
           {/* Move items action bar */}
           {selectedItems.size > 0 && (
-            <div className="bg-brand-offwhite border border-brand-copper/30 rounded-lg px-4 py-2.5 flex items-center gap-3">
+            <div className="bg-brand-offwhite border border-brand-copper/30 rounded-lg px-4 py-2.5 flex items-center gap-3 flex-wrap">
               <span className="text-xs text-brand-charcoal/70">{selectedItems.size} item{selectedItems.size !== 1 ? 's' : ''} selected</span>
               <span className="text-xs text-brand-silver">Move to:</span>
               <select
@@ -669,10 +696,27 @@ export default function DecorEstimateBuilder({
                 onChange={(e) => { if (e.target.value) handleMoveToSection(e.target.value as LocalSection); }}
               >
                 <option value="" disabled>Select section…</option>
-                {[...FLORAL_SECTIONS, ...RENTAL_SECTIONS].map((s) => (
+                {[...FLORAL_SECTIONS, ...RENTAL_SECTIONS, STAFFING_SECTION].map((s) => (
                   <option key={s.section} value={s.section}>{s.label}</option>
                 ))}
               </select>
+              <span className="text-xs text-brand-silver">·</span>
+              <span className="text-xs text-brand-charcoal/70">Set Markup:</span>
+              <div className="relative w-20">
+                <input
+                  type="number"
+                  min="0"
+                  max="500"
+                  step="1"
+                  value={bulkMarkupInput}
+                  onChange={(e) => setBulkMarkupInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleBulkMarkup(); }}
+                  placeholder="%"
+                  className="text-xs border border-brand-cream rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-copper bg-white text-brand-charcoal w-full text-right pr-5"
+                />
+                <span className="absolute right-2 top-1.5 text-brand-silver text-[10px] pointer-events-none">%</span>
+              </div>
+              <button type="button" onClick={handleBulkMarkup} className="text-xs px-2 py-1 bg-brand-brown text-white rounded hover:bg-brand-charcoal transition-colors">Apply</button>
               <button
                 type="button"
                 onClick={() => setSelectedItems(new Set())}
@@ -701,6 +745,17 @@ export default function DecorEstimateBuilder({
               )}
             </div>
             {RENTAL_SECTIONS.map(renderSubSection)}
+          </div>
+
+          {/* Staffing & Fees section */}
+          <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-brand-cream">
+              <h3 className="font-serif text-base font-medium text-brand-charcoal">Staffing & Fees</h3>
+              {staffingTotal > 0 && (
+                <span className="text-sm font-medium text-brand-charcoal tabular-nums">{fmt(staffingTotal)}</span>
+              )}
+            </div>
+            {renderSubSection(STAFFING_SECTION)}
           </div>
 
           {/* Travel Expenses */}

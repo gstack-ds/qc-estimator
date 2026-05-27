@@ -138,6 +138,7 @@ export default function AvEstimateBuilder({
   const [travelExpenses, setTravelExpenses] = useState(0);
   const [showMath, setShowMath] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [bulkMarkupInput, setBulkMarkupInput] = useState('');
 
   // ─── Engine ─────────────────────────────────────────────
 
@@ -347,6 +348,24 @@ export default function AvEstimateBuilder({
     });
   }, []);
 
+  const handleBulkMarkup = useCallback(() => {
+    const pct = parseFloat(bulkMarkupInput);
+    if (isNaN(pct) || pct < 0) return;
+    const newMarkup = pct / 100;
+    const ids = new Set(selectedItems);
+    setLineItems((prev) => {
+      const next = prev.map((item) =>
+        ids.has(item.id) ? { ...item, categoryMarkupPct: newMarkup } : item
+      );
+      lineItemsRef.current = next;
+      return next;
+    });
+    for (const id of ids) setTimeout(() => handleItemSave(id), 0);
+    setBulkMarkupInput('');
+    setSelectedItems(new Set());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bulkMarkupInput, selectedItems, handleItemSave]);
+
   const handleMoveToSection = useCallback((targetSection: LocalSection) => {
     const ids = new Set(selectedItems);
     const taxType = SECTION_DEFAULT_TAX[targetSection];
@@ -513,7 +532,7 @@ export default function AvEstimateBuilder({
           {/* Line item sections */}
           <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-6">
             {selectedItems.size > 0 && (
-              <div className="flex items-center gap-3 bg-brand-offwhite border border-brand-copper/30 rounded px-3 py-2 text-sm">
+              <div className="flex items-center gap-3 bg-brand-offwhite border border-brand-copper/30 rounded px-3 py-2 text-sm flex-wrap">
                 <span className="text-brand-charcoal font-medium">{selectedItems.size} selected</span>
                 <span className="text-brand-silver">·</span>
                 <span className="text-brand-charcoal/70">Move to:</span>
@@ -521,6 +540,23 @@ export default function AvEstimateBuilder({
                   <option value="" disabled>— Section —</option>
                   {AV_SECTIONS.map(({ name: s }) => <option key={s} value={s}>{s}</option>)}
                 </select>
+                <span className="text-brand-silver">·</span>
+                <span className="text-brand-charcoal/70">Set Markup:</span>
+                <div className="relative w-20">
+                  <input
+                    type="number"
+                    min="0"
+                    max="500"
+                    step="1"
+                    value={bulkMarkupInput}
+                    onChange={(e) => setBulkMarkupInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleBulkMarkup(); }}
+                    placeholder="%"
+                    className="border border-brand-cream rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper bg-white text-brand-charcoal w-full text-right pr-5"
+                  />
+                  <span className="absolute right-2 top-1.5 text-brand-silver text-xs pointer-events-none">%</span>
+                </div>
+                <button type="button" onClick={handleBulkMarkup} className="text-xs px-2 py-1 bg-brand-brown text-white rounded hover:bg-brand-charcoal transition-colors">Apply</button>
                 <button type="button" className="text-xs text-brand-silver/60 hover:text-red-500 ml-auto transition-colors" onClick={() => setSelectedItems(new Set())}>Clear selection</button>
               </div>
             )}
