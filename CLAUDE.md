@@ -202,6 +202,9 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-05-22 | Client discount: applied after all fees, reduces totalClient and QC margin directly | discountAmount = totalClientPreDiscount × value (percent) or flat value. productionFee is computed on pre-discount subtotalClient — discount does not affect vendor costs or fees. migration 023 adds discount_type + discount_value to estimates. | Apply before productionFee (distorts fee calc), separate discount estimate (extra DB row) |
 | 2026-05-22 | PDF proposal: @react-pdf/renderer with dynamic import inside click handler | Library can't be imported at module level (SSR crash). serverComponentsExternalPackages in next.config.js prevents Next.js from bundling it server-side. Dynamic `import()` inside handleExportPdf loads it only client-side on demand. ProposalDocument called as a function (not JSX) to avoid module-level JSX evaluation inside the dynamic import. | pdf-lib (lower-level, more verbose), server action (can't stream a blob download) |
 | 2026-05-22 | Move line items: SECTION_DEFAULT_TAX record maps each LocalSection to its taxType default | When moving an item to a new section, both section and taxType are updated atomically so the engine re-prices correctly (F&B items use per-item taxType; equipment uses blanket generalTaxRate on the bucket). Selection state is a Set<string> of IDs in each builder; cleared after move completes. | UI-only section rename without taxType update (incorrect pricing); global context for selection (prop drilling depth ≤ 2, not worth context) |
+| 2026-05-27 | Engine uses TaxBucket enum (fb/equipment/venue/staffing) — section display name is irrelevant to pricing | Enables user-defined section names without breaking tax calculations. Section name stored as text for backwards compat + display; taxBucket is the authoritative routing key. Removes DECOR_TAXABLE/DECOR_NONTAXABLE sets from engine. | Keep string matching (breaks on rename); separate tax routing table (unnecessary complexity) |
+| 2026-05-27 | estimate_sections table with lazy ensureDefaultSections on first page load | Per-estimate section rows let the user rename/add/delete without touching pricing logic. Lazy seed (called when sections array is empty) handles pre-migration estimates without requiring a heavy migration script per estimate. LocalLineItem carries both sectionId (UUID FK) and section (display name, kept in sync). | Global sections table shared across estimates (renames would cross-contaminate); store only sectionId without display name (requires join on every render) |
+| 2026-05-27 | Decor builder dropped Florals/Rentals parent card grouping — flat dynamic sections instead | Parent cards required knowing the sub-section names at compile time. With dynamic sections, any grouping would need a user-specified "group" concept — scope creep. Flat list is simpler to reason about. | Keep parent cards with hard-coded section names (breaks if user renames a sub-section) |
 
 ## Gotchas Log
 
@@ -266,12 +269,20 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] PDF proposal export: @react-pdf/renderer, ProposalDocument component (header, metadata, line items by section, totals block), ExportButtons "Export Proposal PDF" button with dynamic import
 - [x] Move line items between categories: checkboxes on rows, action bar with section dropdown, SECTION_DEFAULT_TAX for taxType update on move — all 3 builders
 - [x] Migration 023 run in production — discount_type + discount_value columns live
+- [x] Bulk "Set Markup %" action bar — applies same markup % to all selected line items at once (all 3 builders)
+- [x] Production Fee tooltip — info (i) badge with CSS-only hover tooltip showing the formula
+- [x] Select-all checkbox — per-section header checkbox with indeterminate state support (all 3 builders)
+- [x] Staffing & Fees section in Decor builder — Non-Taxable Staffing bucket wired in
+- [x] Engine refactor — TaxBucket enum (fb/equipment/venue/staffing) replaces section-string matching; 5 new routing tests (194 total)
+- [x] Dynamic estimate sections (#2/#3/#4) — migration 025, estimate_sections table, per-estimate sections, inline rename (pencil icon), delete empty sections, Add Category button with name+bucket picker; all 3 builders; 0 TypeScript errors, 194 tests passing
 
 ### Remaining
+- [ ] **Run migration 025 in production** — `supabase/migrations/025_estimate_sections.sql`
 - [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- Proposal validation against Excel is the highest-value quality check.
+- Run migration 025 in production (estimate_sections table + section_id FK on line items).
+- After migration, test section rename/add/delete in the builder on a real estimate.
+- Proposal validation against Excel is the next quality check.
 - Scanner is live and working. Run `npm run dedup` if duplicate leads accumulate.
-- Estimates/pricing pages are desktop-only by design — no mobile work planned there.
