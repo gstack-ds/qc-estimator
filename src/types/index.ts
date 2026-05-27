@@ -2,6 +2,7 @@
 // These types mirror the database schema and are used by the pricing engine.
 
 export type TaxType = 'food' | 'alcohol' | 'general' | 'none';
+export type TaxBucket = 'fb' | 'equipment' | 'venue' | 'staffing';
 export type EstimateType = 'venue' | 'av' | 'decor' | 'transportation';
 export type FeeOption = number; // stored as decimal (e.g. 0.20 = 20%)
 export type MarginHealth = '✓ STRONG' | '→ ON TARGET' | '⚠ REVIEW' | '✗ BELOW FLOOR';
@@ -52,6 +53,7 @@ export interface ProgramConfig {
 export interface LineItem {
   id: string;
   section: string;
+  taxBucket: TaxBucket;
   name: string;
   qty: number;
   unitPrice: number;

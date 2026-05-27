@@ -95,6 +95,7 @@ describe('calculateLineItem', () => {
     const item: LineItem = {
       id: '1',
       section: 'F&B',
+      taxBucket: 'fb',
       name: 'Per Person Food',
       qty: 50,
       unitPrice: 50,
@@ -114,6 +115,7 @@ describe('calculateLineItem', () => {
     const item: LineItem = {
       id: '2',
       section: 'Non-Taxable Staffing',
+      taxBucket: 'staffing',
       name: 'QC Event Staff',
       qty: 1,
       unitPrice: 500,
@@ -136,6 +138,7 @@ describe('calculateLineItem — revenue item', () => {
   const revenueItem: LineItem = {
     id: 'rev-1',
     section: 'Non-Taxable Staffing',
+    taxBucket: 'staffing',
     name: 'Coordinator Fee',
     qty: 1,
     unitPrice: 500,
@@ -162,7 +165,7 @@ describe('calculateLineItem — revenue item', () => {
 
   it('does not inflate totalVendorCosts when added to an estimate', () => {
     const regularItem: LineItem = {
-      id: 'r1', section: 'F&B', name: 'Dinner', qty: 50, unitPrice: 50,
+      id: 'r1', section: 'F&B', taxBucket: 'fb', name: 'Dinner', qty: 50, unitPrice: 50,
       categoryMarkupPct: 0.55, taxType: 'food',
     };
     const noCommConfig: ProgramConfig = {
@@ -211,22 +214,22 @@ describe('calculateVenueEstimate', () => {
     adminFee: 0.05,
     lineItems: [
       // F&B
-      { id: '1', section: 'F&B', name: 'Per Person Food', qty: 50, unitPrice: 50, categoryMarkupPct: 0.55, taxType: 'food' },
-      { id: '2', section: 'F&B', name: 'Bar Package', qty: 50, unitPrice: 50, categoryMarkupPct: 0.55, taxType: 'alcohol' },
-      { id: '3', section: 'F&B', name: 'NA Beverages', qty: 50, unitPrice: 8, categoryMarkupPct: 0.55, taxType: 'food' },
+      { id: '1', section: 'F&B', taxBucket: 'fb', name: 'Per Person Food', qty: 50, unitPrice: 50, categoryMarkupPct: 0.55, taxType: 'food' },
+      { id: '2', section: 'F&B', taxBucket: 'fb', name: 'Bar Package', qty: 50, unitPrice: 50, categoryMarkupPct: 0.55, taxType: 'alcohol' },
+      { id: '3', section: 'F&B', taxBucket: 'fb', name: 'NA Beverages', qty: 50, unitPrice: 8, categoryMarkupPct: 0.55, taxType: 'food' },
       // Equipment & Staffing
-      { id: '4', section: 'Equipment & Staffing', name: 'Staffing', qty: 1, unitPrice: 200, categoryMarkupPct: 0.90, taxType: 'general' },
-      { id: '5', section: 'Equipment & Staffing', name: 'Catering Equipment', qty: 1, unitPrice: 200, categoryMarkupPct: 0.65, taxType: 'general' },
-      { id: '6', section: 'Equipment & Staffing', name: 'Rental Equipment', qty: 1, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'general' },
-      { id: '7', section: 'Equipment & Staffing', name: 'Additional Equipment', qty: 1, unitPrice: 200, categoryMarkupPct: 0.65, taxType: 'general' },
+      { id: '4', section: 'Equipment & Staffing', taxBucket: 'equipment', name: 'Staffing', qty: 1, unitPrice: 200, categoryMarkupPct: 0.90, taxType: 'general' },
+      { id: '5', section: 'Equipment & Staffing', taxBucket: 'equipment', name: 'Catering Equipment', qty: 1, unitPrice: 200, categoryMarkupPct: 0.65, taxType: 'general' },
+      { id: '6', section: 'Equipment & Staffing', taxBucket: 'equipment', name: 'Rental Equipment', qty: 1, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'general' },
+      { id: '7', section: 'Equipment & Staffing', taxBucket: 'equipment', name: 'Additional Equipment', qty: 1, unitPrice: 200, categoryMarkupPct: 0.65, taxType: 'general' },
       // Venue Fees
-      { id: '8', section: 'Venue Fees', name: 'Venue / Room Rental', qty: 1, unitPrice: 200, categoryMarkupPct: 0.60, taxType: 'general' },
-      { id: '9', section: 'Venue Fees', name: 'Additional Venue Space', qty: 1, unitPrice: 200, categoryMarkupPct: 0.60, taxType: 'general' },
-      { id: '10', section: 'Venue Fees', name: 'Additional Services', qty: 1, unitPrice: 200, categoryMarkupPct: 0.60, taxType: 'general' },
+      { id: '8', section: 'Venue Fees', taxBucket: 'venue', name: 'Venue / Room Rental', qty: 1, unitPrice: 200, categoryMarkupPct: 0.60, taxType: 'general' },
+      { id: '9', section: 'Venue Fees', taxBucket: 'venue', name: 'Additional Venue Space', qty: 1, unitPrice: 200, categoryMarkupPct: 0.60, taxType: 'general' },
+      { id: '10', section: 'Venue Fees', taxBucket: 'venue', name: 'Additional Services', qty: 1, unitPrice: 200, categoryMarkupPct: 0.60, taxType: 'general' },
       // Non-Taxable Staffing
-      { id: '11', section: 'Non-Taxable Staffing', name: 'QC Event Staff', qty: 1, unitPrice: 500, categoryMarkupPct: 0.90, taxType: 'none' },
-      { id: '12', section: 'Non-Taxable Staffing', name: 'Fee', qty: 1, unitPrice: 10, categoryMarkupPct: 0.90, taxType: 'none' },
-      { id: '13', section: 'Non-Taxable Staffing', name: 'Fee', qty: 1, unitPrice: 10, categoryMarkupPct: 0.90, taxType: 'none' },
+      { id: '11', section: 'Non-Taxable Staffing', taxBucket: 'staffing', name: 'QC Event Staff', qty: 1, unitPrice: 500, categoryMarkupPct: 0.90, taxType: 'none' },
+      { id: '12', section: 'Non-Taxable Staffing', taxBucket: 'staffing', name: 'Fee', qty: 1, unitPrice: 10, categoryMarkupPct: 0.90, taxType: 'none' },
+      { id: '13', section: 'Non-Taxable Staffing', taxBucket: 'staffing', name: 'Fee', qty: 1, unitPrice: 10, categoryMarkupPct: 0.90, taxType: 'none' },
     ],
   };
 
@@ -303,6 +306,7 @@ describe('calculateLineItem with clientCostOverride', () => {
     const item: LineItem = {
       id: '99',
       section: 'F&B',
+      taxBucket: 'fb',
       name: 'Custom Item',
       qty: 2,
       unitPrice: 100,
@@ -320,6 +324,7 @@ describe('calculateLineItem with clientCostOverride', () => {
     const item: LineItem = {
       id: '100',
       section: 'Equipment & Staffing',
+      taxBucket: 'equipment',
       name: 'Regular Item',
       qty: 1,
       unitPrice: 200,
@@ -343,11 +348,11 @@ describe('calculateVenueEstimate — decor sections', () => {
       gratuity: 0,
       adminFee: 0,
       lineItems: [
-        { id: '1', section: 'Florals - Taxable', name: 'Centerpieces', qty: 10, unitPrice: 100, categoryMarkupPct: 0.85, taxType: 'general' },
-        { id: '2', section: 'Rentals - Seating', name: 'Chairs', qty: 50, unitPrice: 10, categoryMarkupPct: 0.85, taxType: 'general' },
-        { id: '3', section: 'Rentals - Lounge', name: 'Sofa', qty: 1, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'general' },
-        { id: '4', section: 'Florals - Non-Taxable', name: 'Delivery', qty: 1, unitPrice: 300, categoryMarkupPct: 0.85, taxType: 'none' },
-        { id: '5', section: 'Rentals - Non-Taxable', name: 'Rental Delivery', qty: 1, unitPrice: 150, categoryMarkupPct: 0.85, taxType: 'none' },
+        { id: '1', section: 'Florals - Taxable', taxBucket: 'equipment', name: 'Centerpieces', qty: 10, unitPrice: 100, categoryMarkupPct: 0.85, taxType: 'general' },
+        { id: '2', section: 'Rentals - Seating', taxBucket: 'equipment', name: 'Chairs', qty: 50, unitPrice: 10, categoryMarkupPct: 0.85, taxType: 'general' },
+        { id: '3', section: 'Rentals - Lounge', taxBucket: 'equipment', name: 'Sofa', qty: 1, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'general' },
+        { id: '4', section: 'Florals - Non-Taxable', taxBucket: 'staffing', name: 'Delivery', qty: 1, unitPrice: 300, categoryMarkupPct: 0.85, taxType: 'none' },
+        { id: '5', section: 'Rentals - Non-Taxable', taxBucket: 'staffing', name: 'Rental Delivery', qty: 1, unitPrice: 150, categoryMarkupPct: 0.85, taxType: 'none' },
       ],
     };
 
@@ -377,7 +382,7 @@ describe('calculateVenueEstimate — decor sections', () => {
       gratuity: 0,
       adminFee: 0,
       lineItems: [
-        { id: '1', section: 'Rentals - Tables', name: 'Farm Tables', qty: 5, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'general' },
+        { id: '1', section: 'Rentals - Tables', taxBucket: 'equipment', name: 'Farm Tables', qty: 5, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'general' },
       ],
     };
 
@@ -410,7 +415,7 @@ describe('calculateMarginAnalysis — new formula', () => {
     gratuity: 0,
     adminFee: 0,
     lineItems: [
-      { id: '1', section: 'Rentals - Tables', name: 'Farm Tables', qty: 5, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'general' },
+      { id: '1', section: 'Rentals - Tables', taxBucket: 'equipment', name: 'Farm Tables', qty: 5, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'general' },
     ],
   };
   // Derived: equipmentTax=134.125, vendorTaxesTotal=72.5, subtotalClient=1984.125,
@@ -522,7 +527,7 @@ describe('client discount', () => {
     name: 'Discount Test',
     fbMinimum: 0, isVenueTaxable: false, serviceCharge: 0, gratuity: 0, adminFee: 0,
     lineItems: [
-      { id: 'a', section: 'Equipment & Staffing', name: 'Item A', qty: 1, unitPrice: 1000, categoryMarkupPct: 0.85, taxType: 'general', isRevenueItem: false },
+      { id: 'a', section: 'Equipment & Staffing', taxBucket: 'equipment', name: 'Item A', qty: 1, unitPrice: 1000, categoryMarkupPct: 0.85, taxType: 'general', isRevenueItem: false },
     ],
   };
   const noDiscountConfig: ProgramConfig = { ...BASE_CONFIG, gdpCommissionEnabled: false, clientCommission: 0.05 };
@@ -609,13 +614,13 @@ describe('category move: taxType changes with section', () => {
       name: 'Move Test',
       fbMinimum: 0, isVenueTaxable: false, serviceCharge: 0, gratuity: 0, adminFee: 0,
       lineItems: [
-        { id: 'x', section: 'F&B', name: 'Item', qty: 1, unitPrice: 1000, categoryMarkupPct: 0.55, taxType: 'food', isRevenueItem: false },
+        { id: 'x', section: 'F&B', taxBucket: 'fb', name: 'Item', qty: 1, unitPrice: 1000, categoryMarkupPct: 0.55, taxType: 'food', isRevenueItem: false },
       ],
     };
     const equipInput: VenueEstimateInput = {
       ...fbInput,
       lineItems: [
-        { id: 'x', section: 'Equipment & Staffing', name: 'Item', qty: 1, unitPrice: 1000, categoryMarkupPct: 0.55, taxType: 'general', isRevenueItem: false },
+        { id: 'x', section: 'Equipment & Staffing', taxBucket: 'equipment', name: 'Item', qty: 1, unitPrice: 1000, categoryMarkupPct: 0.55, taxType: 'general', isRevenueItem: false },
       ],
     };
     const fbSummary = calculateVenueEstimate(fbInput, splitTaxConfig);
@@ -635,13 +640,13 @@ describe('category move: taxType changes with section', () => {
       name: 'Tax Test',
       fbMinimum: 0, isVenueTaxable: false, serviceCharge: 0, gratuity: 0, adminFee: 0,
       lineItems: [
-        { id: 'y', section: 'Equipment & Staffing', name: 'AV', qty: 1, unitPrice: 500, categoryMarkupPct: 0.65, taxType: 'general', isRevenueItem: false },
+        { id: 'y', section: 'Equipment & Staffing', taxBucket: 'equipment', name: 'AV', qty: 1, unitPrice: 500, categoryMarkupPct: 0.65, taxType: 'general', isRevenueItem: false },
       ],
     };
     const nonTaxableInput: VenueEstimateInput = {
       ...taxableInput,
       lineItems: [
-        { id: 'y', section: 'Non-Taxable Staffing', name: 'AV', qty: 1, unitPrice: 500, categoryMarkupPct: 0.65, taxType: 'none', isRevenueItem: false },
+        { id: 'y', section: 'Non-Taxable Staffing', taxBucket: 'staffing', name: 'AV', qty: 1, unitPrice: 500, categoryMarkupPct: 0.65, taxType: 'none', isRevenueItem: false },
       ],
     };
     const taxable = calculateVenueEstimate(taxableInput, splitTaxConfig);
@@ -661,13 +666,13 @@ describe('category move: taxType changes with section', () => {
       name: 'Floral Move',
       fbMinimum: 0, isVenueTaxable: false, serviceCharge: 0, gratuity: 0, adminFee: 0,
       lineItems: [
-        { id: 'z', section: 'Florals - Taxable', name: 'Flowers', qty: 3, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'general', isRevenueItem: false },
+        { id: 'z', section: 'Florals - Taxable', taxBucket: 'equipment', name: 'Flowers', qty: 3, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'general', isRevenueItem: false },
       ],
     };
     const nonTaxableInput: VenueEstimateInput = {
       ...taxableInput,
       lineItems: [
-        { id: 'z', section: 'Florals - Non-Taxable', name: 'Flowers', qty: 3, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'none', isRevenueItem: false },
+        { id: 'z', section: 'Florals - Non-Taxable', taxBucket: 'staffing', name: 'Flowers', qty: 3, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'none', isRevenueItem: false },
       ],
     };
     const before = calculateVenueEstimate(taxableInput, splitTaxConfig);
@@ -692,11 +697,11 @@ describe('calculateVenueEstimate — taxExempt', () => {
     gratuity: 0,
     adminFee: 0,
     lineItems: [
-      { id: '1', section: 'F&B', name: 'Food', qty: 10, unitPrice: 100, categoryMarkupPct: 0.55, taxType: 'food' },
-      { id: '2', section: 'F&B', name: 'Bar', qty: 10, unitPrice: 50, categoryMarkupPct: 0.55, taxType: 'alcohol' },
-      { id: '3', section: 'Equipment & Staffing', name: 'AV', qty: 1, unitPrice: 500, categoryMarkupPct: 0.65, taxType: 'general' },
-      { id: '4', section: 'Venue Fees', name: 'Room', qty: 1, unitPrice: 1000, categoryMarkupPct: 0.60, taxType: 'general' },
-      { id: '5', section: 'Non-Taxable Staffing', name: 'Staff', qty: 1, unitPrice: 200, categoryMarkupPct: 0.90, taxType: 'none' },
+      { id: '1', section: 'F&B', taxBucket: 'fb', name: 'Food', qty: 10, unitPrice: 100, categoryMarkupPct: 0.55, taxType: 'food' },
+      { id: '2', section: 'F&B', taxBucket: 'fb', name: 'Bar', qty: 10, unitPrice: 50, categoryMarkupPct: 0.55, taxType: 'alcohol' },
+      { id: '3', section: 'Equipment & Staffing', taxBucket: 'equipment', name: 'AV', qty: 1, unitPrice: 500, categoryMarkupPct: 0.65, taxType: 'general' },
+      { id: '4', section: 'Venue Fees', taxBucket: 'venue', name: 'Room', qty: 1, unitPrice: 1000, categoryMarkupPct: 0.60, taxType: 'general' },
+      { id: '5', section: 'Non-Taxable Staffing', taxBucket: 'staffing', name: 'Staff', qty: 1, unitPrice: 200, categoryMarkupPct: 0.90, taxType: 'none' },
     ],
   };
 
@@ -755,5 +760,90 @@ describe('calculateVenueEstimate — taxExempt', () => {
     expect(result.alcoholTax).toBe(0);
     expect(result.equipmentTax).toBe(0);
     expect(result.venueTax).toBe(0);
+  });
+});
+
+// ─── TaxBucket routing ───────────────────────────────────
+// These tests verify that bucket assignment (fb/equipment/venue/staffing) is
+// driven by taxBucket — not the section display name. They pass before the
+// engine refactor (section strings still match) and remain passing after
+// (engine switches to taxBucket). Custom-name tests marked with a comment
+// will ONLY pass after the engine refactor.
+
+describe('taxBucket routing', () => {
+  const zeroFees = { fbMinimum: 0, isVenueTaxable: false, serviceCharge: 0, gratuity: 0, adminFee: 0 };
+  const noTaxConfig: ProgramConfig = { ...BASE_CONFIG, ccProcessingFee: 0, clientCommission: 0, gdpCommissionEnabled: false };
+
+  it('fb bucket contributes to fbSubtotalClient', () => {
+    const input: VenueEstimateInput = {
+      name: 'test', ...zeroFees,
+      lineItems: [
+        { id: '1', section: 'F&B', taxBucket: 'fb', name: 'Food', qty: 1, unitPrice: 100, categoryMarkupPct: 0.55, taxType: 'food' },
+      ],
+    };
+    const s = calculateVenueEstimate(input, noTaxConfig);
+    expect(s.fbSubtotalClient).toBeCloseTo(155);
+    expect(s.equipmentSubtotalClient).toBe(0);
+    expect(s.venueSubtotalClient).toBe(0);
+    expect(s.qcStaffingSubtotalClient).toBe(0);
+  });
+
+  it('equipment bucket contributes to equipmentSubtotalClient and incurs general tax', () => {
+    const input: VenueEstimateInput = {
+      name: 'test', ...zeroFees,
+      lineItems: [
+        { id: '1', section: 'Equipment & Staffing', taxBucket: 'equipment', name: 'AV', qty: 1, unitPrice: 100, categoryMarkupPct: 0.65, taxType: 'general' },
+      ],
+    };
+    const s = calculateVenueEstimate(input, BASE_CONFIG);
+    expect(s.equipmentSubtotalClient).toBeCloseTo(165);
+    expect(s.equipmentTax).toBeCloseTo(165 * 0.0725);
+    expect(s.fbSubtotalClient).toBe(0);
+    expect(s.venueSubtotalClient).toBe(0);
+  });
+
+  it('venue bucket contributes to venueSubtotalClient', () => {
+    const input: VenueEstimateInput = {
+      name: 'test', ...zeroFees, isVenueTaxable: true,
+      lineItems: [
+        { id: '1', section: 'Venue Fees', taxBucket: 'venue', name: 'Room', qty: 1, unitPrice: 100, categoryMarkupPct: 0.60, taxType: 'general' },
+      ],
+    };
+    const s = calculateVenueEstimate(input, BASE_CONFIG);
+    expect(s.venueSubtotalClient).toBeCloseTo(160);
+    expect(s.venueTax).toBeCloseTo(160 * 0.0725);
+    expect(s.fbSubtotalClient).toBe(0);
+    expect(s.equipmentSubtotalClient).toBe(0);
+  });
+
+  it('staffing bucket contributes to qcStaffingSubtotalClient with no tax', () => {
+    const input: VenueEstimateInput = {
+      name: 'test', ...zeroFees,
+      lineItems: [
+        { id: '1', section: 'Non-Taxable Staffing', taxBucket: 'staffing', name: 'Staff', qty: 1, unitPrice: 100, categoryMarkupPct: 0.90, taxType: 'none' },
+      ],
+    };
+    const s = calculateVenueEstimate(input, noTaxConfig);
+    expect(s.qcStaffingSubtotalClient).toBeCloseTo(190);
+    expect(s.equipmentTax).toBe(0);
+    expect(s.foodTax).toBe(0);
+    expect(s.venueTax).toBe(0);
+  });
+
+  it('mixed buckets sum correctly', () => {
+    const input: VenueEstimateInput = {
+      name: 'test', ...zeroFees,
+      lineItems: [
+        { id: '1', section: 'F&B', taxBucket: 'fb', name: 'Food', qty: 1, unitPrice: 100, categoryMarkupPct: 0.55, taxType: 'food' },
+        { id: '2', section: 'Equipment & Staffing', taxBucket: 'equipment', name: 'AV', qty: 1, unitPrice: 200, categoryMarkupPct: 0.65, taxType: 'general' },
+        { id: '3', section: 'Venue Fees', taxBucket: 'venue', name: 'Room', qty: 1, unitPrice: 300, categoryMarkupPct: 0.60, taxType: 'none' },
+        { id: '4', section: 'Non-Taxable Staffing', taxBucket: 'staffing', name: 'Staff', qty: 1, unitPrice: 400, categoryMarkupPct: 0.90, taxType: 'none' },
+      ],
+    };
+    const s = calculateVenueEstimate(input, noTaxConfig);
+    expect(s.fbSubtotalClient).toBeCloseTo(155);
+    expect(s.equipmentSubtotalClient).toBeCloseTo(330);
+    expect(s.venueSubtotalClient).toBeCloseTo(480);
+    expect(s.qcStaffingSubtotalClient).toBeCloseTo(760);
   });
 });

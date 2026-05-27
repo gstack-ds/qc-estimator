@@ -80,11 +80,11 @@ describe('Proposal 1 — 50-guest F&B dinner, Charlotte, no restaurant fees (pla
     adminFee: 0,
     lineItems: [
       {
-        id: 'li-1', section: 'F&B', name: 'Plated Dinner',
+        id: 'li-1', section: 'F&B', taxBucket: 'fb', name: 'Plated Dinner',
         qty: 50, unitPrice: 60, categoryMarkupPct: 0.55, taxType: 'food',
       },
       {
-        id: 'li-2', section: 'F&B', name: 'Open Bar',
+        id: 'li-2', section: 'F&B', taxBucket: 'fb', name: 'Open Bar',
         qty: 50, unitPrice: 25, categoryMarkupPct: 0.55, taxType: 'alcohol',
       },
     ],
@@ -154,11 +154,11 @@ describe('Proposal 2 — 100-guest F&B, DC, 20% SC + GDP commission (placeholder
     adminFee: 0,
     lineItems: [
       {
-        id: 'li-1', section: 'F&B', name: 'Plated Dinner',
+        id: 'li-1', section: 'F&B', taxBucket: 'fb', name: 'Plated Dinner',
         qty: 100, unitPrice: 80, categoryMarkupPct: 0.55, taxType: 'food',
       },
       {
-        id: 'li-2', section: 'F&B', name: 'Open Bar',
+        id: 'li-2', section: 'F&B', taxBucket: 'fb', name: 'Open Bar',
         qty: 100, unitPrice: 30, categoryMarkupPct: 0.55, taxType: 'alcohol',
       },
     ],
@@ -231,15 +231,15 @@ describe('Proposal 3 — 75-guest decor/rentals, Charlotte, no F&B (placeholder)
     adminFee: 0,
     lineItems: [
       {
-        id: 'li-1', section: 'Equipment & Staffing', name: 'Table Centerpieces',
+        id: 'li-1', section: 'Equipment & Staffing', taxBucket: 'equipment', name: 'Table Centerpieces',
         qty: 25, unitPrice: 120, categoryMarkupPct: 0.85, taxType: 'general',
       },
       {
-        id: 'li-2', section: 'Equipment & Staffing', name: 'Linens',
+        id: 'li-2', section: 'Equipment & Staffing', taxBucket: 'equipment', name: 'Linens',
         qty: 30, unitPrice: 40, categoryMarkupPct: 0.85, taxType: 'general',
       },
       {
-        id: 'li-3', section: 'Non-Taxable Staffing', name: 'Setup Crew',
+        id: 'li-3', section: 'Non-Taxable Staffing', taxBucket: 'staffing', name: 'Setup Crew',
         qty: 4, unitPrice: 200, categoryMarkupPct: 0.90, taxType: 'none',
       },
     ],

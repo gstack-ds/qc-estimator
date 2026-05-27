@@ -62,15 +62,11 @@ export function calculateVenueEstimate(
 ): EstimateSummary {
   const calculated = input.lineItems.map((li) => calculateLineItem(li, config));
 
-  // Decor sections that map to equipment (taxable) and qcStaffing (non-taxable) buckets
-  const DECOR_TAXABLE = new Set(['Florals - Taxable', 'Rentals - Seating', 'Rentals - Lounge', 'Rentals - Tables', 'Rentals - Rugs & Accessories']);
-  const DECOR_NONTAXABLE = new Set(['Florals - Non-Taxable', 'Rentals - Non-Taxable']);
-
-  // Group by section
-  const fb = calculated.filter((li) => li.section === 'F&B');
-  const equipment = calculated.filter((li) => li.section === 'Equipment & Staffing' || DECOR_TAXABLE.has(li.section));
-  const venue = calculated.filter((li) => li.section === 'Venue Fees');
-  const qcStaffing = calculated.filter((li) => li.section === 'Non-Taxable Staffing' || DECOR_NONTAXABLE.has(li.section));
+  // Group by taxBucket — section display name is irrelevant to pricing
+  const fb = calculated.filter((li) => li.taxBucket === 'fb');
+  const equipment = calculated.filter((li) => li.taxBucket === 'equipment');
+  const venue = calculated.filter((li) => li.taxBucket === 'venue');
+  const qcStaffing = calculated.filter((li) => li.taxBucket === 'staffing');
 
   // Subtotals
   const fbSubtotalOur = fb.reduce((s, li) => s + li.ourCost, 0);
