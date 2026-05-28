@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
+import type { DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { TaxType, TaxBucket } from '@/types';
@@ -16,13 +19,14 @@ import LinkVenuePanel from './LinkVenuePanel';
 import CopyItemsFromButton from './CopyItemsFromButton';
 import LineItemSection from './LineItemSection';
 import type { LocalSectionDef } from './LineItemSection';
+import SortableSectionItem from './SortableSectionItem';
 import SummaryPanel from './SummaryPanel';
 import MarginPanel from './MarginPanel';
 import TravelPanel from './TravelPanel';
 import SlideCopySection from './SlideCopySection';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
-import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection } from '@/app/(programs)/programs/[id]/estimates/actions';
+import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection, reorderSections, reorderLineItems } from '@/app/(programs)/programs/[id]/estimates/actions';
 import { autoLinkOrCreateVenue, syncVenueSpaceDefaults } from '@/app/(programs)/venues/actions';
 import type { DbTemplate, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { TravelRefData, DbTrip } from '@/lib/supabase/queries';
@@ -187,6 +191,7 @@ export default function EstimateBuilder({
       taxBucket: s.tax_bucket,
       markupPct: s.markup_pct,
       isBuiltIn: s.is_built_in,
+      sortOrder: s.sort_order,
     }))
   );
 
@@ -209,7 +214,7 @@ export default function EstimateBuilder({
 
   // Line items state
   const initSections = dbSections.map((s) => ({
-    id: s.id, name: s.name, taxBucket: s.tax_bucket, markupPct: s.markup_pct, isBuiltIn: s.is_built_in,
+    id: s.id, name: s.name, taxBucket: s.tax_bucket, markupPct: s.markup_pct, isBuiltIn: s.is_built_in, sortOrder: s.sort_order,
   }));
   const [lineItems, setLineItems] = useState<LocalLineItem[]>(
     dbLineItems.map((item) => dbItemToLocal(item, markups, initSections))
@@ -713,7 +718,7 @@ export default function EstimateBuilder({
     setLineItems((prev) => prev.map((li) => li.sectionId === sectionId ? { ...li, section: newName } : li));
     const sectionDef = sections.find((s) => s.id === sectionId);
     if (!sectionDef) return;
-    await upsertSection({ id: sectionId, estimate_id: estimate.id, name: newName, tax_bucket: sectionDef.taxBucket, markup_pct: sectionDef.markupPct, sort_order: sections.indexOf(sectionDef), is_built_in: sectionDef.isBuiltIn });
+    await upsertSection({ id: sectionId, estimate_id: estimate.id, name: newName, tax_bucket: sectionDef.taxBucket, markup_pct: sectionDef.markupPct, sort_order: sectionDef.sortOrder, is_built_in: sectionDef.isBuiltIn });
     const idsToSave = lineItemsRef.current.filter((li) => li.sectionId === sectionId).map((li) => li.id);
     for (const id of idsToSave) setTimeout(() => handleItemSave(id), 0);
   }, [sections, estimate.id, handleItemSave]);
@@ -738,11 +743,34 @@ export default function EstimateBuilder({
       is_built_in: false,
     });
     if (result.section) {
-      setSections((prev) => [...prev, { id: result.section!.id, name: result.section!.name, taxBucket: result.section!.tax_bucket, markupPct: result.section!.markup_pct, isBuiltIn: false }]);
+      setSections((prev) => [...prev, { id: result.section!.id, name: result.section!.name, taxBucket: result.section!.tax_bucket, markupPct: result.section!.markup_pct, isBuiltIn: false, sortOrder: result.section!.sort_order }]);
     }
     setNewSectionName('');
     setShowAddSection(false);
   }, [newSectionName, newSectionBucket, sections.length, estimate.id]);
+
+  const sectionSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleSectionDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setSections((prev) => {
+      const oldIndex = prev.findIndex((s) => s.id === active.id);
+      const newIndex = prev.findIndex((s) => s.id === over.id);
+      const reordered = arrayMove(prev, oldIndex, newIndex).map((s, i) => ({ ...s, sortOrder: i }));
+      reorderSections(reordered.map((s) => ({ id: s.id, sortOrder: s.sortOrder })));
+      return reordered;
+    });
+  }, []);
+
+  const handleReorderItems = useCallback(async (sectionId: string, newOrderedItems: LocalLineItem[]) => {
+    const reordered = newOrderedItems.map((li, i) => ({ ...li, sortOrder: i }));
+    setLineItems((prev) => [...prev.filter((li) => li.sectionId !== sectionId), ...reordered]);
+    await reorderLineItems(reordered.map((li) => ({ id: li.id, sortOrder: li.sortOrder })));
+  }, []);
 
   // ─── Render ───────────────────────────────────────────────
 
@@ -1077,35 +1105,44 @@ export default function EstimateBuilder({
                 >Clear selection</button>
               </div>
             )}
-            {sections.map((sectionDef) => (
-              <LineItemSection
-                key={sectionDef.id}
-                sectionDef={sectionDef}
-                items={lineItems.filter((li) => li.sectionId === sectionDef.id)}
-                markups={markups}
-                defaultTaxType={bucketDefaultTax(sectionDef.taxBucket)}
-                guestCount={program.guest_count}
-                selectedItems={selectedItems}
-                onToggleSelect={handleToggleSelect}
-                onToggleAllSelect={handleToggleAllInSection}
-                onChange={(id, patch) => {
-                  handleItemChange(id, patch);
-                  if (patch.categoryId !== undefined || patch.taxType !== undefined) {
-                    setTimeout(() => handleItemSave(id), 0);
-                  }
-                }}
-                onBlur={handleItemSave}
-                onDelete={handleItemDelete}
-                onAdd={handleAddItem}
-                onAddFromTemplate={handleAddFromTemplate}
-                onSaveAsTemplate={handleSaveAsTemplate}
-                onRename={handleRenameSection}
-                onDeleteSection={handleDeleteSection}
-                location={programConfig.location}
-                showMath={showMath}
-                taxExempt={est.taxExempt}
-              />
-            ))}
+            <DndContext sensors={sectionSensors} collisionDetection={closestCenter} onDragEnd={handleSectionDragEnd}>
+              <SortableContext items={sections.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+                {sections.map((sectionDef) => (
+                  <SortableSectionItem key={sectionDef.id} id={sectionDef.id}>
+                    {(dragHandle) => (
+                      <LineItemSection
+                        sectionDef={sectionDef}
+                        dragHandle={dragHandle}
+                        items={lineItems.filter((li) => li.sectionId === sectionDef.id).sort((a, b) => a.sortOrder - b.sortOrder)}
+                        markups={markups}
+                        defaultTaxType={bucketDefaultTax(sectionDef.taxBucket)}
+                        guestCount={program.guest_count}
+                        selectedItems={selectedItems}
+                        onToggleSelect={handleToggleSelect}
+                        onToggleAllSelect={handleToggleAllInSection}
+                        onChange={(id, patch) => {
+                          handleItemChange(id, patch);
+                          if (patch.categoryId !== undefined || patch.taxType !== undefined) {
+                            setTimeout(() => handleItemSave(id), 0);
+                          }
+                        }}
+                        onBlur={handleItemSave}
+                        onDelete={handleItemDelete}
+                        onAdd={handleAddItem}
+                        onAddFromTemplate={handleAddFromTemplate}
+                        onSaveAsTemplate={handleSaveAsTemplate}
+                        onRename={handleRenameSection}
+                        onDeleteSection={handleDeleteSection}
+                        onReorderItems={handleReorderItems}
+                        location={programConfig.location}
+                        showMath={showMath}
+                        taxExempt={est.taxExempt}
+                      />
+                    )}
+                  </SortableSectionItem>
+                ))}
+              </SortableContext>
+            </DndContext>
             {/* Add Section */}
             <div className="pt-2 border-t border-brand-cream/60">
               {showAddSection ? (

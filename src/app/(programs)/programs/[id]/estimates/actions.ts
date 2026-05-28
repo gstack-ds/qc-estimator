@@ -1116,3 +1116,23 @@ export async function generateVenueBio(opts: {
     return { error: String(e), bio: null };
   }
 }
+
+// ─── Reorder helpers ──────────────────────────────────────
+
+export async function reorderSections(updates: { id: string; sortOrder: number }[]): Promise<void> {
+  const supabase = await createClient();
+  await Promise.all(
+    updates.map(({ id, sortOrder }) =>
+      supabase.from('estimate_sections').update({ sort_order: sortOrder }).eq('id', id)
+    )
+  );
+}
+
+export async function reorderLineItems(updates: { id: string; sortOrder: number }[]): Promise<void> {
+  const supabase = await createClient();
+  await Promise.all(
+    updates.map(({ id, sortOrder }) =>
+      supabase.from('estimate_line_items').update({ sort_order: sortOrder }).eq('id', id)
+    )
+  );
+}
