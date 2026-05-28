@@ -5,7 +5,15 @@ import { revalidatePath } from 'next/cache';
 import Anthropic from '@anthropic-ai/sdk';
 import type { DocumentBlockParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
 import type { EstimateType, TaxBucket } from '@/types';
-import type { SlideCopyData } from '@/types/slideCopy';
+import type { SlideCopyData, TravelResult } from '@/types/slideCopy';
+import {
+  getTrafficWindow,
+  formatDriveLine,
+  shouldShowWalking,
+  formatWalkLine,
+  isSameProperty,
+  buildPlanningNotes,
+} from '@/lib/slideCopy/travel';
 
 // ─── Estimate details ─────────────────────────────────────
 
@@ -911,4 +919,89 @@ export async function getExportDataForProgram(programId: string) {
 export async function saveSlideCopyData(estimateId: string, data: SlideCopyData): Promise<void> {
   const supabase = await createClient();
   await supabase.from('estimates').update({ slide_copy_data: data }).eq('id', estimateId);
+}
+
+interface MapsDistanceResponse {
+  rows: { elements: { status: string; distance?: { value: number }; duration?: { value: number } }[] }[];
+  status: string;
+}
+
+async function fetchMapsDistance(origin: string, destination: string, mode: 'driving' | 'walking'): Promise<{ distanceMeters: number; durationSeconds: number } | null> {
+  const key = process.env.GOOGLE_MAPS_API_KEY;
+  if (!key) return null;
+  const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origin)}&destinations=${encodeURIComponent(destination)}&mode=${mode}&key=${key}`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const data = await res.json() as MapsDistanceResponse;
+  const el = data?.rows?.[0]?.elements?.[0];
+  if (!el || el.status !== 'OK' || !el.distance || !el.duration) return null;
+  return { distanceMeters: el.distance.value, durationSeconds: el.duration.value };
+}
+
+export async function getTravelTime(
+  hotelAddress: string,
+  venueAddress: string,
+  eventDate: string,   // YYYY-MM-DD
+  startTime: string,   // HH:MM or HH:MM:SS
+  hotelName: string,
+): Promise<{ error: string | null; result: TravelResult | null }> {
+  if (!hotelAddress || !venueAddress) {
+    return { error: 'Both hotel and venue addresses are required.', result: null };
+  }
+
+  if (isSameProperty(hotelName, venueAddress)) {
+    return {
+      error: null,
+      result: {
+        distanceMiles: 0,
+        baseDriveMins: 0,
+        baseWalkMins: 0,
+        isSameProperty: true,
+        driveLine: 'On-site, no transportation needed',
+        walkLine: null,
+        planningNotes: 'Venue is on-site at the client hotel. No transportation required.',
+        calculatedAt: new Date().toISOString(),
+      },
+    };
+  }
+
+  const [driving, walking] = await Promise.all([
+    fetchMapsDistance(hotelAddress, venueAddress, 'driving'),
+    fetchMapsDistance(hotelAddress, venueAddress, 'walking'),
+  ]);
+
+  if (!driving) {
+    return { error: 'Could not calculate drive time. Check that GOOGLE_MAPS_API_KEY is set and addresses are valid.', result: null };
+  }
+
+  const distanceMiles = driving.distanceMeters / 1609.344;
+  const baseDriveMins = Math.round(driving.durationSeconds / 60);
+  const baseWalkMins = walking ? Math.round(walking.durationSeconds / 60) : null;
+
+  // Determine traffic window from event date + start time
+  const d = new Date(eventDate + 'T12:00:00');
+  const dayOfWeek = d.getDay();
+  const hour = parseInt(startTime.split(':')[0], 10);
+  const window = getTrafficWindow(hour, dayOfWeek);
+
+  const driveLine = formatDriveLine(distanceMiles, baseDriveMins, window);
+  const showWalk = baseWalkMins !== null && shouldShowWalking(distanceMiles, baseWalkMins);
+  const walkLine = showWalk && baseWalkMins !== null ? formatWalkLine(baseWalkMins) : null;
+
+  const maxDriveMins = Math.round(baseDriveMins * window.maxMultiplier);
+  const planningNotes = buildPlanningNotes({ startTime, maxDriveMins, distanceMiles, dayOfWeek, hotelName });
+
+  return {
+    error: null,
+    result: {
+      distanceMiles,
+      baseDriveMins,
+      baseWalkMins,
+      isSameProperty: false,
+      driveLine,
+      walkLine,
+      planningNotes,
+      calculatedAt: new Date().toISOString(),
+    },
+  };
 }

@@ -26,6 +26,17 @@ export interface MenuCourse {
   options: MenuOption[];
 }
 
+export interface TravelResult {
+  distanceMiles: number;
+  baseDriveMins: number;
+  baseWalkMins: number | null;
+  isSameProperty: boolean;
+  driveLine: string;
+  walkLine: string | null;
+  planningNotes: string;
+  calculatedAt: string;
+}
+
 export interface SlideCopyData {
   venueUrl?: string;
   sqft?: number;
@@ -33,4 +44,5 @@ export interface SlideCopyData {
   venueBio?: string;
   inclusions: InclusionToggles;
   menuSelections?: MenuCourse[];
+  travelResult?: TravelResult;
 }

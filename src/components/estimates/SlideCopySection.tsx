@@ -2,8 +2,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { EstimateSummary } from '@/types';
 import type { DbEstimate, DbProgram, DbEvent } from '@/lib/supabase/queries';
-import type { SlideCopyData, InclusionToggles } from '@/types/slideCopy';
-import { saveSlideCopyData } from '@/app/(programs)/programs/[id]/estimates/actions';
+import type { SlideCopyData, InclusionToggles, TravelResult } from '@/types/slideCopy';
+import { saveSlideCopyData, getTravelTime } from '@/app/(programs)/programs/[id]/estimates/actions';
 import { spellNumber, oxfordComma, formatCurrency, checkBannedWords } from '@/lib/slideCopy/brandVoice';
 
 // Minimal shape needed from line items — avoids circular import with EstimateBuilder
@@ -24,6 +24,7 @@ interface Props {
   initialData: SlideCopyData | null;
   venueName?: string;
   venueSpaceName?: string;
+  venueAddress?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -91,7 +92,7 @@ const INCLUSION_LABELS: [keyof Omit<InclusionToggles, 'customInclusion'>, string
 // ─── Main component ───────────────────────────────────────
 
 export default function SlideCopySection({
-  estimate, program, event, summary, lineItems, initialData, venueName, venueSpaceName,
+  estimate, program, event, summary, lineItems, initialData, venueName, venueSpaceName, venueAddress,
 }: Props) {
   const [venueUrl, setVenueUrl] = useState(initialData?.venueUrl ?? '');
   const [sqft, setSqft] = useState(initialData?.sqft?.toString() ?? '');
@@ -99,6 +100,9 @@ export default function SlideCopySection({
   const [inclusions, setInclusions] = useState<InclusionToggles>(
     () => initialData?.inclusions ?? autoDetectInclusions(summary, lineItems)
   );
+  const [travelResult, setTravelResult] = useState<TravelResult | null>(initialData?.travelResult ?? null);
+  const [travelLoading, setTravelLoading] = useState(false);
+  const [travelError, setTravelError] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didMount = useRef(false);
 
@@ -117,11 +121,29 @@ export default function SlideCopySection({
         venueBio: initialData?.venueBio,
         inclusions,
         menuSelections: initialData?.menuSelections,
+        travelResult: travelResult ?? undefined,
       };
       saveSlideCopyData(estimate.id, data);
     }, 1500);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [venueUrl, sqft, maxCapacity, inclusions]);
+  }, [venueUrl, sqft, maxCapacity, inclusions, travelResult]);
+
+  const handleCalculateTravel = useCallback(async () => {
+    const hotel = program.client_hotel;
+    const venue = venueAddress;
+    const date = event?.event_date ?? program.event_date;
+    const time = event?.start_time ?? program.event_start_time;
+    if (!hotel || !venue || !date || !time) {
+      setTravelError('Client hotel, venue address, event date, and start time are all required for drive time calculation.');
+      return;
+    }
+    setTravelLoading(true);
+    setTravelError(null);
+    const { error, result } = await getTravelTime(hotel, venue, date, time, hotel);
+    setTravelLoading(false);
+    if (error) { setTravelError(error); return; }
+    setTravelResult(result);
+  }, [program.client_hotel, venueAddress, event, program.event_date, program.event_start_time]);
 
   const toggleInclusion = useCallback((key: keyof Omit<InclusionToggles, 'customInclusion'>) => {
     setInclusions((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -174,12 +196,14 @@ export default function SlideCopySection({
     : '';
 
   const teamSummary = buildTeamSummary(lineItems);
+  const driveLine = travelResult?.driveLine ?? '';
 
   const allSections = [
     { marker: '--- SLIDE 1 HEADER ---', text: slide1Header },
     { marker: '--- SLIDE 1 SUMMARY ---', text: slide1Summary },
     { marker: '--- SLIDE 2 HEADER ---', text: slide2Header },
     { marker: '--- SLIDE 2 INCLUSIONS ---', text: slide2Inclusions },
+    { marker: '--- SLIDE 2 DRIVE TIME ---', text: driveLine },
     { marker: '--- SLIDE 2 SERVICE TEAM ---', text: teamSummary },
   ];
 
@@ -297,8 +321,16 @@ export default function SlideCopySection({
             {/* Phase 4 placeholder */}
             <PhasePlaceholder label="SLIDE 2 — Venue Description" phase="4" detail="Auto-generate from venue URL or Claude API" />
 
-            {/* Phase 2 placeholder */}
-            <PhasePlaceholder label="SLIDE 2 — Drive Time" phase="2" detail="Google Maps Distance Matrix" />
+            {/* Drive Time */}
+            <DriveTimeBlock
+              hotelName={program.client_hotel}
+              venueName={venueName}
+              venueAddress={venueAddress}
+              result={travelResult}
+              loading={travelLoading}
+              error={travelError}
+              onCalculate={handleCalculateTravel}
+            />
 
             {/* Phase 3 placeholder */}
             <PhasePlaceholder label="SLIDE 2 — Menu Selections" phase="3" detail="Menu selection logic + dietary tags" />
@@ -352,6 +384,69 @@ function PhasePlaceholder({ label, phase, detail }: { label: string; phase: stri
         <span className="text-[10px] text-brand-silver/60 bg-brand-cream px-1.5 py-0.5 rounded">Phase {phase}</span>
       </div>
       <p className="px-3 py-2 text-xs text-brand-charcoal/30 italic">{detail}</p>
+    </div>
+  );
+}
+
+interface DriveTimeBlockProps {
+  hotelName: string | null;
+  venueName?: string;
+  venueAddress?: string;
+  result: TravelResult | null;
+  loading: boolean;
+  error: string | null;
+  onCalculate: () => void;
+}
+
+function DriveTimeBlock({ hotelName, venueName, venueAddress, result, loading, error, onCalculate }: DriveTimeBlockProps) {
+  const canCalculate = !!(hotelName && venueAddress);
+
+  return (
+    <div className="border border-brand-copper/20 rounded bg-white">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-brand-copper/10 bg-brand-offwhite rounded-t">
+        <span className="text-[11px] font-medium text-brand-charcoal/70">SLIDE 1 — Drive Time</span>
+        <div className="flex items-center gap-2">
+          {result && <CopyButton text={result.driveLine} label="Copy" />}
+          <button
+            type="button"
+            onClick={onCalculate}
+            disabled={!canCalculate || loading}
+            className="text-xs px-2 py-1 rounded border border-brand-copper/40 text-brand-brown hover:bg-brand-copper/10 transition-colors disabled:opacity-40"
+          >
+            {loading ? 'Calculating…' : result ? 'Recalculate' : 'Calculate'}
+          </button>
+        </div>
+      </div>
+      <div className="px-3 py-2 space-y-1.5">
+        {!canCalculate && (
+          <p className="text-xs text-brand-charcoal/40 italic">
+            {!hotelName ? 'Set Client Hotel on the program to enable.' : 'Link a venue with an address to enable.'}
+          </p>
+        )}
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        {result && (
+          <>
+            <div className="text-xs text-brand-charcoal">
+              <span className="font-medium">Slide copy:</span> {result.driveLine}
+              {result.walkLine && <span className="ml-2 text-brand-charcoal/60">· {result.walkLine}</span>}
+            </div>
+            {result.isSameProperty && (
+              <p className="text-xs text-brand-copper/80">On-site event detected.</p>
+            )}
+            {result.planningNotes && (
+              <div className="text-[11px] text-brand-charcoal/60 bg-brand-offwhite rounded p-2 mt-1">
+                <p className="font-semibold text-brand-brown uppercase tracking-wider mb-0.5" style={{ fontSize: '10px' }}>Planning Notes</p>
+                {result.planningNotes}
+              </div>
+            )}
+            {canCalculate && (
+              <p className="text-[10px] text-brand-silver/50">
+                {hotelName} → {venueName ?? venueAddress}
+              </p>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

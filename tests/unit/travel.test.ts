@@ -1,225 +1,204 @@
 import { describe, it, expect } from 'vitest';
 import {
-  calcTravelCost,
-  calcHotelCost,
-  calcPerDiemCost,
-  calcVehicleCost,
-  calculateTrip,
-  calculateTotalTravel,
-  LAST_MINUTE_BUFFER_PER_PERSON,
-} from '../../src/lib/engine/travel';
-import type { TravelRefs, TripInput } from '../../src/lib/engine/travel';
+  getTrafficWindow,
+  formatMinsRange,
+  formatDriveLine,
+  shouldShowWalking,
+  formatWalkLine,
+  isSameProperty,
+  buildPlanningNotes,
+} from '../../src/lib/slideCopy/travel';
 
-// ─── Fixtures ─────────────────────────────────────────────
-
-const REFS: TravelRefs = {
-  driveRoutes: [
-    { id: 'dr-1', route_name: 'DC to Richmond VA', cost: 205 },
-    { id: 'dr-2', route_name: 'Charlotte to Raleigh NC', cost: 230 },
-  ],
-  trainRoutes: [
-    { id: 'tr-1', route_name: 'DC to NYC', low_cost: 80, high_cost: 200 },
-    { id: 'tr-2', route_name: 'Philadelphia to NYC', low_cost: 40, high_cost: 120 },
-  ],
-  flightTypes: [
-    { id: 'ft-1', type_name: 'Short Haul', low_cost: 350, high_cost: 550 },
-    { id: 'ft-2', type_name: 'Medium Haul', low_cost: 450, high_cost: 750 },
-  ],
-  hotelRates: [
-    { id: 'hr-1', market: 'NYC', low_rate: 450, high_rate: 650 },
-    { id: 'hr-2', market: 'DC', low_rate: 350, high_rate: 550 },
-  ],
-  perDiemRates: [
-    { id: 'pd-1', market_type: 'Standard', full_day: 68, half_day: 34 },
-    { id: 'pd-2', market_type: 'NYC', full_day: 92, half_day: 46 },
-  ],
-  vehicleRates: [
-    {
-      id: 'vr-1', market: 'NYC',
-      sedan_hourly: 125, sedan_airport: 175,
-      suv_hourly: 150, suv_airport: 200,
-      sprinter_hourly: 200, sprinter_airport: 275,
-    },
-    {
-      id: 'vr-2', market: 'DC',
-      sedan_hourly: 110, sedan_airport: 150,
-      suv_hourly: 135, suv_airport: 175,
-      sprinter_hourly: 185, sprinter_airport: 250,
-    },
-  ],
-};
-
-const BASE_TRIP: TripInput = {
-  travel_type: 'None',
-  drive_route_id: null,
-  train_route_id: null,
-  flight_type_id: null,
-  last_minute_buffer: false,
-  staff_count: 2,
-  nights: 1,
-  hotel_rate_id: null,
-  hotel_budget: 'Low',
-  per_diem_rate_id: null,
-  vehicle_rate_id: null,
-  vehicle_type: 'None',
-  vehicle_service: 'Airport Transfer',
-  vehicle_hours: 0,
-  custom_vehicle_cost: 0,
-};
-
-// ─── Travel cost ─────────────────────────────────────────
-
-describe('calcTravelCost', () => {
-  it('returns drive route cost (flat, not per-staff)', () => {
-    const trip: TripInput = { ...BASE_TRIP, travel_type: 'Drive', drive_route_id: 'dr-1' };
-    expect(calcTravelCost(trip, REFS)).toBe(205);
+describe('getTrafficWindow', () => {
+  it('returns AM rush hour for 7am on a weekday', () => {
+    const w = getTrafficWindow(7, 2);
+    expect(w.label).toBe('AM rush hour');
+    expect(w.minMultiplier).toBe(1.5);
+    expect(w.maxMultiplier).toBe(2.5);
   });
 
-  it('returns 0 for drive with no route selected', () => {
-    const trip: TripInput = { ...BASE_TRIP, travel_type: 'Drive', drive_route_id: null };
-    expect(calcTravelCost(trip, REFS)).toBe(0);
+  it('returns Off-peak for 11am on a weekday', () => {
+    expect(getTrafficWindow(11, 3).label).toBe('Off-peak');
   });
 
-  it('multiplies train low_cost by staff count', () => {
-    const trip: TripInput = { ...BASE_TRIP, travel_type: 'Train', train_route_id: 'tr-1', staff_count: 3 };
-    expect(calcTravelCost(trip, REFS)).toBe(80 * 3); // 240
+  it('returns PM rush hour for 5pm on a Wednesday', () => {
+    const w = getTrafficWindow(17, 3);
+    expect(w.label).toBe('PM rush hour');
+    expect(w.minMultiplier).toBe(1.8);
   });
 
-  it('multiplies flight low_cost by staff, no buffer', () => {
-    const trip: TripInput = { ...BASE_TRIP, travel_type: 'Flight', flight_type_id: 'ft-1', staff_count: 2, last_minute_buffer: false };
-    expect(calcTravelCost(trip, REFS)).toBe(350 * 2); // 700
+  it('returns PM rush hour (heavy) for 5pm on a Thursday', () => {
+    const w = getTrafficWindow(17, 4);
+    expect(w.label).toBe('PM rush hour (heavy)');
+    expect(w.minMultiplier).toBe(2.0);
+    expect(w.maxMultiplier).toBe(2.7);
   });
 
-  it('adds last minute buffer per person for flights', () => {
-    const trip: TripInput = { ...BASE_TRIP, travel_type: 'Flight', flight_type_id: 'ft-1', staff_count: 2, last_minute_buffer: true };
-    expect(calcTravelCost(trip, REFS)).toBe(350 * 2 + LAST_MINUTE_BUFFER_PER_PERSON * 2); // 700 + 300 = 1000
+  it('returns PM rush hour (heavy) for 5pm on a Friday', () => {
+    expect(getTrafficWindow(17, 5).label).toBe('PM rush hour (heavy)');
   });
 
-  it('returns 0 for None travel type', () => {
-    expect(calcTravelCost(BASE_TRIP, REFS)).toBe(0);
+  it('returns Light evening traffic for 8pm on a weekday', () => {
+    expect(getTrafficWindow(20, 2).label).toBe('Light evening traffic');
+  });
+
+  it('returns Weekend traffic on Saturday', () => {
+    expect(getTrafficWindow(17, 6).label).toBe('Weekend traffic');
+  });
+
+  it('returns Weekend traffic on Sunday', () => {
+    expect(getTrafficWindow(8, 0).label).toBe('Weekend traffic');
+  });
+
+  it('returns Off-peak after 10pm', () => {
+    expect(getTrafficWindow(23, 2).label).toBe('Off-peak');
   });
 });
 
-// ─── Hotel cost ───────────────────────────────────────────
-
-describe('calcHotelCost', () => {
-  it('calculates low rate × nights × staff', () => {
-    const trip: TripInput = { ...BASE_TRIP, hotel_rate_id: 'hr-1', hotel_budget: 'Low', nights: 2, staff_count: 2 };
-    expect(calcHotelCost(trip, REFS)).toBe(450 * 2 * 2); // 1800
+describe('formatMinsRange', () => {
+  it('formats a range rounded to nearest 5', () => {
+    expect(formatMinsRange(18, 1.8, 2.5)).toBe('30 to 45 min');
   });
 
-  it('uses high rate when budget = High', () => {
-    const trip: TripInput = { ...BASE_TRIP, hotel_rate_id: 'hr-1', hotel_budget: 'High', nights: 1, staff_count: 1 };
-    expect(calcHotelCost(trip, REFS)).toBe(650);
-  });
-
-  it('returns 0 when no hotel rate selected', () => {
-    const trip: TripInput = { ...BASE_TRIP, hotel_rate_id: null, nights: 2 };
-    expect(calcHotelCost(trip, REFS)).toBe(0);
-  });
-
-  it('returns 0 when nights = 0', () => {
-    const trip: TripInput = { ...BASE_TRIP, hotel_rate_id: 'hr-1', nights: 0 };
-    expect(calcHotelCost(trip, REFS)).toBe(0);
+  it('shows single value when lo equals hi', () => {
+    expect(formatMinsRange(10, 1.0, 1.0)).toBe('10 min');
   });
 });
 
-// ─── Per diem cost ────────────────────────────────────────
-
-describe('calcPerDiemCost', () => {
-  it('1 night = 2 half days × staff (Standard)', () => {
-    const trip: TripInput = { ...BASE_TRIP, per_diem_rate_id: 'pd-1', nights: 1, staff_count: 2 };
-    // 2 × $34 × 2 staff = $136
-    expect(calcPerDiemCost(trip, REFS)).toBe(2 * 34 * 2);
+describe('formatDriveLine', () => {
+  it('includes miles and traffic label', () => {
+    const window = getTrafficWindow(17, 4);
+    const line = formatDriveLine(6, 18, window);
+    expect(line).toContain('6 miles');
+    expect(line).toContain('PM rush hour (heavy)');
   });
 
-  it('2 nights = 2 half days + 1 full day × staff', () => {
-    const trip: TripInput = { ...BASE_TRIP, per_diem_rate_id: 'pd-1', nights: 2, staff_count: 1 };
-    // 2×34 + 1×68 = 68 + 68 = 136
-    expect(calcPerDiemCost(trip, REFS)).toBe(2 * 34 + 68);
+  it('omits traffic label for off-peak', () => {
+    const window = getTrafficWindow(11, 2);
+    const line = formatDriveLine(3, 15, window);
+    expect(line).not.toContain('(Off-peak)');
+    expect(line).toContain('3 miles');
   });
 
-  it('3 nights = 2 half + 2 full × staff', () => {
-    const trip: TripInput = { ...BASE_TRIP, per_diem_rate_id: 'pd-1', nights: 3, staff_count: 2 };
-    // (2×34 + 2×68) × 2 = (68 + 136) × 2 = 408
-    expect(calcPerDiemCost(trip, REFS)).toBe((2 * 34 + 2 * 68) * 2);
+  it('uses singular mile for 1 mile', () => {
+    const window = getTrafficWindow(11, 2);
+    const line = formatDriveLine(1, 10, window);
+    expect(line).toContain('1 mile');
+    expect(line).not.toContain('1 miles');
   });
 
-  it('uses NYC rates', () => {
-    const trip: TripInput = { ...BASE_TRIP, per_diem_rate_id: 'pd-2', nights: 1, staff_count: 1 };
-    expect(calcPerDiemCost(trip, REFS)).toBe(2 * 46);
-  });
-
-  it('returns 0 when nights = 0', () => {
-    const trip: TripInput = { ...BASE_TRIP, per_diem_rate_id: 'pd-1', nights: 0 };
-    expect(calcPerDiemCost(trip, REFS)).toBe(0);
-  });
-
-  it('returns 0 when no rate selected', () => {
-    const trip: TripInput = { ...BASE_TRIP, per_diem_rate_id: null, nights: 2 };
-    expect(calcPerDiemCost(trip, REFS)).toBe(0);
+  it('uses "to" not hyphens in range (brand voice)', () => {
+    const window = getTrafficWindow(17, 3);
+    const line = formatDriveLine(6, 18, window);
+    expect(line).not.toContain('–');
+    expect(line).not.toContain('—');
+    expect(line).toContain('to');
   });
 });
 
-// ─── Vehicle cost ─────────────────────────────────────────
-
-describe('calcVehicleCost', () => {
-  it('returns sedan airport rate', () => {
-    const trip: TripInput = { ...BASE_TRIP, vehicle_rate_id: 'vr-1', vehicle_type: 'Sedan', vehicle_service: 'Airport Transfer' };
-    expect(calcVehicleCost(trip, REFS)).toBe(175);
+describe('shouldShowWalking', () => {
+  it('returns true for short walkable distance', () => {
+    expect(shouldShowWalking(0.5, 10)).toBe(true);
   });
 
-  it('returns suv hourly × hours', () => {
-    const trip: TripInput = { ...BASE_TRIP, vehicle_rate_id: 'vr-1', vehicle_type: 'SUV', vehicle_service: 'Hourly', vehicle_hours: 4 };
-    expect(calcVehicleCost(trip, REFS)).toBe(150 * 4); // 600
+  it('returns false when distance too far', () => {
+    expect(shouldShowWalking(1.2, 25)).toBe(false);
   });
 
-  it('uses custom override when > 0', () => {
-    const trip: TripInput = { ...BASE_TRIP, vehicle_rate_id: 'vr-1', vehicle_type: 'Sedan', vehicle_service: 'Airport Transfer', custom_vehicle_cost: 500 };
-    expect(calcVehicleCost(trip, REFS)).toBe(500);
+  it('returns false when walk time too long', () => {
+    expect(shouldShowWalking(0.8, 21)).toBe(false);
   });
 
-  it('returns 0 when vehicle type is None', () => {
-    const trip: TripInput = { ...BASE_TRIP, vehicle_type: 'None', vehicle_rate_id: 'vr-1' };
-    expect(calcVehicleCost(trip, REFS)).toBe(0);
+  it('returns true at exactly 1 mile and 20 min', () => {
+    expect(shouldShowWalking(1.0, 20)).toBe(true);
   });
 
-  it('returns sprinter airport for DC', () => {
-    const trip: TripInput = { ...BASE_TRIP, vehicle_rate_id: 'vr-2', vehicle_type: 'Sprinter', vehicle_service: 'Airport Transfer' };
-    expect(calcVehicleCost(trip, REFS)).toBe(250);
+  it('returns false for 9.2 miles (SPIN Philadelphia bad example)', () => {
+    expect(shouldShowWalking(9.2, 25)).toBe(false);
   });
 });
 
-// ─── Full trip + total ────────────────────────────────────
-
-describe('calculateTrip', () => {
-  it('sums all costs into tripTotal', () => {
-    const trip: TripInput = {
-      ...BASE_TRIP,
-      travel_type: 'Drive', drive_route_id: 'dr-1',         // $205
-      hotel_rate_id: 'hr-2', hotel_budget: 'Low', nights: 1, // $350
-      per_diem_rate_id: 'pd-1',                              // 2×34 = $68
-      vehicle_type: 'Sedan', vehicle_rate_id: 'vr-2',
-      vehicle_service: 'Airport Transfer',                   // $150
-      staff_count: 1,
-    };
-    const result = calculateTrip(trip, REFS);
-    expect(result.travelCost).toBe(205);
-    expect(result.hotelCost).toBe(350);
-    expect(result.perDiemCost).toBe(68);
-    expect(result.vehicleCost).toBe(150);
-    expect(result.tripTotal).toBe(205 + 350 + 68 + 150); // 773
+describe('formatWalkLine', () => {
+  it('formats walk time in minutes', () => {
+    expect(formatWalkLine(12)).toBe('12 min walk');
   });
 });
 
-describe('calculateTotalTravel', () => {
-  it('sums multiple trips', () => {
-    const trip1: TripInput = { ...BASE_TRIP, travel_type: 'Drive', drive_route_id: 'dr-1' };
-    const trip2: TripInput = { ...BASE_TRIP, travel_type: 'Drive', drive_route_id: 'dr-2' };
-    expect(calculateTotalTravel([trip1, trip2], REFS)).toBe(205 + 230);
+describe('isSameProperty', () => {
+  it('returns true when hotel and venue share significant words', () => {
+    expect(
+      isSameProperty('JW Marriott Atlanta Buckhead', 'JW Marriott Atlanta Buckhead Grand Ballroom')
+    ).toBe(true);
   });
 
-  it('returns 0 for empty array', () => {
-    expect(calculateTotalTravel([], REFS)).toBe(0);
+  it('returns false for different properties', () => {
+    expect(isSameProperty('JW Marriott Atlanta Buckhead', 'World of Coca-Cola Atlanta')).toBe(false);
+  });
+
+  it('returns false for empty hotel name', () => {
+    expect(isSameProperty('', 'World of Coca-Cola')).toBe(false);
+  });
+
+  it('returns false for empty venue name', () => {
+    expect(isSameProperty('JW Marriott', '')).toBe(false);
+  });
+});
+
+describe('buildPlanningNotes', () => {
+  it('includes departure time and hotel name', () => {
+    const notes = buildPlanningNotes({
+      startTime: '18:00',
+      maxDriveMins: 45,
+      distanceMiles: 6,
+      dayOfWeek: 4,
+      hotelName: 'JW Marriott Atlanta Buckhead',
+    });
+    expect(notes).toContain('6:00 PM');
+    expect(notes).toContain('JW Marriott Atlanta Buckhead');
+  });
+
+  it('adds Thursday warning', () => {
+    const notes = buildPlanningNotes({
+      startTime: '18:00',
+      maxDriveMins: 45,
+      distanceMiles: 6,
+      dayOfWeek: 4,
+      hotelName: 'Marriott',
+    });
+    expect(notes).toContain('Thursday');
+  });
+
+  it('adds Friday warning', () => {
+    const notes = buildPlanningNotes({
+      startTime: '18:00',
+      maxDriveMins: 45,
+      distanceMiles: 6,
+      dayOfWeek: 5,
+      hotelName: 'Marriott',
+    });
+    expect(notes).toContain('Friday');
+  });
+
+  it('adds motor coach recommendation over 5 miles', () => {
+    const notes = buildPlanningNotes({
+      startTime: '19:00',
+      maxDriveMins: 60,
+      distanceMiles: 8,
+      dayOfWeek: 2,
+      hotelName: 'Hyatt',
+    });
+    expect(notes).toContain('motor coach');
+  });
+
+  it('does not add day warning for Wednesday', () => {
+    const notes = buildPlanningNotes({
+      startTime: '18:00',
+      maxDriveMins: 20,
+      distanceMiles: 3,
+      dayOfWeek: 2,
+      hotelName: 'Marriott',
+    });
+    expect(notes).not.toContain('Thursday');
+    expect(notes).not.toContain('Friday');
   });
 });

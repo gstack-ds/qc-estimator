@@ -173,6 +173,11 @@ export default function EstimateBuilder({
   const tiersList = useMemo(() => toTiers(tiers), [tiers]);
   const venueName = useMemo(() => venues.find((v) => v.id === estimate.venue_id)?.name, [venues, estimate.venue_id]);
   const venueSpaceName = useMemo(() => venueSpaces.find((vs) => vs.id === estimate.venue_space_id)?.name, [venueSpaces, estimate.venue_space_id]);
+  const venueAddress = useMemo(() => {
+    const v = venues.find((vn) => vn.id === estimate.venue_id);
+    if (!v) return undefined;
+    return [v.address, v.city, v.state].filter(Boolean).join(', ') || undefined;
+  }, [venues, estimate.venue_id]);
 
   // Sections state
   const [sections, setSections] = useState<LocalSectionDef[]>(
@@ -1118,6 +1123,7 @@ export default function EstimateBuilder({
             initialData={initialSlideCopyData}
             venueName={venueName}
             venueSpaceName={venueSpaceName}
+            venueAddress={venueAddress}
           />
 
           {/* Travel Expenses */}
