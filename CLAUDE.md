@@ -205,6 +205,15 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-05-27 | Engine uses TaxBucket enum (fb/equipment/venue/staffing) — section display name is irrelevant to pricing | Enables user-defined section names without breaking tax calculations. Section name stored as text for backwards compat + display; taxBucket is the authoritative routing key. Removes DECOR_TAXABLE/DECOR_NONTAXABLE sets from engine. | Keep string matching (breaks on rename); separate tax routing table (unnecessary complexity) |
 | 2026-05-27 | estimate_sections table with lazy ensureDefaultSections on first page load | Per-estimate section rows let the user rename/add/delete without touching pricing logic. Lazy seed (called when sections array is empty) handles pre-migration estimates without requiring a heavy migration script per estimate. LocalLineItem carries both sectionId (UUID FK) and section (display name, kept in sync). | Global sections table shared across estimates (renames would cross-contaminate); store only sectionId without display name (requires join on every render) |
 | 2026-05-27 | Decor builder dropped Florals/Rentals parent card grouping — flat dynamic sections instead | Parent cards required knowing the sub-section names at compile time. With dynamic sections, any grouping would need a user-specified "group" concept — scope creep. Flat list is simpler to reason about. | Keep parent cards with hard-coded section names (breaks if user renames a sub-section) |
+| 2026-05-27 | Slide Copy Module: slide_copy_data JSONB on estimates, auto-saved via server action | Avoids a separate slide_copy table; JSONB is flexible for future fields. Debounced 1.5s useEffect watches all state dependencies and writes via saveSlideCopyData(). Migration 026 adds the column. | Separate table (overkill for a single JSON blob), localStorage (lost on device change) |
+| 2026-05-27 | Brand voice as pure TypeScript in src/lib/brandVoice.ts — no React deps | Bannned words, Oxford comma, number spelling, dash removal, currency format must be testable in isolation. 20 unit tests. Applied to allCopyText to surface warnings before copy. | Inline in component (untestable) |
+| 2026-05-27 | Travel time via Google Maps Distance Matrix API — server action only, key never reaches browser | GOOGLE_MAPS_API_KEY is a server-side secret. getTravelTime() is a server action that calls the Maps API twice (driving + walking), applies traffic multipliers, returns formatted TravelResult. Fails silently in dev if key is absent. | Client-side fetch (exposes API key), stub (throwaway) |
+| 2026-05-27 | Walking shown only when ≤1 mile AND ≤20 min (both conditions required) | A 9.2-mile walk shows up at SPIN Philadelphia otherwise. shouldShowWalking() enforces both gates before setting walkLine. | Show whenever faster than driving (misleading for long distances) |
+| 2026-05-27 | "Copy to Canva" → Option B: button scrolls to Slide Copy and pre-fills menu selections | Option A (copy to clipboard as-is) loses dietary tags. Option B passes ExtractedData through pendingSlideMenuData state in EstimateBuilder, uses slideCopyRef for scroll. pendingMenuData useEffect in SlideCopySection consumes it once and calls onPendingMenuConsumed. | Option A: copy without dietary tags (rejected — spec requirement); Option C: separate page (overkill) |
+| 2026-05-27 | Menu selection enhances extraction pipeline: dietary tags, selection rules, maxSelections per course | Tags carry through to Slide Copy output. extractedMenuToMenuCourses() maps the enhanced ExtractedMenuItem shape to MenuCourse[]. Existing extracted data can be re-extracted by hitting the parse button. | UI-only tags not persisted in extraction (lost on reload) |
+| 2026-05-27 | Venue bio: fetch URL HTML + Claude API; fall back to name-based with "Verify accuracy" note | AbortSignal.timeout(8000) prevents hanging. Sqft/capacity hints extracted from HTML via regex and auto-fill empty fields. Same anthropic client pattern as extractAttachmentData. | Separate API route (unnecessary with server actions); pre-baked descriptions (stale) |
+| 2026-05-27 | Formatted preview: Cormorant Garamond (headers) + Playfair Display (body), both via next/font/google | Bright Darling (Alex's preferred font) is not on Google Fonts. Cormorant substitutes for display headers. Playfair Display added as --font-display / font-display Tailwind key for body text. Preview note alerts Alex to swap in Canva. | System fonts (too plain for a preview mockup); single font (spec calls for two distinct serifs) |
+| 2026-05-27 | SlideCopySection uses minimal SlideCopyLineItem interface instead of importing LocalLineItem | EstimateBuilder imports SlideCopySection; SlideCopySection can't import LocalLineItem from EstimateBuilder — circular import. Structural typing: SlideCopyLineItem has only {taxBucket, taxType, name, qty, isRevenueItem?}; LocalLineItem satisfies it without declaration. | Re-export LocalLineItem from a shared module (creates new shared dep for a shape already defined in EstimateBuilder) |
 
 ## Gotchas Log
 
@@ -278,10 +287,24 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Migration 025 run in production — estimate_sections table + section_id FK on estimate_line_items live
 - [x] Bug #5 fix — GDP commission base corrected to totalClient; clientCommission deducted from QC margin; 199 tests passing
 
+- [x] Slide Copy Module — all 5 phases (migration 026, brand voice, travel, menu selection, venue bio, formatted preview); 225 tests passing
+  - Phase 1: Types (slideCopy.ts), brandVoice.ts (20 tests), travel.ts (30 tests), migration 026, saveSlideCopyData action, SlideCopySection wired into venue EstimateBuilder
+  - Phase 2: getTravelTime server action (Google Maps Distance Matrix API, traffic multipliers, planning notes, DriveTimeBlock UI)
+  - Phase 3: Enhanced extraction pipeline (dietary tags, selection rules, maxSelections), MenuSelectionPanel, "Copy to Canva" Option B (pendingMenuData state + slideCopyRef scroll)
+  - Phase 4: generateVenueBio server action (URL fetch + Claude API, name-based fallback), VenueBioBlock UI (editable textarea, Generate button)
+  - Phase 5: Formatted preview mode (Slide1Preview + Slide2Preview, 16:9 ratio, brand colors, Cormorant Garamond + Playfair Display, toggle button); note alerts Alex about Bright Darling substitute
+
 ### Remaining
+- [ ] **Run migration 026 in production** — `supabase/migrations/026_slide_copy_data.sql` (ALTER TABLE estimates ADD COLUMN slide_copy_data JSONB)
+- [ ] **Provision GOOGLE_MAPS_API_KEY** — set in Vercel env vars with Distance Matrix API enabled; until then drive time returns an error in production
+- [ ] **Tell Alex** — Bright Darling is not on Google Fonts; Cormorant Garamond is used in the preview instead; she should swap to Bright Darling in the actual Canva template
 - [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs (note: EXPECTED_QC_MARGIN values changed significantly with bug #5 fix)
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- Proposal validation against Excel is the next quality check — EXPECTED_* values in proposal-validation.test.ts were updated for bug #5 but not yet verified against the workbook.
+- Run migration 026 in production (slide_copy_data JSONB column).
+- Provision GOOGLE_MAPS_API_KEY in Vercel — Distance Matrix API must be enabled in GCP console.
+- Test the full Slide Copy flow on a real estimate: fill in venue URL, generate bio, calculate drive time, load menu from PDF, toggle preview.
+- Tell Alex about the Bright Darling substitute.
+- Proposal validation against Excel is the next quality check.
 - Scanner is live and working. Run `npm run dedup` if duplicate leads accumulate.
