@@ -3,7 +3,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { EstimateSummary } from '@/types';
 import type { DbEstimate, DbProgram, DbEvent } from '@/lib/supabase/queries';
 import type { SlideCopyData, InclusionToggles, TravelResult, MenuCourse } from '@/types/slideCopy';
-import { saveSlideCopyData, getTravelTime, getAttachmentsForEstimate, extractedMenuToMenuCourses, generateVenueBio } from '@/app/(programs)/programs/[id]/estimates/actions';
+import { saveSlideCopyData, getTravelTime, getAttachmentsForEstimate, generateVenueBio } from '@/app/(programs)/programs/[id]/estimates/actions';
+import { extractedMenuToMenuCourses } from '@/lib/slideCopy/menuMapping';
 import MenuSelectionPanel from './MenuSelectionPanel';
 import { spellNumber, oxfordComma, formatCurrency, checkBannedWords } from '@/lib/slideCopy/brandVoice';
 
