@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { EstimateSummary } from '@/types';
+import type { EstimateSummary, Location } from '@/types';
 import {
   buildDetailedCopyText,
   buildLineItemsCopyText,
@@ -26,6 +26,7 @@ interface Props {
   lineItems: LineItemForExport[];
   markups: MarkupForExport[];
   taxExempt?: boolean;
+  location?: Location | null;
 }
 
 // ─── Component ────────────────────────────────────────────
@@ -43,6 +44,7 @@ export default function ExportButtons({
   lineItems,
   markups,
   taxExempt = false,
+  location,
 }: Props) {
   const [copyLabel, setCopyLabel] = useState<'Copy Numbers' | 'Copied!'>('Copy Numbers');
   const [copyItemsLabel, setCopyItemsLabel] = useState<'Copy Line Items' | 'Copied!'>('Copy Line Items');
@@ -85,6 +87,7 @@ export default function ExportButtons({
         proposalDate,
         taxExempt,
         logoSrc,
+        location,
       });
       const blob = await pdf(element).toBlob();
       const url = URL.createObjectURL(blob);

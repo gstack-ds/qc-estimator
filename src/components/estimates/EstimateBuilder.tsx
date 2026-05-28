@@ -807,6 +807,7 @@ export default function EstimateBuilder({
             lineItems={lineItems}
             markups={markups}
             taxExempt={est.taxExempt}
+            location={programConfig.location}
           />
           <button
             onClick={() => setShowMath(v => !v)}

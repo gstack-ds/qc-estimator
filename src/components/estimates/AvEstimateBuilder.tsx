@@ -543,6 +543,7 @@ export default function AvEstimateBuilder({
             lineItems={lineItems}
             markups={markups}
             taxExempt={taxExempt}
+            location={programConfig.location}
           />
           <button
             onClick={() => setShowMath(v => !v)}

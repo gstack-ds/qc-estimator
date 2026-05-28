@@ -214,6 +214,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-05-27 | Venue bio: fetch URL HTML + Claude API; fall back to name-based with "Verify accuracy" note | AbortSignal.timeout(8000) prevents hanging. Sqft/capacity hints extracted from HTML via regex and auto-fill empty fields. Same anthropic client pattern as extractAttachmentData. | Separate API route (unnecessary with server actions); pre-baked descriptions (stale) |
 | 2026-05-27 | Formatted preview: Cormorant Garamond (headers) + Playfair Display (body), both via next/font/google | Bright Darling (Alex's preferred font) is not on Google Fonts. Cormorant substitutes for display headers. Playfair Display added as --font-display / font-display Tailwind key for body text. Preview note alerts Alex to swap in Canva. | System fonts (too plain for a preview mockup); single font (spec calls for two distinct serifs) |
 | 2026-05-27 | SlideCopySection uses minimal SlideCopyLineItem interface instead of importing LocalLineItem | EstimateBuilder imports SlideCopySection; SlideCopySection can't import LocalLineItem from EstimateBuilder — circular import. Structural typing: SlideCopyLineItem has only {taxBucket, taxType, name, qty, isRevenueItem?}; LocalLineItem satisfies it without declaration. | Re-export LocalLineItem from a shared module (creates new shared dep for a shape already defined in EstimateBuilder) |
+| 2026-05-28 | Drag-and-drop reordering: render prop pattern for SortableSectionItem | dnd-kit listeners/attributes must be on the drag handle element inside LineItemSection, but the sortable wrapper is the parent. Render prop `children: (dragHandle: ReactNode) => ReactNode` passes the handle in without coupling LineItemSection to dnd-kit. sort_order exists on both estimate_sections and estimate_line_items (migration 025) — no new migration needed. Items filtered with `.sort((a, b) => a.sortOrder - b.sortOrder)` after reorder to guarantee display order regardless of array position. | Global context for drag handle (prop drilling); dnd-kit imports in LineItemSection (couples component to dnd-kit) |
+| 2026-05-28 | extractedMenuToMenuCourses moved to src/lib/slideCopy/menuMapping.ts — not in actions.ts | Next.js requires all exports in a 'use server' file to be async functions. extractedMenuToMenuCourses is a synchronous utility — can't live in actions.ts. Moved to a plain TS module; SlideCopySection imports from there instead. | Keep in actions.ts (Vercel build failure); make it async (wrong semantics for a pure transform) |
 
 ## Gotchas Log
 
@@ -238,6 +240,7 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-05-05 | Client component importing runtime values from queries.ts breaks the build | queries.ts imports server.ts (next/headers) — any runtime import in a client component pulls that chain in. Extract constants with no server deps into a separate file (src/lib/leads/constants.ts) and import from there instead. |
 | 2026-05-05 | Migration 017 + 020 created parallel column sets for the same data | Migration 017 created source_advisor/source_coordinator/third_party_company/lead_source. Migration 020 added gdp_advisor/gdp_coordinator/third_party/lead_source_type as new columns. Both exist in DB. Scanner was writing to old, UI reading from new → data invisible in dropdowns. Fix: writer.ts explicitly maps new cols. Historical rows may need a one-time UPDATE backfill. |
 | 2026-05-13 | Proposal validation EXPECTED_* values: manually computed via algebra, not by running engine | Engine subtotalClient INCLUDES vendor-side taxes (foodTaxOur etc.) per engine code. vendorCostsBase = subtotalOur - vendorTaxesTotal. ccProcessingAmount uses tax-inclusive subtotalClient. Algebraic verify: qcRevenue = markup + markupRevenue*clientComm - gdpComm - thirdParty. Get this wrong and test values look right but aren't. |
+| 2026-05-28 | Synchronous export in 'use server' file causes Vercel build failure | Next.js enforces that all exports in a 'use server' module are async functions (server actions). A plain `export function` (non-async) triggers a build error. Any pure utility accidentally placed in actions.ts must be moved to a separate non-server file. |
 
 ## Current TODOs
 
@@ -293,16 +296,17 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
   - Phase 3: Enhanced extraction pipeline (dietary tags, selection rules, maxSelections), MenuSelectionPanel, "Copy to Canva" Option B (pendingMenuData state + slideCopyRef scroll)
   - Phase 4: generateVenueBio server action (URL fetch + Claude API, name-based fallback), VenueBioBlock UI (editable textarea, Generate button)
   - Phase 5: Formatted preview mode (Slide1Preview + Slide2Preview, 16:9 ratio, brand colors, Cormorant Garamond + Playfair Display, toggle button); note alerts Alex about Bright Darling substitute
+- [x] Migration 026 run in production — slide_copy_data JSONB column live
+- [x] Drag-and-drop reordering — dnd-kit, SortableSectionItem render prop, SortableItemRow in LineItemSection; reorderSections + reorderLineItems server actions; all 3 builders; persists to DB via sort_order column (migration 025)
+- [x] Vercel build fix — extractedMenuToMenuCourses moved from actions.ts to src/lib/slideCopy/menuMapping.ts (synchronous exports not allowed in 'use server' files)
 
 ### Remaining
-- [ ] **Run migration 026 in production** — `supabase/migrations/026_slide_copy_data.sql` (ALTER TABLE estimates ADD COLUMN slide_copy_data JSONB)
 - [ ] **Provision GOOGLE_MAPS_API_KEY** — set in Vercel env vars with Distance Matrix API enabled; until then drive time returns an error in production
 - [ ] **Tell Alex** — Bright Darling is not on Google Fonts; Cormorant Garamond is used in the preview instead; she should swap to Bright Darling in the actual Canva template
 - [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs (note: EXPECTED_QC_MARGIN values changed significantly with bug #5 fix)
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- Run migration 026 in production (slide_copy_data JSONB column).
 - Provision GOOGLE_MAPS_API_KEY in Vercel — Distance Matrix API must be enabled in GCP console.
 - Test the full Slide Copy flow on a real estimate: fill in venue URL, generate bio, calculate drive time, load menu from PDF, toggle preview.
 - Tell Alex about the Bright Darling substitute.

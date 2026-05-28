@@ -1,9 +1,19 @@
 // Client-facing proposal PDF document — rendered by @react-pdf/renderer
 // Import this file ONLY via dynamic import() inside client event handlers to avoid SSR issues.
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
-import type { EstimateSummary } from '@/types';
+import type { EstimateSummary, Location } from '@/types';
 import type { LineItemForExport } from '@/lib/utils/export';
 import { itemClientCost } from '@/lib/utils/export';
+
+function shortLocationName(name: string): string {
+  return name.replace(/\s*\([^)]*\)/, '').replace(/\s+(NC|SC|GA|VA|PA|MD|NY|NJ|DC)$/, '').trim();
+}
+
+function taxRateForItem(taxType: string, location: Location): number {
+  if (taxType === 'food') return location.foodTaxRate;
+  if (taxType === 'alcohol') return location.alcoholTaxRate;
+  return location.generalTaxRate;
+}
 
 const BRAND_CHARCOAL = '#464543';
 const BRAND_BROWN = '#846E60';
@@ -87,6 +97,7 @@ export interface ProposalDocumentProps {
   proposalDate: string;
   taxExempt?: boolean;
   logoSrc?: string;
+  location?: Location | null;
 }
 
 export default function ProposalDocument({
@@ -101,6 +112,7 @@ export default function ProposalDocument({
   proposalDate,
   taxExempt = false,
   logoSrc,
+  location,
 }: ProposalDocumentProps) {
   const proposalNumber = estimateId.slice(0, 8).toUpperCase();
 
@@ -167,14 +179,23 @@ export default function ProposalDocument({
                 const unitPrice = item.categoryId === 'custom' && item.customClientUnitPrice !== undefined
                   ? item.customClientUnitPrice
                   : item.unitPrice * (1 + item.categoryMarkupPct);
-                const taxRate = item.taxType === 'none' ? 0 : 0.0725; // display only; exact rates from engine
-                const taxColLabel = taxExempt ? 'Exempt' : (item.taxType === 'none' ? '—' : `${(taxRate * 100).toFixed(2)}%`);
+                const taxNone = item.taxType === 'none';
+                const taxRatePct = (!taxNone && location)
+                  ? parseFloat((taxRateForItem(item.taxType, location) * 100).toFixed(3))
+                  : null;
+                const taxRateLabel = taxExempt ? 'Exempt' : taxNone ? '—' : taxRatePct != null ? `${taxRatePct}%` : '—';
+                const taxPlaceLabel = (!taxExempt && !taxNone && location)
+                  ? shortLocationName(location.name)
+                  : null;
                 return (
                   <View key={idx} style={[styles.row, idx % 2 === 1 ? styles.rowAlt : {}]}>
                     <Text style={[styles.cell, styles.colItem]}>{item.name}</Text>
                     <Text style={[styles.cell, styles.colQty]}>{item.qty}</Text>
                     <Text style={[styles.cell, styles.colPrice]}>{fmt(unitPrice)}</Text>
-                    <Text style={[styles.cellDim, styles.colTax]}>{taxColLabel}</Text>
+                    <View style={styles.colTax}>
+                      <Text style={styles.cellDim}>{taxRateLabel}</Text>
+                      {taxPlaceLabel ? <Text style={{ fontSize: 7.5, color: BRAND_SILVER, textAlign: 'right' }}>{taxPlaceLabel}</Text> : null}
+                    </View>
                     <Text style={[styles.cell, styles.colTotal]}>{fmt(clientTotal)}</Text>
                   </View>
                 );
