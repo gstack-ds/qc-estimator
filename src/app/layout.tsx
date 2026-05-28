@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Raleway, Cormorant_Garamond } from 'next/font/google';
+import { Raleway, Cormorant_Garamond, Playfair_Display } from 'next/font/google';
 import './globals.css';
 
 const raleway = Raleway({
@@ -12,6 +12,13 @@ const cormorant = Cormorant_Garamond({
   subsets: ['latin'],
   weight: ['300', '400', '500', '600'],
   variable: '--font-serif',
+  display: 'swap',
+});
+
+const playfair = Playfair_Display({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-display',
   display: 'swap',
 });
 
@@ -31,7 +38,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${raleway.variable} ${cormorant.variable} font-sans`}>
+      <body className={`${raleway.variable} ${cormorant.variable} ${playfair.variable} font-sans`}>
         {children}
       </body>
     </html>

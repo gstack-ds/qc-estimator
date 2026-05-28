@@ -19,8 +19,9 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans:  ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        serif: ['var(--font-serif)', 'ui-serif', 'Georgia', 'serif'],
+        sans:    ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        serif:   ['var(--font-serif)', 'ui-serif', 'Georgia', 'serif'],
+        display: ['var(--font-display)', 'Georgia', 'serif'],
       },
     },
   },

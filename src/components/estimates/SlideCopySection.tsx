@@ -112,6 +112,7 @@ export default function SlideCopySection({
   const [bioError, setBioError] = useState<string | null>(null);
   const [menuCourses, setMenuCourses] = useState<MenuCourse[]>(initialData?.menuSelections ?? []);
   const [menuLoading, setMenuLoading] = useState(false);
+  const [previewMode, setPreviewMode] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didMount = useRef(false);
 
@@ -357,9 +358,42 @@ export default function SlideCopySection({
           </div>
         </div>
 
-        {/* Raw copy block */}
+        {/* Copy blocks / preview toggle */}
         <div>
-          <p className="text-[11px] font-semibold text-brand-brown uppercase tracking-wider mb-2">Raw Copy Blocks</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[11px] font-semibold text-brand-brown uppercase tracking-wider">
+              {previewMode ? 'Formatted Preview' : 'Raw Copy Blocks'}
+            </p>
+            <button
+              type="button"
+              onClick={() => setPreviewMode((p) => !p)}
+              className="text-xs px-2.5 py-1 rounded border border-brand-copper/40 text-brand-brown hover:bg-brand-copper/10 transition-colors"
+            >
+              {previewMode ? 'Show Raw Blocks' : 'Show Preview'}
+            </button>
+          </div>
+
+          {previewMode ? (
+            <SlidePreview
+              venueName={venueName}
+              venueSpaceName={venueSpaceName}
+              programName={program.name}
+              venueBio={venueBio}
+              sqft={sqft}
+              maxCapacity={maxCapacity}
+              summaryRows={summaryRows}
+              totalClient={summary.totalClient}
+              pricePerPerson={summary.pricePerPerson}
+              eventName={eventName}
+              eventDate={eventDate}
+              startTime={startTime}
+              activeInclusions={activeInclusions}
+              driveLine={driveLine}
+              walkLine={travelResult?.walkLine ?? null}
+              menuCourses={menuCourses}
+              teamSummary={teamSummary}
+            />
+          ) : (
           <div className="space-y-3">
             {/* Slide 1 Header */}
             <CopyBlock marker="SLIDE 1 — Venue Header" text={slide1Header} />
@@ -424,6 +458,7 @@ export default function SlideCopySection({
               </div>
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>
@@ -473,6 +508,217 @@ function PhasePlaceholder({ label, phase, detail }: { label: string; phase: stri
         <span className="text-[10px] text-brand-silver/60 bg-brand-cream px-1.5 py-0.5 rounded">Phase {phase}</span>
       </div>
       <p className="px-3 py-2 text-xs text-brand-charcoal/30 italic">{detail}</p>
+    </div>
+  );
+}
+
+// ─── Slide Preview components ────────────────────────────────
+
+interface SlidePreviewProps {
+  venueName?: string;
+  venueSpaceName?: string;
+  programName: string;
+  venueBio: string;
+  sqft: string;
+  maxCapacity: string;
+  summaryRows: [string, number][];
+  totalClient: number;
+  pricePerPerson: number;
+  eventName: string;
+  eventDate: string | null;
+  startTime: string | null;
+  activeInclusions: string[];
+  driveLine: string;
+  walkLine: string | null;
+  menuCourses: MenuCourse[];
+  teamSummary: string;
+}
+
+function SlidePreview(props: SlidePreviewProps) {
+  return (
+    <div className="space-y-5">
+      <p className="text-[10px] text-brand-silver/70 uppercase tracking-wider text-center">
+        SPIN Philadelphia Template — Preview
+      </p>
+      <div>
+        <p className="text-[10px] text-brand-charcoal/40 uppercase tracking-wider mb-1.5">Slide 1 — Hero</p>
+        <Slide1Preview {...props} />
+      </div>
+      <div>
+        <p className="text-[10px] text-brand-charcoal/40 uppercase tracking-wider mb-1.5">Slide 2 — Menu / Details</p>
+        <Slide2Preview {...props} />
+      </div>
+      <p className="text-[10px] text-brand-silver/50 text-center">
+        ✦ Bright Darling font not available — using Cormorant Garamond. Tell Alex to swap in Canva.
+      </p>
+    </div>
+  );
+}
+
+function Slide1Preview({ venueName, venueSpaceName, programName, venueBio, sqft, maxCapacity, summaryRows, totalClient, pricePerPerson }: SlidePreviewProps) {
+  return (
+    <div
+      className="w-full rounded-lg overflow-hidden border border-brand-copper/20 shadow-sm flex"
+      style={{ aspectRatio: '16 / 9' }}
+    >
+      {/* Left panel — charcoal */}
+      <div className="w-[42%] bg-brand-charcoal flex flex-col p-[4%] text-white min-h-0 overflow-hidden">
+        <div className="flex-shrink-0">
+          {venueName && (
+            <h2 className="font-serif text-[clamp(1rem,2.5vw,1.75rem)] font-light leading-tight text-white mb-1">
+              {venueName}
+            </h2>
+          )}
+          {venueSpaceName && (
+            <p className="font-serif text-[clamp(0.6rem,1.2vw,0.85rem)] italic text-brand-copper/80 mb-0.5">
+              {venueSpaceName}
+            </p>
+          )}
+          <p className="text-[clamp(0.5rem,1vw,0.7rem)] text-white/40 uppercase tracking-wider">{programName}</p>
+        </div>
+
+        {venueBio && (
+          <p className="font-display text-[clamp(0.5rem,1vw,0.65rem)] text-white/75 leading-relaxed mt-[3%] flex-1 overflow-hidden">
+            {venueBio}
+          </p>
+        )}
+
+        <div className="flex-shrink-0 mt-[3%] border-t border-white/10 pt-[2%] space-y-0.5">
+          {sqft && (
+            <p className="text-[clamp(0.45rem,0.85vw,0.6rem)] text-white/50">
+              {Number(sqft).toLocaleString()} sq ft
+            </p>
+          )}
+          {maxCapacity && (
+            <p className="text-[clamp(0.45rem,0.85vw,0.6rem)] text-white/50">{maxCapacity}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Right panel — cream / estimate table */}
+      <div className="flex-1 bg-brand-offwhite flex flex-col justify-center px-[4%] py-[3%] min-h-0 overflow-hidden">
+        <div className="space-y-[1.5%]">
+          {summaryRows.map(([label, val]) => (
+            <div key={label} className="flex justify-between items-baseline">
+              <span className="text-[clamp(0.45rem,0.9vw,0.65rem)] text-brand-charcoal/70">{label}</span>
+              <span className="font-mono text-[clamp(0.45rem,0.9vw,0.65rem)] text-brand-charcoal">{formatCurrency(val)}</span>
+            </div>
+          ))}
+          <div className="border-t border-brand-copper/30 pt-[1.5%] mt-[1.5%] space-y-[1%]">
+            <div className="flex justify-between items-baseline">
+              <span className="text-[clamp(0.5rem,1vw,0.7rem)] font-semibold text-brand-charcoal uppercase tracking-wide">
+                Total Estimate
+              </span>
+              <span className="font-mono text-[clamp(0.5rem,1vw,0.7rem)] font-semibold text-brand-charcoal">
+                {formatCurrency(totalClient)}
+              </span>
+            </div>
+            <div className="flex justify-between items-baseline">
+              <span className="text-[clamp(0.45rem,0.9vw,0.6rem)] text-brand-brown uppercase tracking-wide">
+                Price Per Person
+              </span>
+              <span className="font-mono text-[clamp(0.45rem,0.9vw,0.6rem)] text-brand-brown font-medium">
+                {formatCurrency(pricePerPerson)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Slide2Preview({ eventName, eventDate, startTime, activeInclusions, driveLine, walkLine, menuCourses, teamSummary }: SlidePreviewProps) {
+  return (
+    <div
+      className="w-full rounded-lg overflow-hidden border border-brand-copper/20 shadow-sm flex flex-col"
+      style={{ aspectRatio: '16 / 9' }}
+    >
+      {/* Header strip */}
+      <div className="bg-brand-charcoal px-[4%] py-[2%] flex items-center justify-between flex-shrink-0">
+        <h2 className="font-serif text-[clamp(0.7rem,1.8vw,1.2rem)] font-light text-white">
+          {eventName || 'Event Name'}
+        </h2>
+        <p className="text-[clamp(0.4rem,0.9vw,0.6rem)] text-white/50">
+          {[formatDate(eventDate), formatTime(startTime)].filter(Boolean).join('  |  ')}
+        </p>
+      </div>
+
+      {/* Body */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Left — drive time + menu */}
+        <div className="flex-1 bg-brand-offwhite px-[3%] py-[2.5%] overflow-hidden space-y-[2.5%]">
+          {driveLine && (
+            <div>
+              <p className="text-[clamp(0.4rem,0.75vw,0.5rem)] font-semibold text-brand-copper uppercase tracking-widest mb-0.5">
+                Drive Time
+              </p>
+              <p className="text-[clamp(0.45rem,0.85vw,0.6rem)] text-brand-charcoal">{driveLine}</p>
+              {walkLine && (
+                <p className="text-[clamp(0.4rem,0.75vw,0.55rem)] text-brand-charcoal/55">{walkLine}</p>
+              )}
+            </div>
+          )}
+
+          {menuCourses.length > 0 && (
+            <div>
+              <p className="text-[clamp(0.4rem,0.75vw,0.5rem)] font-semibold text-brand-copper uppercase tracking-widest mb-0.5">
+                Menu Selections
+              </p>
+              {menuCourses.map((c, i) => {
+                const selected = c.options.filter((o) => o.selected);
+                return (
+                  <div key={i} className="mb-[1%]">
+                    <p className="text-[clamp(0.4rem,0.75vw,0.55rem)] font-medium text-brand-charcoal">{c.name}</p>
+                    {selected.length > 0 ? (
+                      selected.map((o, j) => (
+                        <p key={j} className="text-[clamp(0.38rem,0.7vw,0.5rem)] text-brand-charcoal/65">
+                          • {o.name}{o.tags?.length ? ` [${o.tags.join(', ')}]` : ''}
+                        </p>
+                      ))
+                    ) : (
+                      <p className="text-[clamp(0.38rem,0.7vw,0.5rem)] text-brand-charcoal/35 italic">no selection</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {menuCourses.length === 0 && !driveLine && (
+            <p className="text-[clamp(0.4rem,0.75vw,0.55rem)] text-brand-charcoal/30 italic">
+              Add drive time and menu selections to populate this slide.
+            </p>
+          )}
+        </div>
+
+        {/* Right — inclusions + team */}
+        <div className="w-[38%] bg-brand-cream/50 border-l border-brand-copper/15 px-[3%] py-[2.5%] overflow-hidden space-y-[2.5%]">
+          {activeInclusions.length > 0 && (
+            <div>
+              <p className="text-[clamp(0.4rem,0.75vw,0.5rem)] font-semibold text-brand-copper uppercase tracking-widest mb-0.5">
+                What&apos;s Included
+              </p>
+              {activeInclusions.map((inc, i) => (
+                <p key={i} className="text-[clamp(0.4rem,0.75vw,0.55rem)] text-brand-charcoal/75">
+                  · {inc}
+                </p>
+              ))}
+            </div>
+          )}
+
+          {teamSummary && (
+            <div>
+              <p className="text-[clamp(0.4rem,0.75vw,0.5rem)] font-semibold text-brand-copper uppercase tracking-widest mb-0.5">
+                Service Team
+              </p>
+              <p className="text-[clamp(0.38rem,0.7vw,0.5rem)] text-brand-charcoal/65 leading-relaxed">
+                {teamSummary}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
