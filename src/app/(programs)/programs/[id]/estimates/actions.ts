@@ -1054,3 +1054,65 @@ export async function getTravelTime(
     },
   };
 }
+
+// ─── Venue Description Generator ─────────────────────────
+
+const VENUE_BIO_SYSTEM = `You write venue descriptions for QC Event Design, a corporate event planning company.
+Style: Warm, grounded, confident. Clear and creative without being over-polished.
+Rules:
+- 3 to 5 sentences only
+- No em dashes or en dashes — use commas or periods
+- Oxford comma always
+- Avoid: decor, set up, tear down, stuff, things, party
+- Avoid unless they genuinely fit: curated, elevated, immersive, unforgettable, one-of-a-kind
+- Lead with what makes the venue distinctive, not generic praise
+- Do NOT write a header or title — output the paragraph only`;
+
+export async function generateVenueBio(opts: {
+  venueName: string;
+  venueUrl?: string;
+  city?: string;
+  eventType?: string;
+}): Promise<{ error: string | null; bio: string | null; sqftHint?: string; capacityHint?: string }> {
+  let sourceContent = '';
+  let sqftHint: string | undefined;
+  let capacityHint: string | undefined;
+
+  if (opts.venueUrl) {
+    try {
+      const res = await fetch(opts.venueUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) });
+      if (res.ok) {
+        const html = await res.text();
+        // Strip tags, collapse whitespace, take first 4000 chars
+        const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 4000);
+        sourceContent = `Venue website content:\n${text}`;
+        // Extract sqft/capacity hints from page text
+        const sqftMatch = text.match(/(\d[\d,]+)\s*(?:sq\.?\s*ft\.?|square feet)/i);
+        if (sqftMatch) sqftHint = sqftMatch[1].replace(',', '');
+        const capMatch = text.match(/(?:capacity|seats?|holds?)\s*(?:up to\s*)?(\d[\d,]+)/i);
+        if (capMatch) capacityHint = capMatch[1].replace(',', '');
+      }
+    } catch {
+      // Fetch failed — fall through to name-based generation
+    }
+  }
+
+  const userPrompt = sourceContent
+    ? `Write a 3 to 5 sentence venue description for ${opts.venueName}${opts.city ? ` in ${opts.city}` : ''} for a ${opts.eventType ?? 'corporate event'}.\n\n${sourceContent}`
+    : `Write a 3 to 5 sentence venue description for ${opts.venueName}${opts.city ? ` in ${opts.city}` : ''} for a ${opts.eventType ?? 'corporate event'}. Base it on general knowledge of this venue. End with a note: "Verify accuracy — no venue website was provided."`;
+
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 400,
+      system: VENUE_BIO_SYSTEM,
+      messages: [{ role: 'user', content: userPrompt }],
+    });
+    const bio = (response.content.find((b) => b.type === 'text') as { type: 'text'; text: string } | undefined)?.text?.trim() ?? null;
+    return { error: null, bio, sqftHint, capacityHint };
+  } catch (e) {
+    return { error: String(e), bio: null };
+  }
+}

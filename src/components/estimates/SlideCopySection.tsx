@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { EstimateSummary } from '@/types';
 import type { DbEstimate, DbProgram, DbEvent } from '@/lib/supabase/queries';
 import type { SlideCopyData, InclusionToggles, TravelResult, MenuCourse } from '@/types/slideCopy';
-import { saveSlideCopyData, getTravelTime, getAttachmentsForEstimate, extractedMenuToMenuCourses } from '@/app/(programs)/programs/[id]/estimates/actions';
+import { saveSlideCopyData, getTravelTime, getAttachmentsForEstimate, extractedMenuToMenuCourses, generateVenueBio } from '@/app/(programs)/programs/[id]/estimates/actions';
 import MenuSelectionPanel from './MenuSelectionPanel';
 import { spellNumber, oxfordComma, formatCurrency, checkBannedWords } from '@/lib/slideCopy/brandVoice';
 
@@ -107,6 +107,9 @@ export default function SlideCopySection({
   const [travelResult, setTravelResult] = useState<TravelResult | null>(initialData?.travelResult ?? null);
   const [travelLoading, setTravelLoading] = useState(false);
   const [travelError, setTravelError] = useState<string | null>(null);
+  const [venueBio, setVenueBio] = useState(initialData?.venueBio ?? '');
+  const [bioLoading, setBioLoading] = useState(false);
+  const [bioError, setBioError] = useState<string | null>(null);
   const [menuCourses, setMenuCourses] = useState<MenuCourse[]>(initialData?.menuSelections ?? []);
   const [menuLoading, setMenuLoading] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -143,7 +146,7 @@ export default function SlideCopySection({
         venueUrl: venueUrl || undefined,
         sqft: sqft ? Number(sqft) : undefined,
         maxCapacity: maxCapacity || undefined,
-        venueBio: initialData?.venueBio,
+        venueBio: venueBio || undefined,
         inclusions,
         menuSelections: menuCourses.length > 0 ? menuCourses : undefined,
         travelResult: travelResult ?? undefined,
@@ -151,7 +154,7 @@ export default function SlideCopySection({
       saveSlideCopyData(estimate.id, data);
     }, 1500);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [venueUrl, sqft, maxCapacity, inclusions, travelResult, menuCourses]);
+  }, [venueUrl, sqft, maxCapacity, inclusions, travelResult, menuCourses, venueBio]);
 
   const handleCalculateTravel = useCallback(async () => {
     const hotel = program.client_hotel;
@@ -173,6 +176,23 @@ export default function SlideCopySection({
   const toggleInclusion = useCallback((key: keyof Omit<InclusionToggles, 'customInclusion'>) => {
     setInclusions((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
+
+  const handleGenerateBio = useCallback(async () => {
+    setBioLoading(true);
+    setBioError(null);
+    const city = venueAddress?.split(',')[1]?.trim();
+    const { error, bio, sqftHint, capacityHint } = await generateVenueBio({
+      venueName: venueName ?? 'the venue',
+      venueUrl: venueUrl || undefined,
+      city,
+      eventType: event?.event_type ?? undefined,
+    });
+    setBioLoading(false);
+    if (error) { setBioError(error); return; }
+    if (bio) setVenueBio(bio);
+    if (sqftHint && !sqft) setSqft(sqftHint);
+    if (capacityHint && !maxCapacity) setMaxCapacity(capacityHint + ' seated');
+  }, [venueName, venueUrl, venueAddress, sqft, maxCapacity, event?.event_type]);
 
   // ─── Build text blocks ──────────────────────────────────
 
@@ -236,6 +256,7 @@ export default function SlideCopySection({
 
   const allSections = [
     { marker: '--- SLIDE 1 HEADER ---', text: slide1Header },
+    { marker: '--- SLIDE 1 DESCRIPTION ---', text: venueBio },
     { marker: '--- SLIDE 1 SUMMARY ---', text: slide1Summary },
     { marker: '--- SLIDE 2 HEADER ---', text: slide2Header },
     { marker: '--- SLIDE 2 INCLUSIONS ---', text: slide2Inclusions },
@@ -355,8 +376,15 @@ export default function SlideCopySection({
             {/* Slide 2 Service Team */}
             <CopyBlock marker="SLIDE 2 — Service Team" text={teamSummary || '(no staffing line items)'} />
 
-            {/* Phase 4 placeholder */}
-            <PhasePlaceholder label="SLIDE 2 — Venue Description" phase="4" detail="Auto-generate from venue URL or Claude API" />
+            {/* Slide 1 Description / Venue Bio */}
+            <VenueBioBlock
+              bio={venueBio}
+              loading={bioLoading}
+              error={bioError}
+              hasUrl={!!venueUrl}
+              onGenerate={handleGenerateBio}
+              onChange={setVenueBio}
+            />
 
             {/* Drive Time */}
             <DriveTimeBlock
@@ -445,6 +473,51 @@ function PhasePlaceholder({ label, phase, detail }: { label: string; phase: stri
         <span className="text-[10px] text-brand-silver/60 bg-brand-cream px-1.5 py-0.5 rounded">Phase {phase}</span>
       </div>
       <p className="px-3 py-2 text-xs text-brand-charcoal/30 italic">{detail}</p>
+    </div>
+  );
+}
+
+interface VenueBioBlockProps {
+  bio: string;
+  loading: boolean;
+  error: string | null;
+  hasUrl: boolean;
+  onGenerate: () => void;
+  onChange: (v: string) => void;
+}
+
+function VenueBioBlock({ bio, loading, error, hasUrl, onGenerate, onChange }: VenueBioBlockProps) {
+  return (
+    <div className="border border-brand-copper/20 rounded bg-white">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-brand-copper/10 bg-brand-offwhite rounded-t">
+        <span className="text-[11px] font-medium text-brand-charcoal/70">SLIDE 1 — Venue Description</span>
+        <div className="flex items-center gap-2">
+          {bio && <CopyButton text={bio} label="Copy Section" />}
+          <button
+            type="button"
+            onClick={onGenerate}
+            disabled={loading}
+            className="text-xs px-2 py-1 rounded border border-brand-copper/40 text-brand-brown hover:bg-brand-copper/10 transition-colors disabled:opacity-40"
+          >
+            {loading ? 'Generating…' : bio ? 'Regenerate' : hasUrl ? 'Generate from URL' : 'Generate from Name'}
+          </button>
+        </div>
+      </div>
+      <div className="px-3 py-2 space-y-1.5">
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        <textarea
+          value={bio}
+          onChange={(e) => onChange(e.target.value)}
+          rows={4}
+          placeholder="Generate a venue description or type one manually…"
+          className="w-full text-xs border border-brand-copper/20 rounded px-2 py-1.5 bg-brand-offwhite/40 focus:outline-none focus:border-brand-copper resize-y"
+        />
+        {!hasUrl && !bio && (
+          <p className="text-[10px] text-brand-silver/60">
+            No venue URL — will generate from venue name. Add a URL above for a richer description.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
