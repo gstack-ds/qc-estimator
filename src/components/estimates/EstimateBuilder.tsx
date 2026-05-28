@@ -4,7 +4,8 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { TaxType, TaxBucket } from '@/types';
-import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation, DbVenue, DbVenueSpace, DbEstimateSection } from '@/lib/supabase/queries';
+import type { DbProgram, DbEstimate, DbEvent, DbLineItem, DbMarkup, DbTier, DbLocation, DbVenue, DbVenueSpace, DbEstimateSection } from '@/lib/supabase/queries';
+import type { SlideCopyData } from '@/types/slideCopy';
 import {
   calculateVenueEstimate,
   calculateMarginAnalysis,
@@ -18,6 +19,7 @@ import type { LocalSectionDef } from './LineItemSection';
 import SummaryPanel from './SummaryPanel';
 import MarginPanel from './MarginPanel';
 import TravelPanel from './TravelPanel';
+import SlideCopySection from './SlideCopySection';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection } from '@/app/(programs)/programs/[id]/estimates/actions';
@@ -154,6 +156,8 @@ interface Props {
   travelRefs: TravelRefData;
   initialTrips: DbTrip[];
   eventName?: string | null;
+  event?: DbEvent | null;
+  initialSlideCopyData?: SlideCopyData | null;
   venues?: DbVenue[];
   venueSpaces?: DbVenueSpace[];
 }
@@ -162,11 +166,13 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 export default function EstimateBuilder({
   program, location, allEstimates, estimate, dbLineItems, dbSections, markups, tiers, travelRefs, initialTrips, eventName,
-  venues = [], venueSpaces = [],
+  event = null, initialSlideCopyData = null, venues = [], venueSpaces = [],
 }: Props) {
   const router = useRouter();
   const programConfig = useMemo(() => toProgramConfig(program, location), [program, location]);
   const tiersList = useMemo(() => toTiers(tiers), [tiers]);
+  const venueName = useMemo(() => venues.find((v) => v.id === estimate.venue_id)?.name, [venues, estimate.venue_id]);
+  const venueSpaceName = useMemo(() => venueSpaces.find((vs) => vs.id === estimate.venue_space_id)?.name, [venueSpaces, estimate.venue_space_id]);
 
   // Sections state
   const [sections, setSections] = useState<LocalSectionDef[]>(
@@ -1101,6 +1107,18 @@ export default function EstimateBuilder({
               )}
             </div>
           </div>
+
+          {/* Slide Copy */}
+          <SlideCopySection
+            estimate={estimate}
+            program={program}
+            event={event}
+            summary={summary}
+            lineItems={lineItems}
+            initialData={initialSlideCopyData}
+            venueName={venueName}
+            venueSpaceName={venueSpaceName}
+          />
 
           {/* Travel Expenses */}
           <TravelPanel

@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import Anthropic from '@anthropic-ai/sdk';
 import type { DocumentBlockParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
 import type { EstimateType, TaxBucket } from '@/types';
+import type { SlideCopyData } from '@/types/slideCopy';
 
 // ─── Estimate details ─────────────────────────────────────
 
@@ -903,4 +904,11 @@ export async function getExportDataForProgram(programId: string) {
   }));
 
   return { error: null, data: byEstimate };
+}
+
+// ─── Slide Copy ────────────────────────────────────────────
+
+export async function saveSlideCopyData(estimateId: string, data: SlideCopyData): Promise<void> {
+  const supabase = await createClient();
+  await supabase.from('estimates').update({ slide_copy_data: data }).eq('id', estimateId);
 }

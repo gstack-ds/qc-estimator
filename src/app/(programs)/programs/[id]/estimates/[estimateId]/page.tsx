@@ -17,6 +17,7 @@ import {
 } from '@/lib/supabase/queries';
 import { ensureDefaultSections } from '@/app/(programs)/programs/[id]/estimates/actions';
 import EstimateBuilder from '@/components/estimates/EstimateBuilder';
+import type { SlideCopyData } from '@/types/slideCopy';
 import AvEstimateBuilder from '@/components/estimates/AvEstimateBuilder';
 import DecorEstimateBuilder from '@/components/estimates/DecorEstimateBuilder';
 import TransportationEstimateBuilder from '@/components/estimates/TransportationEstimateBuilder';
@@ -102,6 +103,8 @@ export default async function EstimatePage({ params }: Props) {
           travelRefs={travelRefs}
           initialTrips={initialTrips}
           eventName={eventName}
+          event={event}
+          initialSlideCopyData={estimate.slide_copy_data as SlideCopyData | null}
           venues={venues}
           venueSpaces={venueSpaces}
         />
