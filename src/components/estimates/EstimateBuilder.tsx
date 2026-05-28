@@ -223,6 +223,8 @@ export default function EstimateBuilder({
   const [travelExpenses, setTravelExpenses] = useState(0);
   const [showMath, setShowMath] = useState(false);
 
+  const [pendingSlideMenuData, setPendingSlideMenuData] = useState<import('@/types/slideCopy').MenuCourse[] | null>(null);
+  const slideCopyRef = useRef<HTMLDivElement | null>(null);
   const [linkedVenueId, setLinkedVenueId] = useState<string | null>(estimate.venue_id);
   const [linkedSpaceId, setLinkedSpaceId] = useState<string | null>(estimate.venue_space_id);
   const [venueBanner, setVenueBanner] = useState<{ message: string; venueId: string } | null>(null);
@@ -638,6 +640,31 @@ export default function EstimateBuilder({
     handleImportItems(toImport);
   }, [markups, sections, program.guest_count, handleImportItems]);
 
+  const handleLoadMenuToSlide = useCallback((data: ExtractedData) => {
+    const courses = (data.menuItems ?? []).filter(
+      (item) => item.category === 'food' || item.category === 'alcohol' || item.category === 'na_beverage'
+    ).map((item) => {
+      const scenario: 'final' | 'needs_selection' = item.needsSelection ? 'needs_selection' : 'final';
+      const options = item.options?.map((o: { name: string; description?: string; tags?: string[] }) => ({
+        name: o.name,
+        tags: o.tags ?? [],
+        description: o.description,
+        selected: false,
+        locked: false,
+      })) ?? (item.selections ?? []).map((s: string) => ({
+        name: s,
+        tags: item.tags ?? [],
+        selected: !item.needsSelection,
+        locked: !item.needsSelection,
+      }));
+      return { name: item.name, selectionRule: item.selectionRule, maxSelections: item.maxSelections, scenario, options };
+    });
+    setPendingSlideMenuData(courses);
+    setTimeout(() => {
+      slideCopyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  }, []);
+
   function handlePopulateEstimateDetails(data: ExtractedData) {
     const fees = data.venueFees;
     function findFee(...keywords: string[]) {
@@ -994,7 +1021,7 @@ export default function EstimateBuilder({
           </div>
 
           {/* Attachments */}
-          <AttachmentsPanel estimateId={estimate.id} onPopulateLineItems={handlePopulateFromExtraction} onPopulateEstimateDetails={handlePopulateEstimateDetails} />
+          <AttachmentsPanel estimateId={estimate.id} onPopulateLineItems={handlePopulateFromExtraction} onPopulateEstimateDetails={handlePopulateEstimateDetails} onLoadMenuToSlide={handleLoadMenuToSlide} />
 
           {/* Guest count mismatch banner */}
           {program.guest_count > 0 && lineItems.filter((li) => li.qty > 0 && li.qty !== program.guest_count).length > 0 && (
@@ -1114,17 +1141,21 @@ export default function EstimateBuilder({
           </div>
 
           {/* Slide Copy */}
-          <SlideCopySection
-            estimate={estimate}
-            program={program}
-            event={event}
-            summary={summary}
-            lineItems={lineItems}
-            initialData={initialSlideCopyData}
-            venueName={venueName}
-            venueSpaceName={venueSpaceName}
-            venueAddress={venueAddress}
-          />
+          <div ref={slideCopyRef}>
+            <SlideCopySection
+              estimate={estimate}
+              program={program}
+              event={event}
+              summary={summary}
+              lineItems={lineItems}
+              initialData={initialSlideCopyData}
+              venueName={venueName}
+              venueSpaceName={venueSpaceName}
+              venueAddress={venueAddress}
+              pendingMenuData={pendingSlideMenuData}
+              onPendingMenuConsumed={() => setPendingSlideMenuData(null)}
+            />
+          </div>
 
           {/* Travel Expenses */}
           <TravelPanel

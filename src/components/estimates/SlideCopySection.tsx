@@ -2,8 +2,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { EstimateSummary } from '@/types';
 import type { DbEstimate, DbProgram, DbEvent } from '@/lib/supabase/queries';
-import type { SlideCopyData, InclusionToggles, TravelResult } from '@/types/slideCopy';
-import { saveSlideCopyData, getTravelTime } from '@/app/(programs)/programs/[id]/estimates/actions';
+import type { SlideCopyData, InclusionToggles, TravelResult, MenuCourse } from '@/types/slideCopy';
+import { saveSlideCopyData, getTravelTime, getAttachmentsForEstimate, extractedMenuToMenuCourses } from '@/app/(programs)/programs/[id]/estimates/actions';
+import MenuSelectionPanel from './MenuSelectionPanel';
 import { spellNumber, oxfordComma, formatCurrency, checkBannedWords } from '@/lib/slideCopy/brandVoice';
 
 // Minimal shape needed from line items — avoids circular import with EstimateBuilder
@@ -25,6 +26,8 @@ interface Props {
   venueName?: string;
   venueSpaceName?: string;
   venueAddress?: string;
+  pendingMenuData?: MenuCourse[] | null;
+  onPendingMenuConsumed?: () => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -93,6 +96,7 @@ const INCLUSION_LABELS: [keyof Omit<InclusionToggles, 'customInclusion'>, string
 
 export default function SlideCopySection({
   estimate, program, event, summary, lineItems, initialData, venueName, venueSpaceName, venueAddress,
+  pendingMenuData, onPendingMenuConsumed,
 }: Props) {
   const [venueUrl, setVenueUrl] = useState(initialData?.venueUrl ?? '');
   const [sqft, setSqft] = useState(initialData?.sqft?.toString() ?? '');
@@ -103,8 +107,29 @@ export default function SlideCopySection({
   const [travelResult, setTravelResult] = useState<TravelResult | null>(initialData?.travelResult ?? null);
   const [travelLoading, setTravelLoading] = useState(false);
   const [travelError, setTravelError] = useState<string | null>(null);
+  const [menuCourses, setMenuCourses] = useState<MenuCourse[]>(initialData?.menuSelections ?? []);
+  const [menuLoading, setMenuLoading] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didMount = useRef(false);
+
+  // Consume pendingMenuData from Option B "Copy to Canva"
+  useEffect(() => {
+    if (pendingMenuData && pendingMenuData.length > 0) {
+      setMenuCourses(pendingMenuData);
+      onPendingMenuConsumed?.();
+    }
+  }, [pendingMenuData]);
+
+  const handleLoadMenuFromPdfs = useCallback(async () => {
+    setMenuLoading(true);
+    const { error, records } = await getAttachmentsForEstimate(estimate.id);
+    setMenuLoading(false);
+    if (error || !records) return;
+    const allMenuItems = records.flatMap((r) => r.extracted_data?.menuItems ?? []);
+    if (allMenuItems.length > 0) {
+      setMenuCourses(extractedMenuToMenuCourses(allMenuItems));
+    }
+  }, [estimate.id]);
 
   // Debounced auto-save — skip the very first render
   useEffect(() => {
@@ -120,13 +145,13 @@ export default function SlideCopySection({
         maxCapacity: maxCapacity || undefined,
         venueBio: initialData?.venueBio,
         inclusions,
-        menuSelections: initialData?.menuSelections,
+        menuSelections: menuCourses.length > 0 ? menuCourses : undefined,
         travelResult: travelResult ?? undefined,
       };
       saveSlideCopyData(estimate.id, data);
     }, 1500);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [venueUrl, sqft, maxCapacity, inclusions, travelResult]);
+  }, [venueUrl, sqft, maxCapacity, inclusions, travelResult, menuCourses]);
 
   const handleCalculateTravel = useCallback(async () => {
     const hotel = program.client_hotel;
@@ -198,12 +223,24 @@ export default function SlideCopySection({
   const teamSummary = buildTeamSummary(lineItems);
   const driveLine = travelResult?.driveLine ?? '';
 
+  const menuCopyText = menuCourses.length > 0
+    ? menuCourses.map((c) => {
+        const selected = c.options.filter((o) => o.selected);
+        const lines = selected.map((o) => {
+          const tagStr = o.tags?.length ? ` [${o.tags.join(', ')}]` : '';
+          return `• ${o.name}${tagStr}`;
+        });
+        return `${c.name}:\n${lines.join('\n') || '(no selections yet)'}`;
+      }).join('\n\n')
+    : '';
+
   const allSections = [
     { marker: '--- SLIDE 1 HEADER ---', text: slide1Header },
     { marker: '--- SLIDE 1 SUMMARY ---', text: slide1Summary },
     { marker: '--- SLIDE 2 HEADER ---', text: slide2Header },
     { marker: '--- SLIDE 2 INCLUSIONS ---', text: slide2Inclusions },
     { marker: '--- SLIDE 2 DRIVE TIME ---', text: driveLine },
+    { marker: '--- SLIDE 2 MENU ---', text: menuCopyText },
     { marker: '--- SLIDE 2 SERVICE TEAM ---', text: teamSummary },
   ];
 
@@ -332,8 +369,32 @@ export default function SlideCopySection({
               onCalculate={handleCalculateTravel}
             />
 
-            {/* Phase 3 placeholder */}
-            <PhasePlaceholder label="SLIDE 2 — Menu Selections" phase="3" detail="Menu selection logic + dietary tags" />
+            {/* Menu Selections */}
+            <div className="border border-brand-copper/20 rounded bg-white">
+              <div className="flex items-center justify-between px-3 py-1.5 border-b border-brand-copper/10 bg-brand-offwhite rounded-t">
+                <span className="text-[11px] font-medium text-brand-charcoal/70">SLIDE 2 — Menu Selections</span>
+                <div className="flex items-center gap-2">
+                  {menuCourses.length > 0 && <CopyButton text={menuCopyText} label="Copy Menu" />}
+                  <button
+                    type="button"
+                    onClick={handleLoadMenuFromPdfs}
+                    disabled={menuLoading}
+                    className="text-xs px-2 py-1 rounded border border-brand-copper/40 text-brand-brown hover:bg-brand-copper/10 transition-colors disabled:opacity-40"
+                  >
+                    {menuLoading ? 'Loading…' : menuCourses.length > 0 ? 'Reload from PDFs' : 'Load from PDFs'}
+                  </button>
+                </div>
+              </div>
+              <div className="p-3">
+                {menuCourses.length === 0 ? (
+                  <p className="text-xs text-brand-charcoal/40 italic">
+                    Extract menu from a PDF attachment, then click "Load from PDFs" to populate selections here.
+                  </p>
+                ) : (
+                  <MenuSelectionPanel courses={menuCourses} onChange={setMenuCourses} />
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

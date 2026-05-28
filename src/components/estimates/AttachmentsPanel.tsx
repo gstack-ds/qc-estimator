@@ -20,6 +20,7 @@ interface Props {
   estimateType?: 'venue' | 'av' | 'decor' | 'transportation';
   onPopulateLineItems?: (data: ExtractedData) => void;
   onPopulateEstimateDetails?: (data: ExtractedData) => void;
+  onLoadMenuToSlide?: (data: ExtractedData) => void;
 }
 
 type ExtractionStatus =
@@ -68,7 +69,7 @@ function buildCanvaCopyText(data: ExtractedData): string {
   return lines.join('\n').trim();
 }
 
-export default function AttachmentsPanel({ estimateId, estimateType = 'venue', onPopulateLineItems, onPopulateEstimateDetails }: Props) {
+export default function AttachmentsPanel({ estimateId, estimateType = 'venue', onPopulateLineItems, onPopulateEstimateDetails, onLoadMenuToSlide }: Props) {
   const [records, setRecords] = useState<AttachmentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -267,10 +268,18 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
   }
 
   async function handleCopyToCanva(attachmentId: string, data: ExtractedData) {
-    const text = buildCanvaCopyText(data);
-    await navigator.clipboard.writeText(text);
-    setCopiedId(attachmentId);
-    setTimeout(() => setCopiedId((id) => id === attachmentId ? null : id), 2000);
+    if (onLoadMenuToSlide && data.menuItems?.length > 0) {
+      // Option B: jump to Slide Copy section and pre-fill menu selections
+      onLoadMenuToSlide(data);
+      setCopiedId(attachmentId);
+      setTimeout(() => setCopiedId((id) => id === attachmentId ? null : id), 2000);
+    } else {
+      // Fallback: copy formatted text to clipboard
+      const text = buildCanvaCopyText(data);
+      await navigator.clipboard.writeText(text);
+      setCopiedId(attachmentId);
+      setTimeout(() => setCopiedId((id) => id === attachmentId ? null : id), 2000);
+    }
   }
 
   const labelClass = 'text-xs font-medium text-brand-charcoal/60 tracking-wide uppercase';
@@ -471,7 +480,7 @@ function ExtractionResultPanel({ data, estimateType, onCopyToCanva, onPopulateLi
             onClick={onCopyToCanva}
             className="text-xs px-2 py-0.5 rounded border border-brand-cream bg-white hover:bg-brand-offwhite text-brand-charcoal/70 hover:text-brand-charcoal transition-colors"
           >
-            {copied ? 'Copied!' : 'Copy to Canva'}
+            {copied ? (hasItems ? 'Loaded ↓' : 'Copied!') : (hasItems ? 'Load to Slide Copy ↓' : 'Copy to Canva')}
           </button>
         )}
         {onPopulateLineItems && (isTransport ? hasTransportData : (hasItems || hasEquipment)) && (

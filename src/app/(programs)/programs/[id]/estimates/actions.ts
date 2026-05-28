@@ -355,12 +355,25 @@ export async function cacheEstimateTotal(estimateId: string, programId: string, 
 
 // ─── Attachments ─────────────────────────────────────────
 
+export interface ExtractedMenuOption {
+  name: string;
+  description?: string;
+  tags?: string[];
+}
+
 export interface ExtractedMenuItem {
   name: string;
   description?: string;
   pricePerPerson: number;
   category: 'food' | 'alcohol' | 'na_beverage';
   selections?: string[];
+  // Phase 3 — menu selection fields
+  tags?: string[];
+  needsSelection?: boolean;
+  selectionRule?: string;
+  maxSelections?: number;
+  options?: ExtractedMenuOption[];
+  isSampleMenu?: boolean;
 }
 
 export interface ExtractedEquipmentItem {
@@ -541,20 +554,29 @@ function getExtractionPrompt(type: 'venue' | 'av' | 'decor' | 'transportation'):
     );
   }
   return (
-    'You are extracting menu data for a corporate event planning team that prices by PACKAGE, not by individual dish. ' +
+    'You are extracting menu data for a corporate event planning team. ' +
     'Return ONLY valid JSON with these fields:\n' +
     '- venueName (string, optional)\n' +
     '- roomSpace (string, optional)\n' +
-    '- menuItems: array of PRICING PACKAGES — aim for 5–10 total, not one row per dish. Each package: ' +
-    '{ name (package/course label, e.g. "Plated Dinner", "Cocktail Hour Passed Apps", "Premium Open Bar (3hr)"), ' +
-    'pricePerPerson (number — the per-person price for this package), ' +
-    'category ("food" | "alcohol" | "na_beverage"), ' +
-    'selections (array of strings — the individual dish or item names inside this package, for reference) }\n' +
+    '- isSampleMenu (boolean) — true if the PDF is labeled "sample menu," "to be finalized," or similar\n' +
+    '- menuItems: array of PRICING PACKAGES — aim for 5–10 total. Each package:\n' +
+    '  { name (e.g. "Plated Dinner", "Cocktail Hour Passed Apps", "Premium Open Bar (3hr)"),\n' +
+    '    pricePerPerson (number),\n' +
+    '    category ("food" | "alcohol" | "na_beverage"),\n' +
+    '    isSampleMenu (boolean, inherit from top level),\n' +
+    '    needsSelection (boolean) — true when PDF says "Choose X", "Select X", "Pick X of", or lists multiple options for a single course position,\n' +
+    '    selectionRule (string, e.g. "choose 3") — present only when needsSelection=true,\n' +
+    '    maxSelections (number) — parsed from selectionRule, present only when needsSelection=true,\n' +
+    '    tags (array of dietary tag strings, e.g. ["GF","VEG"] — apply to the package when all options share the tag),\n' +
+    '    options (array) — populate ONLY when needsSelection=true, each option:\n' +
+    '      { name (string), description (string, optional), tags (array of dietary tag strings e.g. ["GF","VEG","V","AG"]) },\n' +
+    '    selections (array of strings — final dish names when needsSelection=false, for backward compat) }\n' +
+    'DIETARY TAGS: use standard abbreviations from the PDF (GF=gluten-free, VEG=vegetarian, V=vegan, AG=allergen-noted, DF=dairy-free, NF=nut-free).\n' +
     'GROUPING RULES:\n' +
-    '- Prix-fixe or stated per-person course price → one package, list dishes as selections.\n' +
-    '- Individual dishes with no stated package price → group by course (all apps → "Appetizers", all entrees → "Dinner Entrées"), use average price as pricePerPerson.\n' +
-    '- Per-piece passed items (e.g. "skewers $4 each") → group as "Passed Appetizers", pricePerPerson = average per-piece price, selections = item names.\n' +
-    '- Bar packages → one line per tier (e.g. "Premium Open Bar (3hr)"), do NOT list individual spirits as separate items.\n' +
+    '- Prix-fixe/final menu → needsSelection=false, list dishes as selections.\n' +
+    '- "Choose X of the following" sections → needsSelection=true, list each option in options array with its tags.\n' +
+    '- Bar choices (e.g. "Choose 3 beers") → needsSelection=true, group beers by style in options.\n' +
+    '- Bar packages (stated tier price) → needsSelection=false, list inclusions as selections.\n' +
     '- NA beverages → one "Non-Alcoholic Beverages" package.\n' +
     '- venueFees (array: { name, value, type: "percentage"|"flat" }) for service charge, gratuity, admin fee, F&B minimum, room rental.\n' +
     '- equipmentItems: only for AV/staffing/rental line items that are NOT food/beverage.\n' +
@@ -915,6 +937,33 @@ export async function getExportDataForProgram(programId: string) {
 }
 
 // ─── Slide Copy ────────────────────────────────────────────
+
+export function extractedMenuToMenuCourses(items: ExtractedMenuItem[]): import('@/types/slideCopy').MenuCourse[] {
+  return items
+    .filter((item) => item.category === 'food' || item.category === 'alcohol' || item.category === 'na_beverage')
+    .map((item) => {
+      const scenario: 'final' | 'needs_selection' = item.needsSelection ? 'needs_selection' : 'final';
+      const options: import('@/types/slideCopy').MenuOption[] = item.options?.map((o) => ({
+        name: o.name,
+        tags: o.tags ?? [],
+        description: o.description,
+        selected: false,
+        locked: false,
+      })) ?? (item.selections ?? []).map((s) => ({
+        name: s,
+        tags: item.tags ?? [],
+        selected: !item.needsSelection,
+        locked: !item.needsSelection,
+      }));
+      return {
+        name: item.name,
+        selectionRule: item.selectionRule,
+        maxSelections: item.maxSelections,
+        scenario,
+        options,
+      };
+    });
+}
 
 export async function saveSlideCopyData(estimateId: string, data: SlideCopyData): Promise<void> {
   const supabase = await createClient();
