@@ -113,6 +113,8 @@ export default function SlideCopySection({
     () => initialData?.inclusions ?? autoDetectInclusions(summary, lineItems)
   );
   const [travelResult, setTravelResult] = useState<TravelResult | null>(initialData?.travelResult ?? null);
+  const [travelOrigin, setTravelOrigin] = useState(initialData?.travelOrigin ?? program.client_hotel ?? '');
+  const [travelDest, setTravelDest] = useState(initialData?.travelDest ?? venueAddress ?? '');
   const [travelLoading, setTravelLoading] = useState(false);
   const [travelError, setTravelError] = useState<string | null>(null);
   const [venueBio, setVenueBio] = useState(initialData?.venueBio ?? '');
@@ -159,19 +161,21 @@ export default function SlideCopySection({
         inclusions,
         menuSelections: menuCourses.length > 0 ? menuCourses : undefined,
         travelResult: travelResult ?? undefined,
+        travelOrigin: travelOrigin || undefined,
+        travelDest: travelDest || undefined,
       };
       saveSlideCopyData(estimate.id, data);
     }, 1500);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [venueUrl, sqft, maxCapacity, inclusions, travelResult, menuCourses, venueBio]);
+  }, [venueUrl, sqft, maxCapacity, inclusions, travelResult, menuCourses, venueBio, travelOrigin, travelDest]);
 
   const handleCalculateTravel = useCallback(async () => {
-    const hotel = program.client_hotel;
-    const venue = venueAddress;
+    const origin = travelOrigin.trim();
+    const dest = travelDest.trim();
     const date = event?.event_date ?? program.event_date;
     const time = event?.start_time ?? program.event_start_time;
-    if (!hotel || !venue || !date || !time) {
-      setTravelError('Client hotel, venue address, event date, and start time are all required for drive time calculation.');
+    if (!origin || !dest || !date || !time) {
+      setTravelError('From address, To address, event date, and start time are all required.');
       return;
     }
     setTravelLoading(true);
@@ -179,14 +183,14 @@ export default function SlideCopySection({
     let error: string | null = null;
     let result = null;
     try {
-      ({ error, result } = await getTravelTime(hotel, venue, date, time, hotel));
+      ({ error, result } = await getTravelTime(origin, dest, date, time, origin));
     } catch {
       error = 'Unexpected error calculating travel time. Check server logs.';
     }
     setTravelLoading(false);
     if (error) { setTravelError(error); return; }
     setTravelResult(result);
-  }, [program.client_hotel, venueAddress, event, program.event_date, program.event_start_time]);
+  }, [travelOrigin, travelDest, event, program.event_date, program.event_start_time]);
 
   const toggleInclusion = useCallback((key: keyof Omit<InclusionToggles, 'customInclusion'>) => {
     setInclusions((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -441,9 +445,10 @@ export default function SlideCopySection({
 
             {/* Drive Time */}
             <DriveTimeBlock
-              hotelName={program.client_hotel}
-              venueName={venueName}
-              venueAddress={venueAddress}
+              origin={travelOrigin}
+              dest={travelDest}
+              onOriginChange={setTravelOrigin}
+              onDestChange={setTravelDest}
               result={travelResult}
               loading={travelLoading}
               error={travelError}
@@ -788,17 +793,20 @@ function VenueBioBlock({ bio, loading, error, hasUrl, onGenerate, onChange }: Ve
 }
 
 interface DriveTimeBlockProps {
-  hotelName: string | null;
-  venueName?: string;
-  venueAddress?: string;
+  origin: string;
+  dest: string;
+  onOriginChange: (v: string) => void;
+  onDestChange: (v: string) => void;
   result: TravelResult | null;
   loading: boolean;
   error: string | null;
   onCalculate: () => void;
 }
 
-function DriveTimeBlock({ hotelName, venueName, venueAddress, result, loading, error, onCalculate }: DriveTimeBlockProps) {
-  const canCalculate = !!(hotelName && venueAddress);
+const addrInputCls = 'w-full border border-brand-cream rounded px-2 py-1 text-xs text-brand-charcoal placeholder:text-brand-silver/50 focus:outline-none focus:ring-1 focus:ring-brand-copper bg-white';
+
+function DriveTimeBlock({ origin, dest, onOriginChange, onDestChange, result, loading, error, onCalculate }: DriveTimeBlockProps) {
+  const canCalculate = !!(origin.trim() && dest.trim());
 
   return (
     <div className="border border-brand-copper/20 rounded bg-white">
@@ -816,12 +824,31 @@ function DriveTimeBlock({ hotelName, venueName, venueAddress, result, loading, e
           </button>
         </div>
       </div>
-      <div className="px-3 py-2 space-y-1.5">
-        {!canCalculate && (
-          <p className="text-xs text-brand-charcoal/40 italic">
-            {!hotelName ? 'Set Client Hotel on the program to enable.' : 'Link a venue with an address to enable.'}
-          </p>
-        )}
+      <div className="px-3 py-2 space-y-2">
+        {/* Editable address inputs */}
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[10px] text-brand-silver/70 uppercase tracking-wide block mb-0.5">From</label>
+            <input
+              type="text"
+              value={origin}
+              onChange={(e) => onOriginChange(e.target.value)}
+              placeholder="Hotel name or full address"
+              className={addrInputCls}
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-brand-silver/70 uppercase tracking-wide block mb-0.5">To</label>
+            <input
+              type="text"
+              value={dest}
+              onChange={(e) => onDestChange(e.target.value)}
+              placeholder="Venue name or full address"
+              className={addrInputCls}
+            />
+          </div>
+        </div>
+
         {error && <p className="text-xs text-red-600">{error}</p>}
         {result && (
           <>
@@ -837,11 +864,6 @@ function DriveTimeBlock({ hotelName, venueName, venueAddress, result, loading, e
                 <p className="font-semibold text-brand-brown uppercase tracking-wider mb-0.5" style={{ fontSize: '10px' }}>Planning Notes</p>
                 {result.planningNotes}
               </div>
-            )}
-            {canCalculate && (
-              <p className="text-[10px] text-brand-silver/50">
-                {hotelName} → {venueName ?? venueAddress}
-              </p>
             )}
           </>
         )}

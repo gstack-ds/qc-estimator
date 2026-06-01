@@ -45,4 +45,6 @@ export interface SlideCopyData {
   inclusions: InclusionToggles;
   menuSelections?: MenuCourse[];
   travelResult?: TravelResult;
+  travelOrigin?: string;  // free-form "From" address (overrides client_hotel)
+  travelDest?: string;    // free-form "To" address (overrides linked venue address)
 }

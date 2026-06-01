@@ -312,10 +312,10 @@ export async function uploadLineItemThumbnail(
   const path = `line-item-thumbnails/${lineItemId}.${ext}`;
   const buffer = Buffer.from(base64Data, 'base64');
   const { error } = await supabase.storage
-    .from('estimates')
+    .from('line-item-thumbnails')
     .upload(path, buffer, { contentType: mimeType, upsert: true });
   if (error) return { error: error.message, url: null };
-  const { data } = supabase.storage.from('estimates').getPublicUrl(path);
+  const { data } = supabase.storage.from('line-item-thumbnails').getPublicUrl(path);
   return { error: null, url: data.publicUrl };
 }
 
