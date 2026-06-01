@@ -109,8 +109,11 @@ export interface EstimateSummary {
   adminFeeClient: number;
   // Totals
   subtotalOur: number;
-  subtotalClient: number;
+  subtotalClient: number;      // line items + line-item taxes (production fee base)
   productionFee: number;
+  productionFeeTax: number;    // productionFee × generalTaxRate (new: prod fee is taxable)
+  lineItemsSubtotalClient: number; // line items without any tax (display "Subtotal" line)
+  preTaxTotal: number;         // lineItemsSubtotalClient + productionFee (before all taxes)
   totalOur: number;
   totalClient: number;
   // Margin support fields

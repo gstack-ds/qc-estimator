@@ -84,10 +84,14 @@ export default function AvSummaryPanel({ summary, guestCount, sections, showMath
 
       <Divider />
 
-      {/* Totals */}
-      <Row label="Subtotal" value={summary.subtotalClient} bold showMath={showMath} />
+      {/* Totals — Subtotal → Prod Fee → Pre-Tax Total → Tax → Total */}
+      <Row label="Subtotal" value={summary.lineItemsSubtotalClient} bold showMath={showMath} />
       <Row label="Production Fee" value={summary.productionFee} showMath={showMath}
         math={mathRates ? `$${fmtM(summary.subtotalClient)} × ${pctM(mathRates.ccProcessingFee)} CC + $${fmtM(markupRevenue)} × ${pctM(mathRates.clientCommissionRate)} commission` : undefined}
+      />
+      <Row label="Pre-Tax Total" value={summary.preTaxTotal} showMath={showMath} />
+      <Row label="Tax" value={summary.equipmentTax + summary.productionFeeTax} indent dim showMath={showMath}
+        math={mathRates && summary.productionFeeTax > 0 ? `includes ${fmt(summary.productionFeeTax)} on production fee` : undefined}
       />
       {summary.discountAmount > 0 && (
         <div className="flex justify-between py-1 text-sm text-brand-copper">

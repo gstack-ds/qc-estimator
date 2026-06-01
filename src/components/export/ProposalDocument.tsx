@@ -118,8 +118,7 @@ export default function ProposalDocument({
 
   // Group items by section, filter out $0 items
   const sections = Array.from(new Set(lineItems.map((li) => li.section)));
-  const totalTax = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax;
-  const preTaxSubtotal = summary.subtotalClient - totalTax;
+  const totalTax = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax + summary.productionFeeTax;
 
   return (
     <Document>
@@ -204,12 +203,24 @@ export default function ProposalDocument({
           );
         })}
 
-        {/* Totals block */}
+        {/* Totals block: Subtotal → Production Fee → Pre-Tax Total → Tax → Total */}
         <View style={styles.totalsBlock}>
-          {preTaxSubtotal > 0 && (
+          {summary.lineItemsSubtotalClient > 0 && (
             <View style={styles.totalsRow}>
-              <Text style={styles.totalsLabel}>Subtotal (before tax)</Text>
-              <Text style={styles.totalsValue}>{fmtRound(preTaxSubtotal)}</Text>
+              <Text style={styles.totalsLabel}>Subtotal</Text>
+              <Text style={styles.totalsValue}>{fmtRound(summary.lineItemsSubtotalClient)}</Text>
+            </View>
+          )}
+          {summary.productionFee > 0 && (
+            <View style={styles.totalsRow}>
+              <Text style={styles.totalsLabel}>Production Fee</Text>
+              <Text style={styles.totalsValue}>{fmtRound(summary.productionFee)}</Text>
+            </View>
+          )}
+          {summary.preTaxTotal > 0 && (
+            <View style={styles.totalsRow}>
+              <Text style={styles.totalsLabel}>Pre-Tax Total</Text>
+              <Text style={styles.totalsValue}>{fmtRound(summary.preTaxTotal)}</Text>
             </View>
           )}
           {taxExempt ? (
@@ -221,30 +232,6 @@ export default function ProposalDocument({
             <View style={styles.totalsRow}>
               <Text style={styles.totalsLabel}>Tax</Text>
               <Text style={styles.totalsValue}>{fmtRound(totalTax)}</Text>
-            </View>
-          )}
-          {summary.serviceChargeClient > 0 && (
-            <View style={styles.totalsRow}>
-              <Text style={styles.totalsLabel}>Service Charge</Text>
-              <Text style={styles.totalsValue}>{fmtRound(summary.serviceChargeClient)}</Text>
-            </View>
-          )}
-          {summary.gratuityClient > 0 && (
-            <View style={styles.totalsRow}>
-              <Text style={styles.totalsLabel}>Gratuity</Text>
-              <Text style={styles.totalsValue}>{fmtRound(summary.gratuityClient)}</Text>
-            </View>
-          )}
-          {summary.adminFeeClient > 0 && (
-            <View style={styles.totalsRow}>
-              <Text style={styles.totalsLabel}>Administrative Fee</Text>
-              <Text style={styles.totalsValue}>{fmtRound(summary.adminFeeClient)}</Text>
-            </View>
-          )}
-          {summary.productionFee > 0 && (
-            <View style={styles.totalsRow}>
-              <Text style={styles.totalsLabel}>Production Fee</Text>
-              <Text style={styles.totalsValue}>{fmtRound(summary.productionFee)}</Text>
             </View>
           )}
           {summary.discountAmount > 0 && (

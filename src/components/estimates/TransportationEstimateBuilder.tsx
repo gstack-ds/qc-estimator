@@ -167,6 +167,7 @@ export default function TransportationEstimateBuilder({
     adminFeeOur: 0, adminFeeClient: 0,
     subtotalOur: summary.subtotalOur, subtotalClient: summary.subtotalClient,
     productionFee: summary.productionFee,
+    productionFeeTax: 0, lineItemsSubtotalClient: summary.subtotalClient, preTaxTotal: summary.subtotalClient + summary.productionFee,
     totalOur: summary.subtotalOur, totalClient: summary.totalClient,
     pricePerPerson: 0, fbMinimumMet: true, fbShortfall: 0,
     vendorTaxesTotal: 0, revenueItemsClientTotal: 0, discountAmount: 0,

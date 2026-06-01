@@ -399,7 +399,8 @@ describe('calculateVenueEstimate — decor sections', () => {
     expect(result.equipmentTax).toBeCloseTo(134.125);
     expect(result.subtotalClient).toBeCloseTo(subtotalClient);
     expect(result.productionFee).toBeCloseTo(productionFee);
-    expect(result.totalClient).toBeCloseTo(subtotalClient + productionFee);
+    const productionFeeTax = productionFee * BASE_CONFIG.location.generalTaxRate;
+    expect(result.totalClient).toBeCloseTo(subtotalClient + productionFee + productionFeeTax);
   });
 });
 
@@ -427,11 +428,12 @@ describe('calculateMarginAnalysis — new formula', () => {
     expect(margin.vendorCostsBase).toBeCloseTo(1000);
   });
 
-  it('totalTaxes equals client-side taxes', () => {
+  it('totalTaxes equals client-side taxes including productionFeeTax', () => {
     const summary = calculateVenueEstimate(simpleDecorInput, BASE_CONFIG);
     const margin = calculateMarginAnalysis(summary, BASE_CONFIG, TEAM_HOURS_TIERS, 0);
     // equipmentTax = 1850 × 0.0725 = 134.125
-    expect(margin.totalTaxes).toBeCloseTo(134.125);
+    // productionFeeTax = productionFee × 0.0725 ≈ 11.741
+    expect(margin.totalTaxes).toBeCloseTo(summary.equipmentTax + summary.productionFeeTax);
   });
 
   it('ccProcessingAmount = subtotalClient × ccRate', () => {
@@ -448,7 +450,9 @@ describe('calculateMarginAnalysis — new formula', () => {
       - margin.vendorCostsBase - margin.totalTaxes
       - margin.ccProcessingAmount - margin.clientCommissionAmount - margin.gdpCommissionAmount;
     expect(margin.qcRevenue).toBeCloseTo(expected);
-    expect(margin.qcRevenue).toBeCloseTo(710.51);
+    // Updated for production fee tax: GDP base is larger by productionFeeTax → qcRevenue decreases
+    // productionFeeTax ≈ 11.741, GDP at 6.5% takes 0.763 → ~709.75
+    expect(margin.qcRevenue).toBeCloseTo(709.74);
   });
 
   it('client commission cancels exactly — qcRevenue is independent of commission rate', () => {
@@ -613,15 +617,15 @@ describe('client discount', () => {
   it('discountAmount is 0 when no discount', () => {
     const s = calculateVenueEstimate(baseInput, noDiscountConfig);
     expect(s.discountAmount).toBe(0);
-    expect(s.totalClient).toBeCloseTo(s.subtotalClient + s.productionFee);
+    expect(s.totalClient).toBeCloseTo(s.subtotalClient + s.productionFee + s.productionFeeTax);
   });
 
   it('flat discount reduces totalClient by exact amount', () => {
     const input = { ...baseInput, discount: { type: 'flat' as const, value: 200 } };
     const s = calculateVenueEstimate(input, noDiscountConfig);
     expect(s.discountAmount).toBe(200);
-    // totalClient = (subtotalClient + productionFee) − discountAmount
-    const preDiscount = s.subtotalClient + s.productionFee;
+    // totalClient = (subtotalClient + productionFee + productionFeeTax) − discountAmount
+    const preDiscount = s.subtotalClient + s.productionFee + s.productionFeeTax;
     expect(s.totalClient).toBeCloseTo(preDiscount - 200);
   });
 
@@ -629,7 +633,7 @@ describe('client discount', () => {
     const input = { ...baseInput, discount: { type: 'percent' as const, value: 0.10 } };
     const s = calculateVenueEstimate(input, noDiscountConfig);
     const noDiscount = calculateVenueEstimate(baseInput, noDiscountConfig);
-    const preDiscount = noDiscount.subtotalClient + noDiscount.productionFee;
+    const preDiscount = noDiscount.subtotalClient + noDiscount.productionFee + noDiscount.productionFeeTax;
     expect(s.discountAmount).toBeCloseTo(preDiscount * 0.10);
     expect(s.totalClient).toBeCloseTo(preDiscount * 0.90);
   });
@@ -761,6 +765,73 @@ describe('category move: taxType changes with section', () => {
     expect(after.equipmentTax).toBe(0);
     expect(before.equipmentSubtotalClient).toBeCloseTo(clientCost);
     expect(after.qcStaffingSubtotalClient).toBeCloseTo(clientCost);
+  });
+});
+
+// ─── Production Fee Tax (Issue 2) ────────────────────────
+// Production fee is now taxed at the location's general sales rate.
+// Pre-Tax Total = lineItemsSubtotalClient + productionFee (before all taxes).
+
+describe('calculateVenueEstimate — production fee tax', () => {
+  // Farm Tables: equipmentSubtotalClient=1850, equipmentTax=134.125
+  // subtotalClient=1984.125, markupRevenue=1850
+  // productionFee = 1984.125×0.035 + 1850×0.05 = 69.444375 + 92.5 = 161.944375
+  // productionFeeTax = 161.944375 × 0.0725 ≈ 11.741
+  const simpleInput: VenueEstimateInput = {
+    name: 'Prod Fee Tax Test',
+    fbMinimum: 0, isVenueTaxable: false, serviceCharge: 0, gratuity: 0, adminFee: 0,
+    lineItems: [
+      { id: '1', section: 'Equipment', taxBucket: 'equipment', name: 'Farm Tables', qty: 5, unitPrice: 200, categoryMarkupPct: 0.85, taxType: 'general' },
+    ],
+  };
+
+  it('productionFeeTax = productionFee × generalTaxRate', () => {
+    const s = calculateVenueEstimate(simpleInput, BASE_CONFIG);
+    expect(s.productionFeeTax).toBeCloseTo(s.productionFee * BASE_CONFIG.location.generalTaxRate);
+  });
+
+  it('lineItemsSubtotalClient equals sum of item client costs (no taxes)', () => {
+    const s = calculateVenueEstimate(simpleInput, BASE_CONFIG);
+    // lineItemsSubtotalClient = equipmentSubtotalClient (no F&B, staffing, venue, or restaurant fees)
+    expect(s.lineItemsSubtotalClient).toBeCloseTo(1850);
+  });
+
+  it('preTaxTotal = lineItemsSubtotalClient + productionFee', () => {
+    const s = calculateVenueEstimate(simpleInput, BASE_CONFIG);
+    expect(s.preTaxTotal).toBeCloseTo(s.lineItemsSubtotalClient + s.productionFee);
+  });
+
+  it('totalClient = preTaxTotal + all taxes (including productionFeeTax)', () => {
+    const s = calculateVenueEstimate(simpleInput, BASE_CONFIG);
+    const allTaxes = s.foodTax + s.alcoholTax + s.equipmentTax + s.venueTax + s.productionFeeTax;
+    expect(s.totalClient).toBeCloseTo(s.preTaxTotal + allTaxes - s.discountAmount);
+  });
+
+  it('productionFeeTax = 0 when taxExempt', () => {
+    const s = calculateVenueEstimate({ ...simpleInput, taxExempt: true }, BASE_CONFIG);
+    expect(s.productionFeeTax).toBe(0);
+  });
+
+  it('calculateMarginAnalysis totalTaxes includes productionFeeTax', () => {
+    const s = calculateVenueEstimate(simpleInput, BASE_CONFIG);
+    const margin = calculateMarginAnalysis(s, BASE_CONFIG, TEAM_HOURS_TIERS, 0);
+    const expected = s.foodTax + s.alcoholTax + s.equipmentTax + s.venueTax + s.productionFeeTax;
+    expect(margin.totalTaxes).toBeCloseTo(expected);
+  });
+
+  it('lineItemsSubtotalClient with service charge includes the charge', () => {
+    const withSC: VenueEstimateInput = {
+      name: 'SC Test',
+      fbMinimum: 0, isVenueTaxable: false, serviceCharge: 0.20, gratuity: 0, adminFee: 0,
+      lineItems: [
+        { id: 'f1', section: 'F&B', taxBucket: 'fb', name: 'Food', qty: 10, unitPrice: 50, categoryMarkupPct: 0.55, taxType: 'food' },
+      ],
+    };
+    const s = calculateVenueEstimate(withSC, BASE_CONFIG);
+    // fbSubtotalClient = 10×50×1.55 = 775
+    // serviceChargeClient = 775 × 0.20 = 155
+    // lineItemsSubtotalClient = 775 + 155 = 930 (no taxes)
+    expect(s.lineItemsSubtotalClient).toBeCloseTo(930);
   });
 });
 

@@ -52,11 +52,11 @@ function withinDollar(actual: number, expected: number) {
 describe('Proposal 1 — 50-guest F&B dinner, Charlotte, no restaurant fees (placeholder)', () => {
   // EXPECTED values computed by the engine from the inputs below.
   // Replace with actual Excel workbook numbers once validated.
-  const EXPECTED_TOTAL_CLIENT   = 7641.75;  // TODO: verify against Excel
+  const EXPECTED_TOTAL_CLIENT   = 7683.55;  // TODO: verify against Excel — updated: +productionFeeTax (576.65×0.0725≈41.81)
   const EXPECTED_VENDOR_COSTS   = 4250.00;  // TODO: verify against Excel
-  const EXPECTED_TOTAL_TAXES    =  477.59;  // TODO: verify against Excel
-  const EXPECTED_CC_PROCESSING  =  247.28;  // TODO: verify against Excel
-  const EXPECTED_QC_MARGIN      = 2337.50;  // TODO: verify against Excel — updated for bug #5 fix (clientComm now deducted)
+  const EXPECTED_TOTAL_TAXES    =  519.40;  // TODO: verify against Excel — updated: +productionFeeTax ≈ 41.81
+  const EXPECTED_CC_PROCESSING  =  247.28;  // TODO: verify against Excel — unchanged (based on subtotalClient)
+  const EXPECTED_QC_MARGIN      = 2337.50;  // TODO: verify against Excel — unchanged (productionFeeTax cancels in formula)
 
   const config: ProgramConfig = {
     guestCount: 50,
@@ -125,12 +125,12 @@ describe('Proposal 1 — 50-guest F&B dinner, Charlotte, no restaurant fees (pla
 
 describe('Proposal 2 — 100-guest F&B, DC, 20% SC + GDP commission (placeholder)', () => {
   // EXPECTED values computed by the engine from the inputs below.
-  const EXPECTED_TOTAL_CLIENT   = 23963.78; // TODO: verify against Excel
+  const EXPECTED_TOTAL_CLIENT   = 24143.65; // TODO: verify against Excel — updated: +productionFeeTax (1798.775×0.10≈179.88)
   const EXPECTED_VENDOR_COSTS   = 13200.00; // TODO: verify against Excel
-  const EXPECTED_TOTAL_TAXES    =  1705.00; // TODO: verify against Excel
-  const EXPECTED_CC_PROCESSING  =   775.78; // TODO: verify against Excel
-  const EXPECTED_GDP_COMMISSION =  1557.65; // TODO: verify against Excel — updated for bug #5 fix (GDP base = totalClient)
-  const EXPECTED_QC_MARGIN      =  5702.36; // TODO: verify against Excel — updated for bug #5 fix (clientComm deducted, GDP base fixed)
+  const EXPECTED_TOTAL_TAXES    =  1884.88; // TODO: verify against Excel — updated: +productionFeeTax ≈ 179.88
+  const EXPECTED_CC_PROCESSING  =   775.78; // TODO: verify against Excel — unchanged
+  const EXPECTED_GDP_COMMISSION =  1569.34; // TODO: verify against Excel — updated: GDP base is new totalClient
+  const EXPECTED_QC_MARGIN      =  5690.66; // TODO: verify against Excel — updated: GDP takes productionFeeTax × gdpRate from qcRevenue
 
   const config: ProgramConfig = {
     guestCount: 100,
@@ -203,11 +203,11 @@ describe('Proposal 2 — 100-guest F&B, DC, 20% SC + GDP commission (placeholder
 
 describe('Proposal 3 — 75-guest decor/rentals, Charlotte, no F&B (placeholder)', () => {
   // EXPECTED values computed by the engine from the inputs below.
-  const EXPECTED_TOTAL_CLIENT   = 10662.69; // TODO: verify against Excel
+  const EXPECTED_TOTAL_CLIENT   = 10721.37; // TODO: verify against Excel — updated: +productionFeeTax (809.37×0.0725≈58.68)
   const EXPECTED_VENDOR_COSTS   =  5000.00; // TODO: verify against Excel
-  const EXPECTED_TOTAL_TAXES    =   563.33; // TODO: verify against Excel
-  const EXPECTED_CC_PROCESSING  =   344.87; // TODO: verify against Excel
-  const EXPECTED_QC_MARGIN      =  4290.00; // TODO: verify against Excel — updated for bug #5 fix (clientComm now deducted)
+  const EXPECTED_TOTAL_TAXES    =   622.00; // TODO: verify against Excel — updated: +productionFeeTax ≈ 58.68
+  const EXPECTED_CC_PROCESSING  =   344.87; // TODO: verify against Excel — unchanged
+  const EXPECTED_QC_MARGIN      =  4290.00; // TODO: verify against Excel — unchanged (gdpEnabled=false)
 
   const config: ProgramConfig = {
     guestCount: 75,

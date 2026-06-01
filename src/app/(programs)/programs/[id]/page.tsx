@@ -125,6 +125,7 @@ function buildEstimateData(
       adminFeeOur: 0, adminFeeClient: 0,
       subtotalOur: agg.total_our, subtotalClient: agg.total_client,
       productionFee: transportSummary.productionFee,
+      productionFeeTax: 0, lineItemsSubtotalClient: agg.total_client, preTaxTotal: agg.total_client + transportSummary.productionFee,
       totalOur: agg.total_our, totalClient: transportSummary.totalClient,
       pricePerPerson: 0, fbMinimumMet: true, fbShortfall: 0,
       vendorTaxesTotal: 0, revenueItemsClientTotal: 0, discountAmount: 0,

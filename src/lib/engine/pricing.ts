@@ -138,9 +138,16 @@ export function calculateVenueEstimate(
     subtotalClient * config.ccProcessingFee +
     markupRevenue * config.clientCommission;
 
+  // Production fee is taxable at the general sales rate
+  const productionFeeTax = tm * productionFee * config.location.generalTaxRate;
+
+  // Display subtotals (no taxes in these two fields)
+  const lineItemsSubtotalClient = markupRevenue; // items before any tax
+  const preTaxTotal = lineItemsSubtotalClient + productionFee;
+
   // Totals (pre-discount)
   const totalOur = subtotalOur + productionFee;
-  const totalClientPreDiscount = subtotalClient + productionFee;
+  const totalClientPreDiscount = subtotalClient + productionFee + productionFeeTax;
 
   // Discount applied after all fees — reduces client billing and therefore QC margin
   const discountAmount = input.discount
@@ -175,7 +182,8 @@ export function calculateVenueEstimate(
     gratuityOur, gratuityClient,
     adminFeeOur, adminFeeClient,
     subtotalOur, subtotalClient,
-    productionFee,
+    productionFee, productionFeeTax,
+    lineItemsSubtotalClient, preTaxTotal,
     totalOur, totalClient,
     vendorTaxesTotal, revenueItemsClientTotal,
     pricePerPerson,
@@ -231,7 +239,7 @@ export function calculateMarginAnalysis(
   // GDP and third-party commissions are true costs deducted from QC margin.
   // Simplified: qcRevenue = markup − gdpCommission − thirdPartyCommissions − discount
   const vendorCostsBase = summary.subtotalOur - summary.vendorTaxesTotal;
-  const totalTaxes = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax;
+  const totalTaxes = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax + summary.productionFeeTax;
   const ccProcessingAmount = summary.subtotalClient * config.ccProcessingFee;
 
   const qcRevenue = summary.totalClient
