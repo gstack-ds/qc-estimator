@@ -216,6 +216,10 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-05-27 | SlideCopySection uses minimal SlideCopyLineItem interface instead of importing LocalLineItem | EstimateBuilder imports SlideCopySection; SlideCopySection can't import LocalLineItem from EstimateBuilder — circular import. Structural typing: SlideCopyLineItem has only {taxBucket, taxType, name, qty, isRevenueItem?}; LocalLineItem satisfies it without declaration. | Re-export LocalLineItem from a shared module (creates new shared dep for a shape already defined in EstimateBuilder) |
 | 2026-05-28 | Drag-and-drop reordering: render prop pattern for SortableSectionItem | dnd-kit listeners/attributes must be on the drag handle element inside LineItemSection, but the sortable wrapper is the parent. Render prop `children: (dragHandle: ReactNode) => ReactNode` passes the handle in without coupling LineItemSection to dnd-kit. sort_order exists on both estimate_sections and estimate_line_items (migration 025) — no new migration needed. Items filtered with `.sort((a, b) => a.sortOrder - b.sortOrder)` after reorder to guarantee display order regardless of array position. | Global context for drag handle (prop drilling); dnd-kit imports in LineItemSection (couples component to dnd-kit) |
 | 2026-05-28 | extractedMenuToMenuCourses moved to src/lib/slideCopy/menuMapping.ts — not in actions.ts | Next.js requires all exports in a 'use server' file to be async functions. extractedMenuToMenuCourses is a synchronous utility — can't live in actions.ts. Moved to a plain TS module; SlideCopySection imports from there instead. | Keep in actions.ts (Vercel build failure); make it async (wrong semantics for a pure transform) |
+| 2026-06-01 | Summary panel labels derived from live sections (labelForBucket helper) | Hardcoded strings ("Floral Product", "Taxable AV Equipment") were disconnected from user-renamed sections. Engine taxBucket controls pricing; display label now reads from sections array. | Keep hardcoded labels (rejected — bug) |
+| 2026-06-01 | Production fee taxed: new formula adds productionFeeTax to totalClient | Alex invoices include prod fee; clients pay tax on it. QC margin unchanged (prod fee tax is a pass-through). subtotalClient (tax-inclusive line items) remains the production fee calculation base — no circular dependency. | Apply before productionFee (circular), separate tax line (unnecessary complexity) |
+| 2026-06-01 | Merge dialog: field comparison shows only differing fields; survivor pre-selected by updated_at | Most recently updated record is likeliest to be "correct." User can override. Confirmation step + warning before delete. | Show all fields (overwhelming with 40+ lead fields) |
+| 2026-06-01 | ThumbnailCell: icon picker inline popover, photo via base64 upload to server action | API key never reaches browser. suggestIcon() keyword matching is instant + free; Claude API would add latency per new item. Icon SVGs in react-pdf are complex — photos shown via Image, icons show a placeholder square. | Client-side Claude call (rejected — exposes key) |
 
 ## Gotchas Log
 
@@ -299,6 +303,11 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Migration 026 run in production — slide_copy_data JSONB column live
 - [x] Drag-and-drop reordering — dnd-kit, SortableSectionItem render prop, SortableItemRow in LineItemSection; reorderSections + reorderLineItems server actions; all 3 builders; persists to DB via sort_order column (migration 025)
 - [x] Vercel build fix — extractedMenuToMenuCourses moved from actions.ts to src/lib/slideCopy/menuMapping.ts (synchronous exports not allowed in 'use server' files)
+- [x] Summary panel labels dynamically derived from live section names (sectionLabels.ts helper, labelForBucket); DecorSummaryPanel uses per-section totals instead of hardcoded Floral/Rentals split; SlideCopySection summaryRow labels also derived from sections; 5 new sectionLabels tests (230 total)
+- [x] Production fee taxed at general sales rate — new EstimateSummary fields: productionFeeTax, lineItemsSubtotalClient, preTaxTotal; calculateMarginAnalysis.totalTaxes includes productionFeeTax; all summary panels (Venue/AV/Decor) show new format Subtotal→Production Fee→Pre-Tax Total→Tax→Total; PDF updated; 7 new tests + updated expected values (237 total)
+- [x] Google Maps travel time: better error messages (key-absent vs API-error), fetchMapsDistance logs failures to server, try/catch around server action call in SlideCopySection
+- [x] Merge duplicate leads/programs: checkboxes on leads table and programs table; MergeLeadsDialog and MergeProgramsDialog show side-by-side field comparison (most recently updated is default survivor, radio buttons per differing field, confirmation step); mergeLeads re-points linked programs; mergePrograms moves estimates+events to survivor; LeadRow refactored into LeadRowCells
+- [x] Line item thumbnails: migration 027 (thumbnail_url, thumbnail_icon on estimate_line_items); ThumbnailCell component with Lucide icon picker (18 icons) and Supabase Storage photo upload; client-side suggestIcon() keyword matcher; display in all 3 builders; PDF shows uploaded photos; lucide-react installed
 
 ### Remaining
 - [ ] **Provision GOOGLE_MAPS_API_KEY** — set in Vercel env vars with Distance Matrix API enabled; until then drive time returns an error in production
@@ -307,8 +316,9 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- Provision GOOGLE_MAPS_API_KEY in Vercel — Distance Matrix API must be enabled in GCP console.
-- Test the full Slide Copy flow on a real estimate: fill in venue URL, generate bio, calculate drive time, load menu from PDF, toggle preview.
-- Tell Alex about the Bright Darling substitute.
-- Proposal validation against Excel is the next quality check.
+- Provision GOOGLE_MAPS_API_KEY in Vercel — Distance Matrix API must be enabled in GCP console; drive time shows an error in production until this is set.
+- Tell Alex about the Bright Darling substitute (Cormorant Garamond in preview; she swaps in Canva).
+- Migration 027 (thumbnail_url, thumbnail_icon) — confirm it has been run in production before testing thumbnails.
+- Proposal validation against Excel is the next quality check — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values.
 - Scanner is live and working. Run `npm run dedup` if duplicate leads accumulate.
+- Role-based access (admin vs user UI enforcement) is the remaining backlog item after Excel validation.
