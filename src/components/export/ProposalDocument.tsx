@@ -93,6 +93,7 @@ export interface ProposalDocumentProps {
   guestCount: number;
   summary: EstimateSummary;
   lineItems: LineItemForExport[];
+  orderedSections?: string[];
   estimateType: 'venue' | 'av' | 'decor';
   proposalDate: string;
   taxExempt?: boolean;
@@ -109,6 +110,7 @@ export default function ProposalDocument({
   guestCount,
   summary,
   lineItems,
+  orderedSections,
   proposalDate,
   taxExempt = false,
   logoSrc,
@@ -116,8 +118,9 @@ export default function ProposalDocument({
 }: ProposalDocumentProps) {
   const proposalNumber = estimateId.slice(0, 8).toUpperCase();
 
-  // Group items by section, filter out $0 items
-  const sections = Array.from(new Set(lineItems.map((li) => li.section)));
+  // Use caller-supplied section order (preserves user drag-and-drop order).
+  // Fall back to insertion order from lineItems if not provided.
+  const sections = orderedSections ?? Array.from(new Set(lineItems.map((li) => li.section)));
   const totalTax = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax + summary.productionFeeTax;
 
   return (

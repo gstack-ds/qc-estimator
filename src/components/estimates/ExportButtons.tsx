@@ -24,6 +24,7 @@ interface Props {
   guestCount: number;
   estimateType?: 'venue' | 'av' | 'decor';
   lineItems: LineItemForExport[];
+  orderedSections?: string[];
   markups: MarkupForExport[];
   taxExempt?: boolean;
   location?: Location | null;
@@ -42,6 +43,7 @@ export default function ExportButtons({
   guestCount,
   estimateType = 'venue',
   lineItems,
+  orderedSections,
   markups,
   taxExempt = false,
   location,
@@ -83,6 +85,7 @@ export default function ExportButtons({
         guestCount,
         summary,
         lineItems,
+        orderedSections,
         estimateType,
         proposalDate,
         taxExempt,
