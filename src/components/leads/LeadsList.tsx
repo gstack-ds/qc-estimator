@@ -7,6 +7,7 @@ import type { DbLead, DbTeamMember, LeadStatus, LeadStatusGroup } from '@/lib/su
 import { OPEN_STATUSES, PAUSED_STATUSES, CLOSED_STATUSES } from '@/lib/leads/constants';
 import LeadStatusBadge from './LeadStatusBadge';
 import { createLead, updateLead, bulkArchiveLeads, deleteLead, type LeadInput } from '@/app/(programs)/leads/actions';
+import MergeLeadsDialog from './MergeLeadsDialog';
 
 // ─── Constants ─────────────────────────────────────────────
 
@@ -309,20 +310,19 @@ function LeadCard({ lead, teamMembers, isNew, onSave }: {
 
 // ─── Lead Row ─────────────────────────────────────────────
 
-function LeadRow({ lead, teamMembers, isNew, onRowClick, onSave, onDelete }: {
+function LeadRowCells({ lead, teamMembers, isNew, onSave, onDelete }: {
   lead: DbLead;
   teamMembers: DbTeamMember[];
   isNew: boolean;
-  onRowClick: () => void;
   onSave: (id: string, field: keyof LeadInput, value: string | number | null) => void;
   onDelete: (e: React.MouseEvent, id: string) => void;
 }) {
   const stopProp = (e: React.MouseEvent) => e.stopPropagation();
 
   return (
-    <tr onClick={onRowClick} className="group cursor-pointer hover:bg-brand-offwhite transition-colors">
+    <>
       {/* Client */}
-      <td className="px-3 py-2.5 font-medium text-brand-charcoal whitespace-nowrap sticky left-0 z-10 bg-white group-hover:bg-brand-offwhite transition-colors">
+      <td className="px-3 py-2.5 font-medium text-brand-charcoal whitespace-nowrap sticky left-8 z-10 bg-white group-hover:bg-brand-offwhite transition-colors">
         <span className="flex items-center gap-1.5">
           {lead.client_name ?? <span className="text-brand-silver">—</span>}
           {isNew && (
@@ -460,7 +460,7 @@ function LeadRow({ lead, teamMembers, isNew, onRowClick, onSave, onDelete }: {
           </svg>
         </button>
       </td>
-    </tr>
+    </>
   );
 }
 
@@ -485,6 +485,9 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
   const [showArchiveOld, setShowArchiveOld] = useState(false);
   const [archiveCutoff, setArchiveCutoff] = useState('2025-12-31');
   const [archiving, setArchiving] = useState(false);
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
 
   const [localEdits, setLocalEdits] = useState<Map<string, Partial<DbLead>>>(new Map());
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
@@ -647,6 +650,14 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
               {teamMembers.map((m) => <option key={m.id} value={String(m.id)}>{m.first_name} {m.last_name}</option>)}
             </select>
           )}
+          {selectedIds.size >= 2 && (
+            <button
+              onClick={() => setShowMergeDialog(true)}
+              className="text-xs font-medium rounded px-3 py-1.5 border border-brand-copper text-brand-copper hover:bg-brand-copper/10 transition-colors"
+            >
+              Merge {selectedIds.size} selected
+            </button>
+          )}
           <button
             onClick={() => setShowArchiveOld((v) => !v)}
             className="text-xs font-medium rounded px-3 py-1.5 border border-brand-cream text-brand-charcoal/60 hover:text-brand-charcoal hover:border-brand-charcoal/30 transition-colors"
@@ -744,11 +755,22 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
             <table className="text-sm">
               <thead className="bg-brand-offwhite border-b border-brand-cream sticky top-0 z-20">
                 <tr>
+                  <th className={thCls + ' w-8'}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.size > 0 && displayLeads.every((l) => selectedIds.has(l.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedIds(new Set(displayLeads.map((l) => l.id)));
+                        else setSelectedIds(new Set());
+                      }}
+                      className="accent-brand-brown"
+                    />
+                  </th>
                   {colHeaders.map(({ label, key }) =>
                     key ? (
                       <th
                         key={label}
-                        className={thSortCls + (label === 'Client' ? ' sticky left-0 z-30 bg-brand-offwhite' : '')}
+                        className={thSortCls + (label === 'Client' ? ' sticky left-8 z-30 bg-brand-offwhite' : '')}
                         onClick={() => toggleSort(key)}
                       >
                         {label}{sortIcon(key)}
@@ -762,15 +784,29 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
 
               <tbody className="divide-y divide-brand-cream/60">
                 {displayLeads.map((lead) => (
-                  <LeadRow
-                    key={lead.id}
-                    lead={lead}
-                    teamMembers={teamMembers}
-                    isNew={nowMs - new Date(lead.created_at).getTime() < NEW_THRESHOLD_MS}
-                    onRowClick={() => router.push(`/leads/${lead.id}`)}
-                    onSave={saveCellChange}
-                    onDelete={handleDeleteLead}
-                  />
+                  <tr key={lead.id} className="group cursor-pointer hover:bg-brand-offwhite transition-colors" onClick={() => router.push(`/leads/${lead.id}`)}>
+                    <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(lead.id)}
+                        onChange={(e) => {
+                          setSelectedIds((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(lead.id); else next.delete(lead.id);
+                            return next;
+                          });
+                        }}
+                        className="accent-brand-brown"
+                      />
+                    </td>
+                    <LeadRowCells
+                      lead={lead}
+                      teamMembers={teamMembers}
+                      isNew={nowMs - new Date(lead.created_at).getTime() < NEW_THRESHOLD_MS}
+                      onSave={saveCellChange}
+                      onDelete={handleDeleteLead}
+                    />
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -782,6 +818,14 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
         <p className="text-[10px] text-brand-silver mt-2 text-right">
           {totalLeads} lead{totalLeads !== 1 ? 's' : ''}
         </p>
+      )}
+
+      {showMergeDialog && selectedIds.size >= 2 && (
+        <MergeLeadsDialog
+          leads={effectiveLeads.filter((l) => selectedIds.has(l.id))}
+          teamMembers={teamMembers}
+          onClose={() => { setShowMergeDialog(false); setSelectedIds(new Set()); }}
+        />
       )}
     </>
   );

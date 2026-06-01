@@ -152,6 +152,50 @@ export async function deleteProgram(programId: string) {
   return { error: null };
 }
 
+export async function fetchProgramsByIds(ids: string[]) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('programs')
+    .select('id, name, client_name, event_date, guest_count, company_name, client_hotel, location_id, updated_at')
+    .in('id', ids);
+  if (error) return { error: error.message, programs: null };
+  return { error: null, programs: data ?? [] };
+}
+
+export async function mergePrograms(
+  survivingId: string,
+  duplicateIds: string[],
+  fieldValues: Record<string, unknown>,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+
+  if (Object.keys(fieldValues).length > 0) {
+    const { error } = await supabase.from('programs').update(fieldValues).eq('id', survivingId);
+    if (error) return { error: error.message };
+  }
+
+  // Move estimates and events from duplicates to survivor
+  if (duplicateIds.length > 0) {
+    const { error: estErr } = await supabase
+      .from('estimates')
+      .update({ program_id: survivingId })
+      .in('program_id', duplicateIds);
+    if (estErr) return { error: estErr.message };
+
+    const { error: evtErr } = await supabase
+      .from('events')
+      .update({ program_id: survivingId })
+      .in('program_id', duplicateIds);
+    if (evtErr) return { error: evtErr.message };
+
+    const { error: delErr } = await supabase.from('programs').delete().in('id', duplicateIds);
+    if (delErr) return { error: delErr.message };
+  }
+
+  revalidatePath('/programs');
+  return { error: null };
+}
+
 // ─── Program Attachments ──────────────────────────────────
 
 export interface ExtractedProgramBrief {

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import type { DbProgramSummary } from '@/lib/supabase/queries';
+import MergeProgramsDialog from '@/components/programs/MergeProgramsDialog';
 
 interface Props {
   programs: DbProgramSummary[];
@@ -15,6 +16,8 @@ function formatDate(val: string | null) {
 
 export default function ProgramsTable({ programs }: Props) {
   const [query, setQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
 
   const filtered = query.trim()
     ? programs.filter((p) => {
@@ -28,13 +31,23 @@ export default function ProgramsTable({ programs }: Props) {
 
   return (
     <div className="space-y-4">
-      <input
-        type="search"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search programs or clients…"
-        className="w-full max-w-sm border border-brand-cream rounded px-3 py-2 text-sm bg-white text-brand-charcoal placeholder:text-brand-silver focus:outline-none focus:ring-2 focus:ring-brand-copper focus:border-brand-brown transition-colors"
-      />
+      <div className="flex items-center gap-3">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search programs or clients…"
+          className="w-full max-w-sm border border-brand-cream rounded px-3 py-2 text-sm bg-white text-brand-charcoal placeholder:text-brand-silver focus:outline-none focus:ring-2 focus:ring-brand-copper focus:border-brand-brown transition-colors"
+        />
+        {selectedIds.size >= 2 && (
+          <button
+            onClick={() => setShowMergeDialog(true)}
+            className="text-xs font-medium rounded px-3 py-2 border border-brand-copper text-brand-copper hover:bg-brand-copper/10 transition-colors whitespace-nowrap"
+          >
+            Merge {selectedIds.size} selected
+          </button>
+        )}
+      </div>
 
       {filtered.length === 0 ? (
         <div className="text-center py-16 border border-dashed border-brand-cream rounded-lg">
@@ -50,6 +63,17 @@ export default function ProgramsTable({ programs }: Props) {
           <table className="w-full min-w-[600px] text-sm">
             <thead className="bg-brand-offwhite border-b border-brand-cream">
               <tr>
+                <th className="px-4 py-3 w-8">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.size > 0 && filtered.every((p) => selectedIds.has(p.id))}
+                    onChange={(e) => {
+                      if (e.target.checked) setSelectedIds(new Set(filtered.map((p) => p.id)));
+                      else setSelectedIds(new Set());
+                    }}
+                    className="accent-brand-brown"
+                  />
+                </th>
                 <th className="text-left px-4 py-3 font-medium text-brand-charcoal/70 text-xs tracking-wide uppercase">Program</th>
                 <th className="text-left px-4 py-3 font-medium text-brand-charcoal/70 text-xs tracking-wide uppercase">Client</th>
                 <th className="text-right px-4 py-3 font-medium text-brand-charcoal/70 text-xs tracking-wide uppercase w-24">Estimates</th>
@@ -61,6 +85,20 @@ export default function ProgramsTable({ programs }: Props) {
             <tbody className="divide-y divide-brand-cream/60">
               {filtered.map((program) => (
                 <tr key={program.id} className="hover:bg-brand-offwhite transition-colors">
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(program.id)}
+                      onChange={(e) => {
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(program.id); else next.delete(program.id);
+                          return next;
+                        });
+                      }}
+                      className="accent-brand-brown"
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <Link
                       href={`/programs/${program.id}`}
@@ -93,6 +131,13 @@ export default function ProgramsTable({ programs }: Props) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {showMergeDialog && selectedIds.size >= 2 && (
+        <MergeProgramsDialog
+          programIds={[...selectedIds]}
+          onClose={() => { setShowMergeDialog(false); setSelectedIds(new Set()); }}
+        />
       )}
     </div>
   );

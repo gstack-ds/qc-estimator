@@ -157,3 +157,31 @@ export async function createProgramFromLead(leadId: string): Promise<{ error: st
   revalidatePath('/programs');
   return { error: null, programId: program.id as string };
 }
+
+export async function mergeLeads(
+  survivingId: string,
+  duplicateIds: string[],
+  fieldValues: LeadInput,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+
+  if (Object.keys(fieldValues).length > 0) {
+    const { error } = await supabase.from('leads').update(fieldValues).eq('id', survivingId);
+    if (error) return { error: error.message };
+  }
+
+  // Re-point linked programs to the surviving lead
+  if (duplicateIds.length > 0) {
+    const { error } = await supabase
+      .from('programs')
+      .update({ lead_id: survivingId })
+      .in('lead_id', duplicateIds);
+    if (error) return { error: error.message };
+
+    const { error: delErr } = await supabase.from('leads').delete().in('id', duplicateIds);
+    if (delErr) return { error: delErr.message };
+  }
+
+  revalidatePath('/leads');
+  return { error: null };
+}
