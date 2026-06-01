@@ -4,6 +4,8 @@ import { useState } from 'react';
 import type { TaxType, Location } from '@/types';
 import type { DbMarkup } from '@/lib/supabase/queries';
 import type { LocalLineItem } from './EstimateBuilder';
+import ThumbnailCell from './ThumbnailCell';
+import { suggestIcon } from '@/lib/utils/suggestIcon';
 
 interface Props {
   item: LocalLineItem;
@@ -91,7 +93,15 @@ export default function LineItemRow({ item, markups, location, showTaxToggle, gu
 
   return (
     <div className="border-b border-brand-cream/40 last:border-0">
-    <div className="grid items-center gap-2 py-1.5" style={{ gridTemplateColumns: '2fr 60px 90px 130px 100px 60px 80px 80px 20px 20px' }}>
+    <div className="grid items-center gap-2 py-1.5" style={{ gridTemplateColumns: '32px 2fr 60px 90px 130px 100px 60px 80px 80px 20px 20px' }}>
+      {/* Thumbnail */}
+      <ThumbnailCell
+        lineItemId={item.id}
+        thumbnailUrl={item.thumbnailUrl}
+        thumbnailIcon={item.thumbnailIcon}
+        suggestedIcon={!item.thumbnailUrl && !item.thumbnailIcon ? suggestIcon(item.name) : undefined}
+        onChange={(patch) => { onChange(item.id, patch); onBlur(item.id); }}
+      />
       {/* Name + Label + Revenue toggle */}
       <div className="flex flex-col gap-0.5">
         <input

@@ -14,6 +14,8 @@ export interface LineItemForExport {
   customClientUnitPrice?: number;
   taxType: string;
   isRevenueItem?: boolean;
+  thumbnailUrl?: string | null;
+  thumbnailIcon?: string | null;
 }
 
 export interface MarkupForExport {

@@ -188,7 +188,14 @@ export default function ProposalDocument({
                   : null;
                 return (
                   <View key={idx} style={[styles.row, idx % 2 === 1 ? styles.rowAlt : {}]}>
-                    <Text style={[styles.cell, styles.colItem]}>{item.name}</Text>
+                    <View style={[styles.colItem, { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8 }]}>
+                      {item.thumbnailUrl ? (
+                        <Image src={item.thumbnailUrl} style={{ width: 18, height: 18, borderRadius: 3, flexShrink: 0 }} />
+                      ) : item.thumbnailIcon ? (
+                        <View style={{ width: 18, height: 18, borderRadius: 3, backgroundColor: '#E8E0D5', flexShrink: 0 }} />
+                      ) : null}
+                      <Text style={styles.cell}>{item.name}</Text>
+                    </View>
                     <Text style={[styles.cell, styles.colQty]}>{item.qty}</Text>
                     <Text style={[styles.cell, styles.colPrice]}>{fmt(unitPrice)}</Text>
                     <View style={styles.colTax}>

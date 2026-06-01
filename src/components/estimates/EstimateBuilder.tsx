@@ -50,6 +50,8 @@ export interface LocalLineItem {
   isRevenueItem?: boolean;
   sortOrder: number;
   isNew?: boolean;
+  thumbnailUrl?: string | null;
+  thumbnailIcon?: string | null;
 }
 
 interface LocalEstimate {
@@ -139,6 +141,8 @@ function dbItemToLocal(item: DbLineItem, markups: DbMarkup[], sections: LocalSec
     customClientUnitPrice: isCustom ? item.custom_client_unit_price! : undefined,
     isRevenueItem: item.is_revenue_item,
     sortOrder: item.sort_order,
+    thumbnailUrl: item.thumbnail_url,
+    thumbnailIcon: item.thumbnail_icon,
   };
 }
 
@@ -414,6 +418,8 @@ export default function EstimateBuilder({
       markup_override: isOverridden ? item.categoryMarkupPct : null,
       is_revenue_item: item.isRevenueItem ?? false,
       sort_order: item.sortOrder,
+      thumbnail_url: item.thumbnailUrl ?? null,
+      thumbnail_icon: item.thumbnailIcon ?? null,
     }));
 
     if (item.isNew && result.id) {

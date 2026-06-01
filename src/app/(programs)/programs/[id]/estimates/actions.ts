@@ -241,6 +241,8 @@ export async function upsertLineItem(data: {
   markup_override?: number | null;
   is_revenue_item?: boolean;
   sort_order: number;
+  thumbnail_url?: string | null;
+  thumbnail_icon?: string | null;
 }) {
   const supabase = await createClient();
 
@@ -260,6 +262,8 @@ export async function upsertLineItem(data: {
         markup_override: data.markup_override ?? null,
         is_revenue_item: data.is_revenue_item ?? false,
         sort_order: data.sort_order,
+        thumbnail_url: data.thumbnail_url ?? null,
+        thumbnail_icon: data.thumbnail_icon ?? null,
       })
       .eq('id', data.id);
     if (error) return { error: error.message, id: data.id };
@@ -281,6 +285,8 @@ export async function upsertLineItem(data: {
         markup_override: data.markup_override ?? null,
         is_revenue_item: data.is_revenue_item ?? false,
         sort_order: data.sort_order,
+        thumbnail_url: data.thumbnail_url ?? null,
+        thumbnail_icon: data.thumbnail_icon ?? null,
       })
       .select('id')
       .single();
@@ -294,6 +300,23 @@ export async function deleteLineItem(id: string) {
   const { error } = await supabase.from('estimate_line_items').delete().eq('id', id);
   if (error) return { error: error.message };
   return { error: null };
+}
+
+export async function uploadLineItemThumbnail(
+  lineItemId: string,
+  base64Data: string,
+  mimeType: string,
+): Promise<{ error: string | null; url: string | null }> {
+  const supabase = await createClient();
+  const ext = mimeType.split('/')[1] ?? 'jpg';
+  const path = `line-item-thumbnails/${lineItemId}.${ext}`;
+  const buffer = Buffer.from(base64Data, 'base64');
+  const { error } = await supabase.storage
+    .from('estimates')
+    .upload(path, buffer, { contentType: mimeType, upsert: true });
+  if (error) return { error: error.message, url: null };
+  const { data } = supabase.storage.from('estimates').getPublicUrl(path);
+  return { error: null, url: data.publicUrl };
 }
 
 // ─── Estimate Trips ───────────────────────────────────────
