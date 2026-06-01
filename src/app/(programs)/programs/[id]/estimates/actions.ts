@@ -582,7 +582,7 @@ function getExtractionPrompt(type: 'venue' | 'av' | 'decor' | 'transportation'):
     '- venueName (string, optional)\n' +
     '- roomSpace (string, optional)\n' +
     '- isSampleMenu (boolean) — true if the PDF is labeled "sample menu," "to be finalized," or similar\n' +
-    '- menuItems: array of PRICING PACKAGES — aim for 5–10 total. Each package:\n' +
+    '- menuItems: array of PRICING PACKAGES — extract EVERY package listed. Do not omit any. Each package:\n' +
     '  { name (e.g. "Plated Dinner", "Cocktail Hour Passed Apps", "Premium Open Bar (3hr)"),\n' +
     '    pricePerPerson (number),\n' +
     '    category ("food" | "alcohol" | "na_beverage"),\n' +
@@ -655,7 +655,7 @@ export async function extractFromText(
     const textBlock: TextBlockParam = { type: 'text', text: prompt };
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
+      max_tokens: 16000,
       messages: [{ role: 'user', content: [textBlock] }],
     });
     responseText = (response.content.find((c) => c.type === 'text') as { type: 'text'; text: string } | undefined)?.text ?? '';
@@ -731,7 +731,7 @@ export async function extractAttachmentData(
     const textBlock: TextBlockParam = { type: 'text', text: getExtractionPrompt(estimateType) };
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
+      max_tokens: 16000,
       messages: [{ role: 'user', content: [docBlock, textBlock] }],
     });
     text = (response.content.find((c) => c.type === 'text') as { type: 'text'; text: string } | undefined)?.text ?? '';
