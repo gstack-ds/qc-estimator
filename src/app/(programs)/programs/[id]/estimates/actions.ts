@@ -954,10 +954,16 @@ async function fetchMapsDistance(origin: string, destination: string, mode: 'dri
   if (!key) return null;
   const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origin)}&destinations=${encodeURIComponent(destination)}&mode=${mode}&key=${key}`;
   const res = await fetch(url);
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.error(`[Maps] HTTP ${res.status} for ${mode}:`, await res.text().catch(() => ''));
+    return null;
+  }
   const data = await res.json() as MapsDistanceResponse;
   const el = data?.rows?.[0]?.elements?.[0];
-  if (!el || el.status !== 'OK' || !el.distance || !el.duration) return null;
+  if (!el || el.status !== 'OK' || !el.distance || !el.duration) {
+    console.error(`[Maps] Element status for ${mode}:`, el?.status ?? 'missing', JSON.stringify(data?.status));
+    return null;
+  }
   return { distanceMeters: el.distance.value, durationSeconds: el.duration.value };
 }
 
@@ -988,13 +994,17 @@ export async function getTravelTime(
     };
   }
 
+  if (!process.env.GOOGLE_MAPS_API_KEY) {
+    return { error: 'Google Maps API key is not configured. Ask your admin to add GOOGLE_MAPS_API_KEY in Vercel environment variables.', result: null };
+  }
+
   const [driving, walking] = await Promise.all([
     fetchMapsDistance(hotelAddress, venueAddress, 'driving'),
     fetchMapsDistance(hotelAddress, venueAddress, 'walking'),
   ]);
 
   if (!driving) {
-    return { error: 'Could not calculate drive time. Check that GOOGLE_MAPS_API_KEY is set and addresses are valid.', result: null };
+    return { error: 'Travel time calculation failed. Verify that the Distance Matrix API is enabled in Google Cloud Console and billing is active on the project.', result: null };
   }
 
   const distanceMiles = driving.distanceMeters / 1609.344;

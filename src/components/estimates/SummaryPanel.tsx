@@ -1,10 +1,13 @@
 import type { ReactNode } from 'react';
 import type { EstimateSummary, SummaryMathRates } from '@/types';
+import { labelForBucket } from '@/lib/utils/sectionLabels';
+import type { SectionRef } from '@/lib/utils/sectionLabels';
 
 interface Props {
   summary: EstimateSummary;
   guestCount: number;
   fbMinimum: number;
+  sections?: SectionRef[];
   showMath?: boolean;
   mathRates?: SummaryMathRates;
 }
@@ -57,9 +60,14 @@ function Divider() {
   return <div className="border-t border-brand-cream/60 my-1.5" />;
 }
 
-export default function SummaryPanel({ summary, guestCount, fbMinimum, showMath, mathRates }: Props) {
+export default function SummaryPanel({ summary, guestCount, fbMinimum, sections, showMath, mathRates }: Props) {
   const pp = (val: number) => guestCount > 0 ? Math.ceil(val / guestCount) : 0;
   const markupRevenue = summary.subtotalClient - summary.foodTax - summary.alcoholTax - summary.equipmentTax - summary.venueTax;
+  const s = sections ?? [];
+  const fbLabel = labelForBucket(s, 'fb', 'F&B');
+  const equipLabel = labelForBucket(s, 'equipment', 'Equipment & Staffing');
+  const staffingLabel = labelForBucket(s, 'staffing', 'QC Staffing');
+  const venueLabel = labelForBucket(s, 'venue', 'Venue Rental');
 
   return (
     <div className="bg-white border border-brand-cream rounded-lg p-4 space-y-0.5">
@@ -68,7 +76,7 @@ export default function SummaryPanel({ summary, guestCount, fbMinimum, showMath,
       </h3>
 
       {/* F&B */}
-      <Row label="F&B Subtotal" value={summary.fbSubtotalClient} pp={pp(summary.fbSubtotalClient)} showMath={showMath} />
+      <Row label={`${fbLabel} Subtotal`} value={summary.fbSubtotalClient} pp={pp(summary.fbSubtotalClient)} showMath={showMath} />
       <Row label="Food Tax" value={summary.foodTax} indent dim showMath={showMath}
         math={mathRates && summary.fbFoodSubtotalClient > 0 ? `$${fmtM(summary.fbFoodSubtotalClient)} × ${pctM(mathRates.foodTaxRate)}` : undefined}
       />
@@ -88,7 +96,7 @@ export default function SummaryPanel({ summary, guestCount, fbMinimum, showMath,
       <Divider />
 
       {/* Equipment */}
-      <Row label="Equipment & Staffing" value={summary.equipmentSubtotalClient} pp={pp(summary.equipmentSubtotalClient)} showMath={showMath} />
+      <Row label={equipLabel} value={summary.equipmentSubtotalClient} pp={pp(summary.equipmentSubtotalClient)} showMath={showMath} />
       <Row label="Equipment Tax" value={summary.equipmentTax} indent dim showMath={showMath}
         math={mathRates ? `$${fmtM(summary.equipmentSubtotalClient)} × ${pctM(mathRates.generalTaxRate)}` : undefined}
       />
@@ -96,12 +104,12 @@ export default function SummaryPanel({ summary, guestCount, fbMinimum, showMath,
       <Divider />
 
       {/* QC Staffing */}
-      <Row label="QC Staffing" value={summary.qcStaffingSubtotalClient} pp={pp(summary.qcStaffingSubtotalClient)} showMath={showMath} />
+      <Row label={staffingLabel} value={summary.qcStaffingSubtotalClient} pp={pp(summary.qcStaffingSubtotalClient)} showMath={showMath} />
 
       <Divider />
 
       {/* Venue */}
-      <Row label="Venue Rental" value={summary.venueSubtotalClient} pp={pp(summary.venueSubtotalClient)} showMath={showMath} />
+      <Row label={venueLabel} value={summary.venueSubtotalClient} pp={pp(summary.venueSubtotalClient)} showMath={showMath} />
       <Row label="Venue Tax" value={summary.venueTax} indent dim showMath={showMath}
         math={mathRates ? `$${fmtM(summary.venueSubtotalClient)} × ${pctM(mathRates.generalTaxRate)}` : undefined}
       />

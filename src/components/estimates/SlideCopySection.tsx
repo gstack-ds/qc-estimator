@@ -17,12 +17,19 @@ interface SlideCopyLineItem {
   isRevenueItem?: boolean;
 }
 
+// Minimal shape for sections — avoids importing LocalSectionDef
+interface SlideCopySectionRef {
+  taxBucket: string;
+  name: string;
+}
+
 interface Props {
   estimate: DbEstimate;
   program: DbProgram;
   event: DbEvent | null;
   summary: EstimateSummary;
   lineItems: SlideCopyLineItem[];
+  sections?: SlideCopySectionRef[];
   initialData: SlideCopyData | null;
   venueName?: string;
   venueSpaceName?: string;
@@ -96,7 +103,7 @@ const INCLUSION_LABELS: [keyof Omit<InclusionToggles, 'customInclusion'>, string
 // ─── Main component ───────────────────────────────────────
 
 export default function SlideCopySection({
-  estimate, program, event, summary, lineItems, initialData, venueName, venueSpaceName, venueAddress,
+  estimate, program, event, summary, lineItems, sections, initialData, venueName, venueSpaceName, venueAddress,
   pendingMenuData, onPendingMenuConsumed,
 }: Props) {
   const [venueUrl, setVenueUrl] = useState(initialData?.venueUrl ?? '');
@@ -169,7 +176,13 @@ export default function SlideCopySection({
     }
     setTravelLoading(true);
     setTravelError(null);
-    const { error, result } = await getTravelTime(hotel, venue, date, time, hotel);
+    let error: string | null = null;
+    let result = null;
+    try {
+      ({ error, result } = await getTravelTime(hotel, venue, date, time, hotel));
+    } catch {
+      error = 'Unexpected error calculating travel time. Check server logs.';
+    }
     setTravelLoading(false);
     if (error) { setTravelError(error); return; }
     setTravelResult(result);
@@ -209,11 +222,16 @@ export default function SlideCopySection({
   ].filter(Boolean).join('\n');
 
   const totalTaxes = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax;
+  const s = sections ?? [];
+  const venueLabel = s.find((sec) => sec.taxBucket === 'venue')?.name ?? 'Venue Rental';
+  const fbLabel = s.find((sec) => sec.taxBucket === 'fb')?.name ?? 'Food and Beverage';
+  const staffingLabel = s.find((sec) => sec.taxBucket === 'staffing')?.name ?? 'Bar Staffing';
+  const equipLabel = s.find((sec) => sec.taxBucket === 'equipment')?.name ?? 'Catering Equipment and Staffing';
   const summaryRows = ([
-    ['Venue Rental', summary.venueSubtotalClient],
-    ['Food and Beverage', summary.fbSubtotalClient],
-    ['Bar Staffing', summary.qcStaffingSubtotalClient],
-    ['Catering Equipment and Staffing', summary.equipmentSubtotalClient],
+    [venueLabel, summary.venueSubtotalClient],
+    [fbLabel, summary.fbSubtotalClient],
+    [staffingLabel, summary.qcStaffingSubtotalClient],
+    [equipLabel, summary.equipmentSubtotalClient],
     ['Service Charge', summary.serviceChargeClient],
     ['Gratuity', summary.gratuityClient],
     ['Production Fee', summary.productionFee],

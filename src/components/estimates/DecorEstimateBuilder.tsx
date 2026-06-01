@@ -5,6 +5,7 @@ import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, us
 import type { DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import type { TaxType, TaxBucket } from '@/types';
+import type { SectionTotal } from '@/lib/utils/sectionLabels';
 import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation, DbEstimateSection } from '@/lib/supabase/queries';
 import { calculateVenueEstimate, calculateMarginAnalysis } from '@/lib/engine/pricing';
 import type { ProgramConfig, TeamHoursTier } from '@/types';
@@ -200,19 +201,21 @@ export default function DecorEstimateBuilder({
     generalTaxRate: programConfig.location.generalTaxRate,
   }), [programConfig]);
 
-  // Compute summary panel breakdown values dynamically from sections
-  const floralTaxableClient = useMemo(
-    () => lineItems.filter((li) => li.taxBucket === 'equipment' && li.taxType !== 'none').reduce((s, li) => s + itemClientCost(li), 0),
-    [lineItems]
-  );
-  const floralNonTaxableClient = useMemo(
-    () => lineItems.filter((li) => li.taxBucket === 'equipment' && li.taxType === 'none').reduce((s, li) => s + itemClientCost(li), 0),
-    [lineItems]
-  );
-  const rentalsTaxableClient = 0;
-  const rentalsNonTaxableClient = useMemo(
-    () => lineItems.filter((li) => li.taxBucket === 'staffing').reduce((s, li) => s + itemClientCost(li), 0),
-    [lineItems]
+  // Per-section totals — drives DecorSummaryPanel rows with live section names
+  const sectionTotals = useMemo<SectionTotal[]>(
+    () =>
+      sections
+        .map((sec) => ({
+          id: sec.id,
+          name: sec.name,
+          taxBucket: sec.taxBucket,
+          sortOrder: sec.sortOrder,
+          total: lineItems
+            .filter((li) => li.sectionId === sec.id)
+            .reduce((sum, li) => sum + itemClientCost(li), 0),
+        }))
+        .filter((s) => s.total > 0),
+    [sections, lineItems]
   );
 
   // ─── Cache total ─────────────────────────────────────────
@@ -795,10 +798,7 @@ export default function DecorEstimateBuilder({
           <DecorSummaryPanel
             summary={summary}
             guestCount={program.guest_count}
-            floralTaxableClient={floralTaxableClient}
-            floralNonTaxableClient={floralNonTaxableClient}
-            rentalsTaxableClient={rentalsTaxableClient}
-            rentalsNonTaxableClient={rentalsNonTaxableClient}
+            sectionTotals={sectionTotals}
             showMath={showMath}
             mathRates={mathRates}
           />

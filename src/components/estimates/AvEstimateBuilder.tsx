@@ -733,7 +733,7 @@ export default function AvEstimateBuilder({
 
         {/* Right sidebar */}
         <div className="w-72 flex-shrink-0 border-l border-brand-cream bg-brand-offwhite overflow-y-auto p-4 space-y-4">
-          <AvSummaryPanel summary={summary} guestCount={program.guest_count} showMath={showMath} mathRates={mathRates} />
+          <AvSummaryPanel summary={summary} guestCount={program.guest_count} sections={sections} showMath={showMath} mathRates={mathRates} />
           <MarginPanel margin={marginAnalysis} summary={summary} showMath={showMath} />
         </div>
       </div>

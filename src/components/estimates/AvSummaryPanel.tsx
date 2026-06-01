@@ -1,8 +1,11 @@
 import type { EstimateSummary, SummaryMathRates } from '@/types';
+import { labelForBucket } from '@/lib/utils/sectionLabels';
+import type { SectionRef } from '@/lib/utils/sectionLabels';
 
 interface Props {
   summary: EstimateSummary;
   guestCount: number;
+  sections?: SectionRef[];
   showMath?: boolean;
   mathRates?: SummaryMathRates;
 }
@@ -55,9 +58,12 @@ function Divider() {
   return <div className="border-t border-brand-cream/60 my-1.5" />;
 }
 
-export default function AvSummaryPanel({ summary, guestCount, showMath, mathRates }: Props) {
+export default function AvSummaryPanel({ summary, guestCount, sections, showMath, mathRates }: Props) {
   const pp = (val: number) => guestCount > 0 ? Math.ceil(val / guestCount) : 0;
   const markupRevenue = summary.subtotalClient - summary.equipmentTax;
+  const s = sections ?? [];
+  const equipLabel = labelForBucket(s, 'equipment', 'Taxable AV Equipment');
+  const staffingLabel = labelForBucket(s, 'staffing', 'Non-Taxable AV Labor');
 
   return (
     <div className="bg-white border border-brand-cream rounded-lg p-4 space-y-0.5">
@@ -66,7 +72,7 @@ export default function AvSummaryPanel({ summary, guestCount, showMath, mathRate
       </h3>
 
       {/* Taxable AV */}
-      <Row label="Taxable AV Equipment" value={summary.equipmentSubtotalClient} pp={pp(summary.equipmentSubtotalClient)} showMath={showMath} />
+      <Row label={equipLabel} value={summary.equipmentSubtotalClient} pp={pp(summary.equipmentSubtotalClient)} showMath={showMath} />
       <Row label="Sales Tax" value={summary.equipmentTax} indent dim showMath={showMath}
         math={mathRates ? `$${fmtM(summary.equipmentSubtotalClient)} × ${pctM(mathRates.generalTaxRate)}` : undefined}
       />
@@ -74,7 +80,7 @@ export default function AvSummaryPanel({ summary, guestCount, showMath, mathRate
       <Divider />
 
       {/* Non-Taxable AV */}
-      <Row label="Non-Taxable AV Labor" value={summary.qcStaffingSubtotalClient} pp={pp(summary.qcStaffingSubtotalClient)} showMath={showMath} />
+      <Row label={staffingLabel} value={summary.qcStaffingSubtotalClient} pp={pp(summary.qcStaffingSubtotalClient)} showMath={showMath} />
 
       <Divider />
 

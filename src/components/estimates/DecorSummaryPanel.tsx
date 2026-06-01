@@ -1,12 +1,10 @@
 import type { EstimateSummary, SummaryMathRates } from '@/types';
+import type { SectionTotal } from '@/lib/utils/sectionLabels';
 
 interface Props {
   summary: EstimateSummary;
   guestCount: number;
-  floralTaxableClient: number;
-  floralNonTaxableClient: number;
-  rentalsTaxableClient: number;
-  rentalsNonTaxableClient: number;
+  sectionTotals: SectionTotal[];
   showMath?: boolean;
   mathRates?: SummaryMathRates;
 }
@@ -60,7 +58,7 @@ function Divider() {
 }
 
 export default function DecorSummaryPanel({
-  summary, guestCount, floralTaxableClient, floralNonTaxableClient, rentalsNonTaxableClient,
+  summary, guestCount, sectionTotals,
   showMath, mathRates,
 }: Props) {
   const pp = (val: number) => guestCount > 0 ? Math.ceil(val / guestCount) : 0;
@@ -72,23 +70,10 @@ export default function DecorSummaryPanel({
         Summary
       </h3>
 
-      {/* Florals */}
-      {floralTaxableClient > 0 && (
-        <Row label="Floral Product" value={floralTaxableClient} pp={pp(floralTaxableClient)} showMath={showMath} />
-      )}
-      {floralNonTaxableClient > 0 && (
-        <Row label="Floral Fees" value={floralNonTaxableClient} pp={pp(floralNonTaxableClient)} showMath={showMath} />
-      )}
-
-      <Divider />
-
-      {/* Rentals */}
-      {summary.equipmentSubtotalClient - floralTaxableClient > 0 && (
-        <Row label="Rentals & Lounge" value={summary.equipmentSubtotalClient - floralTaxableClient} pp={pp(summary.equipmentSubtotalClient - floralTaxableClient)} showMath={showMath} />
-      )}
-      {rentalsNonTaxableClient > 0 && (
-        <Row label="Rental Fees" value={rentalsNonTaxableClient} pp={pp(rentalsNonTaxableClient)} showMath={showMath} />
-      )}
+      {/* Per-section breakdown — uses live section names */}
+      {sectionTotals.map((s) => (
+        <Row key={s.id} label={s.name} value={s.total} pp={pp(s.total)} showMath={showMath} />
+      ))}
 
       <Divider />
 
