@@ -15,6 +15,7 @@ import {
 } from '@/lib/engine/pricing';
 import type { ProgramConfig, TeamHoursTier, VenueEstimateInput } from '@/types';
 import EstimateNav from './EstimateNav';
+import VenuePicker from './VenuePicker';
 import LinkVenuePanel from './LinkVenuePanel';
 import CopyItemsFromButton from './CopyItemsFromButton';
 import LineItemSection from './LineItemSection';
@@ -27,7 +28,7 @@ import SlideCopySection from './SlideCopySection';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection, reorderSections, reorderLineItems } from '@/app/(programs)/programs/[id]/estimates/actions';
-import { autoLinkOrCreateVenue, syncVenueSpaceDefaults } from '@/app/(programs)/venues/actions';
+import { linkVenueToEstimate, syncVenueSpaceDefaults } from '@/app/(programs)/venues/actions';
 import { updateProgram } from '@/app/(programs)/programs/actions';
 import type { DbTemplate, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { TravelRefData, DbTrip } from '@/lib/supabase/queries';
@@ -242,36 +243,36 @@ export default function EstimateBuilder({
   const slideCopyRef = useRef<HTMLDivElement | null>(null);
   const [linkedVenueId, setLinkedVenueId] = useState<string | null>(estimate.venue_id);
   const [linkedSpaceId, setLinkedSpaceId] = useState<string | null>(estimate.venue_space_id);
-  const [venueBanner, setVenueBanner] = useState<{ message: string; venueId: string } | null>(null);
+  const [linkedVenueData, setLinkedVenueData] = useState<DbVenue | null>(
+    venues.find(v => v.id === estimate.venue_id) ?? null
+  );
   const [locationSuggestion, setLocationSuggestion] = useState<{ locationId: string; locationName: string } | null>(null);
 
-  async function triggerAutoLink() {
-    if (linkedVenueId) return;
-    const name = est.name.trim();
-    if (!name) return;
-    let result: Awaited<ReturnType<typeof autoLinkOrCreateVenue>>;
-    try {
-      result = await autoLinkOrCreateVenue(estimate.id, program.id, name, {
-        spaceName: est.roomSpace.trim() || name,
-        fbMinimum: est.fbMinimum,
-        serviceChargeDefault: est.serviceChargeOverride,
-        gratuityDefault: est.gratuityOverride,
-        adminFeeDefault: est.adminFeeOverride,
-      });
-    } catch {
-      return;
+  function handleVenueSelect(venueId: string, spaceId: string | null, venueCity: string | null, venueData: DbVenue) {
+    setLinkedVenueId(venueId);
+    setLinkedSpaceId(spaceId);
+    setLinkedVenueData(venueData);
+    // Auto-fill room space from venue name when no space specified
+    if (!spaceId) handleVenueAutoFill({ roomSpace: venueData.name });
+    // Location suggestion
+    if (venueCity && allLocations.length > 0) {
+      const cityLower = venueCity.toLowerCase();
+      const matches = allLocations.filter(l => l.name.toLowerCase().includes(cityLower));
+      if (matches.length === 1 && matches[0].id !== program.location_id) {
+        setLocationSuggestion({ locationId: matches[0].id, locationName: matches[0].name });
+      } else if (matches.length === 0 && venueCity) {
+        setLocationSuggestion({ locationId: '', locationName: `No tax location found for "${venueCity}" — add one in Admin → Reference Data` });
+      }
     }
-    if (result.action === 'linked' && result.venueId) {
-      setLinkedVenueId(result.venueId);
-      setLinkedSpaceId(result.venueSpaceId);
-      setVenueBanner({ message: 'Linked to existing venue', venueId: result.venueId });
-      router.refresh();
-    } else if (result.action === 'created' && result.venueId) {
-      setLinkedVenueId(result.venueId);
-      setLinkedSpaceId(result.venueSpaceId);
-      setVenueBanner({ message: 'Added to Venues', venueId: result.venueId });
-      router.refresh();
-    }
+    router.refresh();
+  }
+
+  async function handleClearVenue() {
+    await linkVenueToEstimate(estimate.id, program.id, null, null);
+    setLinkedVenueId(null);
+    setLinkedSpaceId(null);
+    setLinkedVenueData(null);
+    setLocationSuggestion(null);
   }
 
   async function syncSpaceOnBlur() {
@@ -816,14 +817,14 @@ export default function EstimateBuilder({
           estimateId={estimate.id}
           estimateName={est.name}
         />
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <CopyItemsFromButton
-            currentEstimateId={estimate.id}
-            otherEstimates={allEstimates.map((e) => ({ id: e.id, name: e.name }))}
-            markups={markups}
-            onImport={handleImportItems}
-          />
-          <span title={!linkedVenueId ? 'Link a venue before exporting' : undefined} className={!linkedVenueId ? 'pointer-events-none opacity-40' : ''}>
+        {linkedVenueId && (
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <CopyItemsFromButton
+              currentEstimateId={estimate.id}
+              otherEstimates={allEstimates.map((e) => ({ id: e.id, name: e.name }))}
+              markups={markups}
+              onImport={handleImportItems}
+            />
             <ExportButtons
               programId={program.id}
               programName={program.name}
@@ -839,53 +840,57 @@ export default function EstimateBuilder({
               taxExempt={est.taxExempt}
               location={programConfig.location}
             />
-          </span>
-          <button
-            onClick={() => setShowMath(v => !v)}
-            className={`text-xs px-2.5 py-1 rounded border transition-colors ${showMath ? 'border-brand-copper/60 bg-brand-offwhite text-brand-brown' : 'border-brand-cream bg-white text-brand-charcoal/70 hover:text-brand-charcoal hover:bg-brand-offwhite'}`}
-          >
-            {showMath ? 'Hide Math' : 'Show Math'}
-          </button>
-          <div className="text-xs flex items-center gap-3">
-            {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
-            {saveState === 'saved' && <span className="text-green-600">Saved</span>}
-            {saveState === 'error' && <span className="text-red-500">{saveError}</span>}
+            <button
+              onClick={() => setShowMath(v => !v)}
+              className={`text-xs px-2.5 py-1 rounded border transition-colors ${showMath ? 'border-brand-copper/60 bg-brand-offwhite text-brand-brown' : 'border-brand-cream bg-white text-brand-charcoal/70 hover:text-brand-charcoal hover:bg-brand-offwhite'}`}
+            >
+              {showMath ? 'Hide Math' : 'Show Math'}
+            </button>
+            <div className="text-xs flex items-center gap-3">
+              {saveState === 'saving' && <span className="text-brand-silver">Saving…</span>}
+              {saveState === 'saved' && <span className="text-green-600">Saved</span>}
+              {saveState === 'error' && <span className="text-red-500">{saveError}</span>}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      {/* VenuePicker — shown when no venue is linked */}
+      {!linkedVenueId && (
+        <div className="flex-1 overflow-y-auto bg-brand-offwhite">
+          <VenuePicker
+            estimateId={estimate.id}
+            programId={program.id}
+            venues={venues}
+            venueSpaces={venueSpaces}
+            onSelect={handleVenueSelect}
+          />
+        </div>
+      )}
+
+      {/* Full estimate builder — shown once venue is linked */}
+      {linkedVenueId && linkedVenueData && <div className="flex flex-1 overflow-hidden">
         {/* Main content */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {/* Estimate header */}
-          <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-3">
-            {/* Link Venue */}
+
+          {/* Compact venue indicator */}
+          <div className="bg-white border border-brand-cream rounded-lg px-5 py-3">
             <LinkVenuePanel
               estimateId={estimate.id}
               programId={program.id}
-              currentVenueId={linkedVenueId}
-              currentVenueSpaceId={linkedSpaceId}
-              venues={venues}
+              venue={linkedVenueData}
+              currentSpaceId={linkedSpaceId}
               venueSpaces={venueSpaces}
-              onAutoFill={handleVenueAutoFill}
-              onLinkChange={(venueId, spaceId, venueCity) => {
-                setLinkedVenueId(venueId);
+              onSpaceChange={(spaceId, autoFill) => {
                 setLinkedSpaceId(spaceId);
-                // venueCity is passed directly by LinkVenuePanel — works for both existing and newly created venues
-                if (venueId && venueCity && allLocations.length > 0) {
-                  const cityLower = venueCity.toLowerCase();
-                  const matches = allLocations.filter((l) => l.name.toLowerCase().includes(cityLower));
-                  if (matches.length === 1 && matches[0].id !== program.location_id) {
-                    setLocationSuggestion({ locationId: matches[0].id, locationName: matches[0].name });
-                  } else if (matches.length === 0) {
-                    setLocationSuggestion({ locationId: '', locationName: `No tax location found for "${venueCity}" — add one in Admin → Reference Data` });
-                  }
-                } else if (!venueId) {
-                  setLocationSuggestion(null);
-                }
+                handleVenueAutoFill(autoFill);
               }}
+              onChangeVenue={handleClearVenue}
             />
+          </div>
 
+          {/* Estimate details */}
+          <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Estimate Name</label>
@@ -938,26 +943,6 @@ export default function EstimateBuilder({
                 <button
                   onClick={() => setLocationSuggestion(null)}
                   className="text-current/50 hover:text-current text-base leading-none flex-shrink-0"
-                  aria-label="Dismiss"
-                >
-                  &times;
-                </button>
-              </div>
-            )}
-
-            {/* Venue link banner */}
-            {venueBanner && (
-              <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-md px-3 py-2 text-sm text-green-800">
-                <span className="font-medium">&#10003; {venueBanner.message}</span>
-                <Link
-                  href={`/venues/${venueBanner.venueId}`}
-                  className="underline hover:text-green-900 text-green-700"
-                >
-                  View venue &rarr;
-                </Link>
-                <button
-                  onClick={() => setVenueBanner(null)}
-                  className="ml-auto text-green-600 hover:text-green-900 text-base leading-none"
                   aria-label="Dismiss"
                 >
                   &times;
@@ -1130,16 +1115,8 @@ export default function EstimateBuilder({
           {/* Attachments */}
           <AttachmentsPanel estimateId={estimate.id} onPopulateLineItems={handlePopulateFromExtraction} onPopulateEstimateDetails={handlePopulateEstimateDetails} onLoadMenuToSlide={handleLoadMenuToSlide} />
 
-          {/* Venue required — blocks line items + slide copy + travel */}
-          {!linkedVenueId && (
-            <div className="rounded-lg border-2 border-dashed border-amber-300 bg-amber-50/60 px-6 py-10 text-center">
-              <p className="text-sm font-medium text-amber-800">Select a venue to add line items</p>
-              <p className="text-xs text-amber-700/70 mt-1">Use the Venue dropdown above or add a new venue.</p>
-            </div>
-          )}
-
           {/* Guest count mismatch banner */}
-          {linkedVenueId && program.guest_count > 0 && lineItems.filter((li) => li.qty > 0 && li.qty !== program.guest_count).length > 0 && (
+          {program.guest_count > 0 && lineItems.filter((li) => li.qty > 0 && li.qty !== program.guest_count).length > 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded-md px-4 py-2 text-sm text-amber-800">
               {(() => {
                 const n = lineItems.filter((li) => li.qty > 0 && li.qty !== program.guest_count).length;
@@ -1148,8 +1125,8 @@ export default function EstimateBuilder({
             </div>
           )}
 
-          {/* Line item sections — hidden until venue is linked */}
-          {linkedVenueId && <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-6">
+          {/* Line item sections */}
+          <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-6">
             {/* Move action bar */}
             {selectedItems.size > 0 && (
               <div className="flex items-center gap-3 bg-brand-offwhite border border-brand-copper/30 rounded px-3 py-2 text-sm flex-wrap">
@@ -1262,10 +1239,10 @@ export default function EstimateBuilder({
                 </button>
               )}
             </div>
-          </div>}
+          </div>
 
-          {/* Slide Copy — only when venue linked */}
-          {linkedVenueId && <>
+          {/* Slide Copy */}
+          <>
           <div ref={slideCopyRef}>
             <SlideCopySection
               estimate={estimate}
@@ -1290,7 +1267,7 @@ export default function EstimateBuilder({
             refs={travelRefs}
             onTotalChange={setTravelExpenses}
           />
-          </>}
+          </>
         </div>
 
         {/* Right sidebar — summary + margin */}
@@ -1298,7 +1275,7 @@ export default function EstimateBuilder({
           <SummaryPanel summary={summary} guestCount={program.guest_count} fbMinimum={est.fbMinimum} sections={sections} showMath={showMath} mathRates={mathRates} />
           <MarginPanel margin={marginAnalysis} summary={summary} showMath={showMath} />
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
