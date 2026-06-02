@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useEffect } from 'react';
 import type { DbVenue, DbVenueSpace } from '@/lib/supabase/queries';
-import { linkVenueToEstimate } from '@/app/(programs)/venues/actions';
+import { linkVenueToEstimate, createVenue } from '@/app/(programs)/venues/actions';
 
 interface Props {
   estimateId: string;
@@ -40,6 +40,16 @@ export default function LinkVenuePanel({
   const [selectedVenueId, setSelectedVenueId] = useState<string>(currentVenueId ?? '');
   const [selectedSpaceId, setSelectedSpaceId] = useState<string>(currentVenueSpaceId ?? '');
   const [spaces, setSpaces] = useState<DbVenueSpace[]>(initialSpaces);
+
+  // Add new venue form state
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newAddress, setNewAddress] = useState('');
+  const [newCity, setNewCity] = useState('');
+  const [newState, setNewState] = useState('');
+  const [addError, setAddError] = useState<string | null>(null);
+  const [duplicateId, setDuplicateId] = useState<string | null>(null);
+  const [duplicateName, setDuplicateName] = useState<string | null>(null);
 
   // Sync when parent updates venue link (e.g. after auto-link)
   useEffect(() => {
@@ -104,50 +114,206 @@ export default function LinkVenuePanel({
     }
   }
 
-  return (
-    <div className="flex items-center gap-3 flex-wrap">
-      {/* Venue dropdown */}
-      <div className="flex items-center gap-2">
-        <label className="text-xs text-brand-silver whitespace-nowrap">Linked Venue:</label>
-        <select
-          value={selectedVenueId}
-          onChange={(e) => handleVenueChange(e.target.value)}
-          disabled={isPending}
-          className="border border-brand-silver/30 rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown min-w-[160px] max-w-[220px]"
-        >
-          <option value="">— None —</option>
-          {venues.map((v) => (
-            <option key={v.id} value={v.id}>{v.name}</option>
-          ))}
-        </select>
-      </div>
+  async function handleAddVenue(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    setAddError(null);
+    setDuplicateId(null);
+    setDuplicateName(null);
 
-      {/* Space dropdown — only when venue selected and has spaces */}
-      {selectedVenueId && filteredSpaces.length > 0 && (
+    const result = await createVenue({
+      name: newName.trim(),
+      address: newAddress.trim() || null,
+      city: newCity.trim() || null,
+      state: newState.trim() || null,
+    });
+
+    if ('error' in result) {
+      setAddError(result.error);
+      if (result.existingId) {
+        setDuplicateId(result.existingId);
+        setDuplicateName(result.existingName ?? null);
+      }
+      return;
+    }
+
+    // Link the new venue to this estimate
+    startTransition(async () => {
+      await linkVenueToEstimate(estimateId, programId, result.id, null);
+    });
+    setSelectedVenueId(result.id);
+    onLinkChange?.(result.id, null);
+    onAutoFill({ roomSpace: newName.trim() });
+    setShowAddForm(false);
+    setNewName('');
+    setNewAddress('');
+    setNewCity('');
+    setNewState('');
+  }
+
+  function handleUseDuplicate() {
+    if (!duplicateId) return;
+    handleVenueChange(duplicateId);
+    setShowAddForm(false);
+    setAddError(null);
+    setDuplicateId(null);
+    setNewName('');
+    setNewAddress('');
+    setNewCity('');
+    setNewState('');
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-3 flex-wrap">
+        {/* Venue dropdown */}
         <div className="flex items-center gap-2">
-          <label className="text-xs text-brand-silver whitespace-nowrap">Space:</label>
+          <label className="text-xs text-brand-silver whitespace-nowrap">
+            Linked Venue: <span className="text-red-400">*</span>
+          </label>
           <select
-            value={selectedSpaceId}
-            onChange={(e) => handleSpaceSelect(e.target.value)}
+            value={selectedVenueId}
+            onChange={(e) => handleVenueChange(e.target.value)}
             disabled={isPending}
-            className="border border-brand-silver/30 rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown min-w-[140px] max-w-[200px]"
+            className={`border rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown min-w-[160px] max-w-[220px] ${
+              !selectedVenueId ? 'border-amber-400' : 'border-brand-silver/30'
+            }`}
           >
-            <option value="">— Select —</option>
-            {filteredSpaces.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
+            <option value="">— Select venue —</option>
+            {venues.map((v) => (
+              <option key={v.id} value={v.id}>{v.name}</option>
             ))}
           </select>
         </div>
-      )}
-      {selectedVenueId && filteredSpaces.length === 0 && (
-        <span className="text-xs text-brand-silver italic">No spaces added — add them in Venues</span>
-      )}
 
-      {/* Last priced badge */}
-      {selectedVenue?.last_used_date && (
-        <span className="text-xs text-brand-silver bg-brand-cream/50 border border-brand-silver/20 rounded px-2 py-0.5">
-          Last priced: {formatDate(selectedVenue.last_used_date)}
-        </span>
+        {/* Space dropdown — only when venue selected and has spaces */}
+        {selectedVenueId && filteredSpaces.length > 0 && (
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-brand-silver whitespace-nowrap">Space:</label>
+            <select
+              value={selectedSpaceId}
+              onChange={(e) => handleSpaceSelect(e.target.value)}
+              disabled={isPending}
+              className="border border-brand-silver/30 rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown min-w-[140px] max-w-[200px]"
+            >
+              <option value="">— Select —</option>
+              {filteredSpaces.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        {selectedVenueId && filteredSpaces.length === 0 && (
+          <span className="text-xs text-brand-silver italic">No spaces added — add them in Venues</span>
+        )}
+
+        {/* Last priced badge */}
+        {selectedVenue?.last_used_date && (
+          <span className="text-xs text-brand-silver bg-brand-cream/50 border border-brand-silver/20 rounded px-2 py-0.5">
+            Last priced: {formatDate(selectedVenue.last_used_date)}
+          </span>
+        )}
+
+        {/* Add new venue toggle */}
+        {!showAddForm && (
+          <button
+            type="button"
+            onClick={() => setShowAddForm(true)}
+            className="text-xs text-brand-brown hover:text-brand-charcoal underline-offset-2 hover:underline transition-colors"
+          >
+            + Add new venue
+          </button>
+        )}
+      </div>
+
+      {/* Inline add-venue form */}
+      {showAddForm && (
+        <form
+          onSubmit={handleAddVenue}
+          className="bg-brand-cream/30 border border-brand-silver/20 rounded-lg p-3 space-y-2"
+        >
+          <p className="text-xs font-medium text-brand-charcoal">New venue</p>
+          <div className="flex gap-2 flex-wrap">
+            <div>
+              <label className="block text-[10px] text-brand-silver mb-0.5">Name *</label>
+              <input
+                autoFocus
+                required
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                className="border border-brand-silver/30 rounded px-2 py-1 text-xs w-44 bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
+                placeholder="e.g. The Ballantyne"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-brand-silver mb-0.5">Address</label>
+              <input
+                value={newAddress}
+                onChange={(e) => setNewAddress(e.target.value)}
+                className="border border-brand-silver/30 rounded px-2 py-1 text-xs w-52 bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
+                placeholder="123 Main St"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-brand-silver mb-0.5">City</label>
+              <input
+                value={newCity}
+                onChange={(e) => setNewCity(e.target.value)}
+                className="border border-brand-silver/30 rounded px-2 py-1 text-xs w-28 bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
+                placeholder="Charlotte"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-brand-silver mb-0.5">State</label>
+              <input
+                value={newState}
+                onChange={(e) => setNewState(e.target.value)}
+                className="border border-brand-silver/30 rounded px-2 py-1 text-xs w-16 bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
+                placeholder="NC"
+                maxLength={2}
+              />
+            </div>
+          </div>
+
+          {addError && (
+            <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+              {addError}
+              {duplicateId && (
+                <button
+                  type="button"
+                  onClick={handleUseDuplicate}
+                  className="ml-2 underline font-medium hover:text-amber-900"
+                >
+                  Use {duplicateName ?? 'that venue'}
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={isPending || !newName.trim()}
+              className="text-xs bg-brand-brown text-white rounded px-3 py-1 hover:bg-brand-brown/90 disabled:opacity-50 transition-colors"
+            >
+              Add venue
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowAddForm(false);
+                setAddError(null);
+                setNewName('');
+                setNewAddress('');
+                setNewCity('');
+                setNewState('');
+              }}
+              className="text-xs text-brand-silver hover:text-brand-charcoal transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
       )}
     </div>
   );

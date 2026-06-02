@@ -17,8 +17,27 @@ export async function createVenue(data: {
   contact_phone?: string | null;
   website?: string | null;
   notes?: string | null;
-}): Promise<{ id: string } | { error: string }> {
+}): Promise<{ id: string } | { error: string; existingId?: string; existingName?: string }> {
   const supabase = await createClient();
+
+  // Duplicate address check — soft, case-insensitive
+  if (data.address?.trim()) {
+    const normalized = data.address.trim().replace(/\s+/g, ' ');
+    const { data: existing } = await supabase
+      .from('venues')
+      .select('id, name')
+      .ilike('address', normalized)
+      .limit(1)
+      .maybeSingle();
+    if (existing) {
+      return {
+        error: `This address already exists as "${existing.name}". Use that venue instead.`,
+        existingId: existing.id,
+        existingName: existing.name,
+      };
+    }
+  }
+
   const { data: venue, error } = await supabase
     .from('venues')
     .insert({ ...data, service_styles: data.service_styles ?? [] })

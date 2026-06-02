@@ -14,6 +14,7 @@ import {
   getTransportScheduleRows,
   getVenues,
   getAllVenueSpaces,
+  getLocations,
 } from '@/lib/supabase/queries';
 import { ensureDefaultSections } from '@/app/(programs)/programs/[id]/estimates/actions';
 import EstimateBuilder from '@/components/estimates/EstimateBuilder';
@@ -31,7 +32,7 @@ interface Props {
 export default async function EstimatePage({ params }: Props) {
   const { id: programId, estimateId } = await params;
 
-  const [program, allEstimates, estimate, markups, tiers, travelRefs, venues] = await Promise.all([
+  const [program, allEstimates, estimate, markups, tiers, travelRefs, venues, allLocations] = await Promise.all([
     getProgram(programId),
     getEstimatesForProgram(programId),
     getEstimate(estimateId),
@@ -39,6 +40,7 @@ export default async function EstimatePage({ params }: Props) {
     getTiers(),
     getTravelRefs(),
     getVenues(),
+    getLocations(),
   ]);
 
   if (!program || !estimate) notFound();
@@ -107,6 +109,7 @@ export default async function EstimatePage({ params }: Props) {
           initialSlideCopyData={estimate.slide_copy_data as SlideCopyData | null}
           venues={venues}
           venueSpaces={venueSpaces}
+          allLocations={allLocations}
         />
       </div>
     );

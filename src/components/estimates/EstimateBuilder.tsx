@@ -28,6 +28,7 @@ import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection, reorderSections, reorderLineItems } from '@/app/(programs)/programs/[id]/estimates/actions';
 import { autoLinkOrCreateVenue, syncVenueSpaceDefaults } from '@/app/(programs)/venues/actions';
+import { updateProgram } from '@/app/(programs)/programs/actions';
 import type { DbTemplate, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { TravelRefData, DbTrip } from '@/lib/supabase/queries';
 
@@ -172,13 +173,14 @@ interface Props {
   initialSlideCopyData?: SlideCopyData | null;
   venues?: DbVenue[];
   venueSpaces?: DbVenueSpace[];
+  allLocations?: DbLocation[];
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 export default function EstimateBuilder({
   program, location, allEstimates, estimate, dbLineItems, dbSections, markups, tiers, travelRefs, initialTrips, eventName,
-  event = null, initialSlideCopyData = null, venues = [], venueSpaces = [],
+  event = null, initialSlideCopyData = null, venues = [], venueSpaces = [], allLocations = [],
 }: Props) {
   const router = useRouter();
   const programConfig = useMemo(() => toProgramConfig(program, location), [program, location]);
@@ -241,6 +243,7 @@ export default function EstimateBuilder({
   const [linkedVenueId, setLinkedVenueId] = useState<string | null>(estimate.venue_id);
   const [linkedSpaceId, setLinkedSpaceId] = useState<string | null>(estimate.venue_space_id);
   const [venueBanner, setVenueBanner] = useState<{ message: string; venueId: string } | null>(null);
+  const [locationSuggestion, setLocationSuggestion] = useState<{ locationId: string; locationName: string } | null>(null);
 
   async function triggerAutoLink() {
     if (linkedVenueId) return;
@@ -866,8 +869,30 @@ export default function EstimateBuilder({
               onLinkChange={(venueId, spaceId) => {
                 setLinkedVenueId(venueId);
                 setLinkedSpaceId(spaceId);
+                // Auto-suggest tax location when venue has city/state and program has no location or a different one
+                if (venueId && allLocations.length > 0) {
+                  const venue = venues.find((v) => v.id === venueId);
+                  if (venue?.city) {
+                    const cityLower = venue.city.toLowerCase();
+                    const matches = allLocations.filter((l) => l.name.toLowerCase().includes(cityLower));
+                    if (matches.length === 1 && matches[0].id !== program.location_id) {
+                      setLocationSuggestion({ locationId: matches[0].id, locationName: matches[0].name });
+                    }
+                  }
+                } else if (!venueId) {
+                  setLocationSuggestion(null);
+                }
               }}
             />
+
+            {/* Required venue warning */}
+            {!linkedVenueId && (
+              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-xs text-amber-800">
+                <span className="text-amber-500 text-sm">⚠</span>
+                Venue required — select from the dropdown or add a new one above. A venue will be created automatically when you name this estimate.
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Estimate Name</label>
@@ -892,6 +917,30 @@ export default function EstimateBuilder({
                 />
               </div>
             </div>
+
+            {/* Tax location suggestion banner */}
+            {locationSuggestion && (
+              <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-sm text-blue-800">
+                <span>Tax location auto-suggested: <strong>{locationSuggestion.locationName}</strong></span>
+                <button
+                  onClick={async () => {
+                    await updateProgram(program.id, { location_id: locationSuggestion.locationId });
+                    setLocationSuggestion(null);
+                    router.refresh();
+                  }}
+                  className="text-xs bg-blue-600 text-white rounded px-2 py-0.5 hover:bg-blue-700 transition-colors whitespace-nowrap"
+                >
+                  Apply
+                </button>
+                <button
+                  onClick={() => setLocationSuggestion(null)}
+                  className="ml-auto text-blue-500 hover:text-blue-800 text-base leading-none"
+                  aria-label="Dismiss"
+                >
+                  &times;
+                </button>
+              </div>
+            )}
 
             {/* Venue link banner */}
             {venueBanner && (
