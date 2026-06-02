@@ -14,6 +14,9 @@ interface Props {
 
 const STATUS_TABS: ProgramStatus[] = ['active', 'completed', 'did_not_book'];
 
+type SortKey = 'event_date' | 'name' | 'client_name' | 'updated_at';
+type SortDir = 'asc' | 'desc';
+
 function formatDate(val: string | null) {
   if (!val) return '—';
   return new Date(val).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -29,6 +32,8 @@ export default function ProgramsTable({ programs }: Props) {
   const [activeTab, setActiveTab] = useState<ProgramStatus>('active');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showMergeDialog, setShowMergeDialog] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>('event_date');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
 
   const counts = useMemo(() => ({
     active: programs.filter((p) => p.status === 'active').length,
@@ -44,8 +49,27 @@ export default function ProgramsTable({ programs }: Props) {
         p.name.toLowerCase().includes(q) || (p.client_name ?? '').toLowerCase().includes(q)
       );
     }
-    return base;
-  }, [programs, activeTab, query]);
+    return [...base].sort((a, b) => {
+      let av = a[sortKey] ?? '';
+      let bv = b[sortKey] ?? '';
+      // Nulls always last regardless of direction
+      if (!av && !bv) return 0;
+      if (!av) return 1;
+      if (!bv) return -1;
+      const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [programs, activeTab, query, sortKey, sortDir]);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) setSortDir((d) => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  }
+
+  function sortIcon(key: SortKey) {
+    if (sortKey !== key) return <span className="ml-1 text-brand-cream">↕</span>;
+    return <span className="ml-1 text-brand-copper">{sortDir === 'asc' ? '↑' : '↓'}</span>;
+  }
 
   function handleStatusChange(programId: string, newStatus: ProgramStatus) {
     startTransition(async () => {
@@ -127,12 +151,24 @@ export default function ProgramsTable({ programs }: Props) {
                     className="accent-brand-brown"
                   />
                 </th>
-                <th className="text-left px-4 py-3 font-medium text-brand-charcoal/70 text-xs tracking-wide uppercase">Program</th>
-                <th className="text-left px-4 py-3 font-medium text-brand-charcoal/70 text-xs tracking-wide uppercase">Client</th>
+                <th
+                  className="text-left px-4 py-3 font-medium text-brand-charcoal/70 text-xs tracking-wide uppercase cursor-pointer hover:text-brand-charcoal select-none"
+                  onClick={() => toggleSort('name')}
+                >Program{sortIcon('name')}</th>
+                <th
+                  className="text-left px-4 py-3 font-medium text-brand-charcoal/70 text-xs tracking-wide uppercase cursor-pointer hover:text-brand-charcoal select-none"
+                  onClick={() => toggleSort('client_name')}
+                >Client{sortIcon('client_name')}</th>
                 <th className="text-right px-4 py-3 font-medium text-brand-charcoal/70 text-xs tracking-wide uppercase w-24">Estimates</th>
                 <th className="text-right px-4 py-3 font-medium text-brand-charcoal/70 text-xs tracking-wide uppercase w-32">Latest Total</th>
-                <th className="text-left px-4 py-3 font-medium text-brand-charcoal/70 text-xs tracking-wide uppercase w-36">Event Date</th>
-                <th className="text-left px-4 py-3 font-medium text-brand-charcoal/70 text-xs tracking-wide uppercase w-36">Last Updated</th>
+                <th
+                  className="text-left px-4 py-3 font-medium text-brand-charcoal/70 text-xs tracking-wide uppercase w-36 cursor-pointer hover:text-brand-charcoal select-none"
+                  onClick={() => toggleSort('event_date')}
+                >Event Date{sortIcon('event_date')}</th>
+                <th
+                  className="text-left px-4 py-3 font-medium text-brand-charcoal/70 text-xs tracking-wide uppercase w-36 cursor-pointer hover:text-brand-charcoal select-none"
+                  onClick={() => toggleSort('updated_at')}
+                >Last Updated{sortIcon('updated_at')}</th>
                 <th className="text-left px-4 py-3 font-medium text-brand-charcoal/70 text-xs tracking-wide uppercase w-36">Status</th>
               </tr>
             </thead>
