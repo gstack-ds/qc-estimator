@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import Anthropic from '@anthropic-ai/sdk';
+import type { ProgramStatus } from '@/lib/programs/constants';
 import type { DocumentBlockParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
 
 // ─── Programs ────────────────────────────────────────────
@@ -142,6 +143,18 @@ export async function createEstimate(programId: string, type: 'venue' | 'av' | '
 
   revalidatePath(`/programs/${programId}`);
   return { error: null, id: estimate.id as string };
+}
+
+export async function updateProgramStatus(id: string, status: ProgramStatus): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const archived_at = (status === 'completed' || status === 'did_not_book')
+    ? new Date().toISOString()
+    : null;
+  const { error } = await supabase.from('programs').update({ status, archived_at }).eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/programs');
+  revalidatePath(`/programs/${id}`);
+  return { error: null };
 }
 
 export async function deleteProgram(programId: string) {

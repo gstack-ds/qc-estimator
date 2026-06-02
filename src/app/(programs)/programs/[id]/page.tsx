@@ -21,6 +21,8 @@ import EventsView, { type EventRow } from '@/components/estimates/EventsView';
 import { type EstimateCard } from '@/components/estimates/ComparisonView';
 import DeleteProgramButton from '@/components/estimates/DeleteProgramButton';
 import ProgramPnLPanel, { type PnLRow } from '@/components/estimates/ProgramPnLPanel';
+import ProgramStatusDropdown from '@/components/programs/ProgramStatusDropdown';
+import type { ProgramStatus } from '@/lib/programs/constants';
 import { calculateVenueEstimate, calculateMarginAnalysis } from '@/lib/engine/pricing';
 import { calcTransportSummary } from '@/lib/engine/transportation';
 import type { LineItem, TaxType, ProgramConfig, TeamHoursTier, EstimateSummary } from '@/types';
@@ -254,6 +256,9 @@ export default async function ProgramPage({ params }: Props) {
             ← Programs
           </Link>
           <h1 className="font-serif text-2xl font-medium text-brand-charcoal mt-1">{program.name}</h1>
+          <div className="mt-2">
+            <ProgramStatusDropdown programId={id} status={(program.status ?? 'active') as ProgramStatus} />
+          </div>
         </div>
         <DeleteProgramButton programId={id} />
       </div>

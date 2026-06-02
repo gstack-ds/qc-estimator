@@ -98,6 +98,8 @@ export interface DbProgram {
   gratuity_default: number;
   admin_fee_default: number;
   third_party_commissions: { name: string; rate: number }[];
+  status: string;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -111,6 +113,8 @@ export interface DbProgramSummary {
   name: string;
   client_name: string | null;
   event_date: string | null;
+  status: string;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
   estimate_count: number;
@@ -121,7 +125,7 @@ export async function getPrograms(): Promise<DbProgramSummary[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('programs')
-    .select('id, name, client_name, event_date, created_at, updated_at, latest_total, estimates(count)')
+    .select('id, name, client_name, event_date, status, archived_at, created_at, updated_at, latest_total, estimates(count)')
     .order('updated_at', { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []).map((p) => ({
@@ -129,6 +133,8 @@ export async function getPrograms(): Promise<DbProgramSummary[]> {
     name: p.name,
     client_name: p.client_name,
     event_date: p.event_date,
+    status: (p as unknown as { status: string }).status ?? 'active',
+    archived_at: (p as unknown as { archived_at: string | null }).archived_at ?? null,
     created_at: p.created_at,
     updated_at: p.updated_at,
     latest_total: (p as unknown as { latest_total: number | null }).latest_total,
@@ -146,7 +152,7 @@ export async function getProgram(id: string): Promise<DbProgramWithLocation | nu
       location_id, cc_processing_fee, client_commission,
       gdp_commission_enabled, gdp_commission_rate,
       service_charge_default, gratuity_default, admin_fee_default,
-      third_party_commissions, created_at, updated_at,
+      third_party_commissions, status, archived_at, created_at, updated_at,
       location:locations(id, name, food_tax_rate, alcohol_tax_rate, general_tax_rate, effective_date, updated_at)
     `)
     .eq('id', id)
