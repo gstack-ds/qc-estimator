@@ -197,7 +197,24 @@ export default function ProposalDocument({
                       ) : item.thumbnailIcon ? (
                         <View style={{ width: 18, height: 18, borderRadius: 3, backgroundColor: '#E8E0D5', flexShrink: 0 }} />
                       ) : null}
-                      <Text style={styles.cell}>{item.name}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.cell}>{item.name}</Text>
+                        {(() => {
+                          if (!item.packageOptions || !item.selectedPackageId) return null;
+                          const pkg = item.packageOptions.options.find((o) => o.id === item.selectedPackageId);
+                          if (!pkg) return null;
+                          return (
+                            <View style={{ marginTop: 2 }}>
+                              <Text style={{ fontSize: 8, color: BRAND_BROWN, fontWeight: 'bold' }}>{pkg.name}</Text>
+                              {pkg.items.length > 0 && (
+                                <Text style={{ fontSize: 7.5, color: BRAND_SILVER, marginTop: 1 }}>
+                                  {pkg.items.join(' · ')}
+                                </Text>
+                              )}
+                            </View>
+                          );
+                        })()}
+                      </View>
                     </View>
                     <Text style={[styles.cell, styles.colQty]}>{item.qty}</Text>
                     <Text style={[styles.cell, styles.colPrice]}>{fmt(unitPrice)}</Text>

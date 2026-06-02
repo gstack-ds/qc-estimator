@@ -5,6 +5,7 @@ import type { TaxType, Location } from '@/types';
 import type { DbMarkup } from '@/lib/supabase/queries';
 import type { LocalLineItem } from './EstimateBuilder';
 import ThumbnailCell from './ThumbnailCell';
+import PackageSelector from './PackageSelector';
 import { suggestIcon } from '@/lib/utils/suggestIcon';
 
 interface Props {
@@ -134,6 +135,16 @@ export default function LineItemRow({ item, markups, location, showTaxToggle, gu
             {isRevenue ? 'Rev ✓' : 'Rev'}
           </button>
         </div>
+        {item.packageOptions && (
+          <PackageSelector
+            packageOptions={item.packageOptions}
+            selectedPackageId={item.selectedPackageId}
+            onChange={(selectedId, pricePerPerson) => {
+              onChange(item.id, { selectedPackageId: selectedId, unitPrice: pricePerPerson });
+              onBlur(item.id);
+            }}
+          />
+        )}
       </div>
 
       {/* Qty */}

@@ -15,6 +15,8 @@ interface SlideCopyLineItem {
   name: string;
   qty: number;
   isRevenueItem?: boolean;
+  packageOptions?: import('@/types').PackageOptions | null;
+  selectedPackageId?: string | null;
 }
 
 // Minimal shape for sections — avoids importing LocalSectionDef
@@ -267,6 +269,20 @@ export default function SlideCopySection({
   const teamSummary = buildTeamSummary(lineItems);
   const driveLine = travelResult?.driveLine ?? '';
 
+  // Derive menu courses from line items where a package option is selected
+  const packageDerivedCourses: import('@/types/slideCopy').MenuCourse[] = lineItems
+    .filter((li) => li.packageOptions && li.selectedPackageId)
+    .map((li) => {
+      const pkg = li.packageOptions!.options.find((o) => o.id === li.selectedPackageId);
+      if (!pkg) return null;
+      return {
+        name: li.packageOptions!.label,
+        scenario: 'final' as const,
+        options: pkg.items.map((item) => ({ name: item, tags: [], selected: true, locked: true })),
+      };
+    })
+    .filter(Boolean) as import('@/types/slideCopy').MenuCourse[];
+
   const menuCopyText = menuCourses.length > 0
     ? menuCourses.map((c) => {
         const selected = c.options.filter((o) => o.selected);
@@ -461,6 +477,16 @@ export default function SlideCopySection({
                 <span className="text-[11px] font-medium text-brand-charcoal/70">SLIDE 2 — Menu Selections</span>
                 <div className="flex items-center gap-2">
                   {menuCourses.length > 0 && <CopyButton text={menuCopyText} label="Copy Menu" />}
+                  {packageDerivedCourses.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setMenuCourses(packageDerivedCourses)}
+                      className="text-xs px-2 py-1 rounded border border-brand-copper text-brand-copper hover:bg-brand-copper/10 transition-colors"
+                      title="Populate from selected packages on line items"
+                    >
+                      Sync from selections
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={handleLoadMenuFromPdfs}
@@ -474,7 +500,9 @@ export default function SlideCopySection({
               <div className="p-3">
                 {menuCourses.length === 0 ? (
                   <p className="text-xs text-brand-charcoal/40 italic">
-                    Extract menu from a PDF attachment, then click "Load from PDFs" to populate selections here.
+                    {packageDerivedCourses.length > 0
+                      ? `${packageDerivedCourses.length} package selection${packageDerivedCourses.length > 1 ? 's' : ''} ready — click "Sync from selections" above.`
+                      : 'Extract menu from a PDF attachment, then click "Load from PDFs" to populate selections here.'}
                   </p>
                 ) : (
                   <MenuSelectionPanel courses={menuCourses} onChange={setMenuCourses} />

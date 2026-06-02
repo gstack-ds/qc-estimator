@@ -52,6 +52,8 @@ export interface LocalLineItem {
   isNew?: boolean;
   thumbnailUrl?: string | null;
   thumbnailIcon?: string | null;
+  packageOptions?: import('@/types').PackageOptions | null;
+  selectedPackageId?: string | null;
 }
 
 interface LocalEstimate {
@@ -143,6 +145,8 @@ function dbItemToLocal(item: DbLineItem, markups: DbMarkup[], sections: LocalSec
     sortOrder: item.sort_order,
     thumbnailUrl: item.thumbnail_url,
     thumbnailIcon: item.thumbnail_icon,
+    packageOptions: item.package_options,
+    selectedPackageId: item.selected_package_id,
   };
 }
 
@@ -420,6 +424,8 @@ export default function EstimateBuilder({
       sort_order: item.sortOrder,
       thumbnail_url: item.thumbnailUrl ?? null,
       thumbnail_icon: item.thumbnailIcon ?? null,
+      package_options: item.packageOptions ?? null,
+      selected_package_id: item.selectedPackageId ?? null,
     }));
 
     if (item.isNew && result.id) {
@@ -600,7 +606,7 @@ export default function EstimateBuilder({
           sectionId: fbSection.id,
           section: fbSection.name,
           taxBucket: fbSection.taxBucket,
-          name: item.name,
+          name: item.packageOptions?.label ?? item.name,
           qty: program.guest_count,
           unitPrice: item.pricePerPerson ?? 0,
           categoryId: cateringMarkup?.id ?? null,
@@ -609,6 +615,8 @@ export default function EstimateBuilder({
           taxType,
           sortOrder: nextOrder(fbSection.id),
           isNew: true,
+          packageOptions: item.packageOptions ?? null,
+          selectedPackageId: null,
         });
       });
     }
@@ -655,6 +663,17 @@ export default function EstimateBuilder({
     const courses = (data.menuItems ?? []).filter(
       (item) => item.category === 'food' || item.category === 'alcohol' || item.category === 'na_beverage'
     ).map((item) => {
+      // Package group: treat each package option as a selectable choice
+      if (item.packageOptions) {
+        const options = item.packageOptions.options.map((pkg) => ({
+          name: pkg.name,
+          description: pkg.description,
+          tags: [] as string[],
+          selected: false,
+          locked: false,
+        }));
+        return { name: item.packageOptions.label, selectionRule: 'choose 1', maxSelections: 1, scenario: 'needs_selection' as const, options };
+      }
       const scenario: 'final' | 'needs_selection' = item.needsSelection ? 'needs_selection' : 'final';
       const options = item.options?.map((o: { name: string; description?: string; tags?: string[] }) => ({
         name: o.name,

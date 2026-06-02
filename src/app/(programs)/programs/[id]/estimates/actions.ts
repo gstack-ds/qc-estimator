@@ -243,6 +243,8 @@ export async function upsertLineItem(data: {
   sort_order: number;
   thumbnail_url?: string | null;
   thumbnail_icon?: string | null;
+  package_options?: import('@/types').PackageOptions | null;
+  selected_package_id?: string | null;
 }) {
   const supabase = await createClient();
 
@@ -264,6 +266,8 @@ export async function upsertLineItem(data: {
         sort_order: data.sort_order,
         thumbnail_url: data.thumbnail_url ?? null,
         thumbnail_icon: data.thumbnail_icon ?? null,
+        package_options: data.package_options ?? null,
+        selected_package_id: data.selected_package_id ?? null,
       })
       .eq('id', data.id);
     if (error) return { error: error.message, id: data.id };
@@ -287,6 +291,8 @@ export async function upsertLineItem(data: {
         sort_order: data.sort_order,
         thumbnail_url: data.thumbnail_url ?? null,
         thumbnail_icon: data.thumbnail_icon ?? null,
+        package_options: data.package_options ?? null,
+        selected_package_id: data.selected_package_id ?? null,
       })
       .select('id')
       .single();
@@ -388,6 +394,7 @@ export interface ExtractedMenuItem {
   name: string;
   description?: string;
   pricePerPerson: number;
+  packageOptions?: import('@/types').PackageOptions;
   category: 'food' | 'alcohol' | 'na_beverage';
   selections?: string[];
   // Phase 3 — menu selection fields
@@ -584,7 +591,7 @@ function getExtractionPrompt(type: 'venue' | 'av' | 'decor' | 'transportation'):
     '- isSampleMenu (boolean) — true if the PDF is labeled "sample menu," "to be finalized," or similar\n' +
     '- menuItems: array of PRICING PACKAGES — extract EVERY package listed. Do not omit any. Each package:\n' +
     '  { name (e.g. "Plated Dinner", "Cocktail Hour Passed Apps", "Premium Open Bar (3hr)"),\n' +
-    '    pricePerPerson (number),\n' +
+    '    pricePerPerson (number — use 0 when packageOptions is present),\n' +
     '    category ("food" | "alcohol" | "na_beverage"),\n' +
     '    isSampleMenu (boolean, inherit from top level),\n' +
     '    needsSelection (boolean) — true when PDF says "Choose X", "Select X", "Pick X of", or lists multiple options for a single course position,\n' +
@@ -593,7 +600,8 @@ function getExtractionPrompt(type: 'venue' | 'av' | 'decor' | 'transportation'):
     '    tags (array of dietary tag strings, e.g. ["GF","VEG"] — apply to the package when all options share the tag),\n' +
     '    options (array) — populate ONLY when needsSelection=true, each option:\n' +
     '      { name (string), description (string, optional), tags (array of dietary tag strings e.g. ["GF","VEG","V","AG"]) },\n' +
-    '    selections (array of strings — final dish names when needsSelection=false, for backward compat) }\n' +
+    '    selections (array of strings — final dish names when needsSelection=false, for backward compat),\n' +
+    '    packageOptions — see PACKAGE GROUP RULES below }\n' +
     'DIETARY TAGS: use standard abbreviations from the PDF (GF=gluten-free, VEG=vegetarian, V=vegan, AG=allergen-noted, DF=dairy-free, NF=nut-free).\n' +
     'GROUPING RULES:\n' +
     '- Prix-fixe/final menu → needsSelection=false, list dishes as selections.\n' +
@@ -603,6 +611,19 @@ function getExtractionPrompt(type: 'venue' | 'av' | 'decor' | 'transportation'):
     '- NA beverages → one "Non-Alcoholic Beverages" package.\n' +
     '- venueFees (array: { name, value, type: "percentage"|"flat" }) for service charge, gratuity, admin fee, F&B minimum, room rental.\n' +
     '- equipmentItems: only for AV/staffing/rental line items that are NOT food/beverage.\n' +
+    'PACKAGE GROUP RULES — use packageOptions when a PDF presents MULTIPLE ALTERNATIVE complete packages at DIFFERENT prices:\n' +
+    '  Examples: "Package A ($85pp) / Package B ($110pp) / Package C ($135pp)", "Gold/Silver/Bronze tiers", "Menu Option 1 / Menu Option 2".\n' +
+    '  When detected, produce ONE menuItem (not one per package) with:\n' +
+    '    name = shared group label (e.g. "Food Package"),\n' +
+    '    pricePerPerson = 0,\n' +
+    '    packageOptions: {\n' +
+    '      label: (same as name),\n' +
+    '      options: [ { id: "a", name: "Package A", description: "...", pricePerPerson: 85, items: ["Dish 1", "Dish 2", ...] }, ... ]\n' +
+    '    }\n' +
+    '  Use sequential single-letter ids ("a", "b", "c", ...).\n' +
+    '  Populate items[] with every dish/course/inclusion listed for that package.\n' +
+    '  DISTINGUISH from needsSelection: use packageOptions only when each option is a COMPLETE standalone menu at its OWN price.\n' +
+    '  Use needsSelection when you choose N items from one list within a single priced package.\n' +
     'No markdown, no explanation — raw JSON only.'
   );
 }

@@ -101,6 +101,8 @@ function dbItemToLocal(item: DbLineItem, markups: DbMarkup[], sections: LocalSec
     sortOrder: item.sort_order,
     thumbnailUrl: item.thumbnail_url,
     thumbnailIcon: item.thumbnail_icon,
+    packageOptions: item.package_options,
+    selectedPackageId: item.selected_package_id,
   };
 }
 
@@ -275,6 +277,8 @@ export default function AvEstimateBuilder({
       sort_order: item.sortOrder,
       thumbnail_url: item.thumbnailUrl ?? null,
       thumbnail_icon: item.thumbnailIcon ?? null,
+      package_options: item.packageOptions ?? null,
+      selected_package_id: item.selectedPackageId ?? null,
     }));
 
     if (item.isNew && result.id) {

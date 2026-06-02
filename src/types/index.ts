@@ -1,6 +1,19 @@
 // QC Estimator — Core Types
 // These types mirror the database schema and are used by the pricing engine.
 
+export interface PackageOption {
+  id: string;
+  name: string;
+  description?: string;
+  pricePerPerson: number;
+  items: string[];
+}
+
+export interface PackageOptions {
+  label: string;
+  options: PackageOption[];
+}
+
 export type TaxType = 'food' | 'alcohol' | 'general' | 'none';
 export type TaxBucket = 'fb' | 'equipment' | 'venue' | 'staffing';
 export type EstimateType = 'venue' | 'av' | 'decor' | 'transportation';

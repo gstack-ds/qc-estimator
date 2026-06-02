@@ -16,6 +16,8 @@ export interface LineItemForExport {
   isRevenueItem?: boolean;
   thumbnailUrl?: string | null;
   thumbnailIcon?: string | null;
+  packageOptions?: import('@/types').PackageOptions | null;
+  selectedPackageId?: string | null;
 }
 
 export interface MarkupForExport {
