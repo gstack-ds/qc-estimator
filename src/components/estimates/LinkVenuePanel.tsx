@@ -52,6 +52,7 @@ export default function LinkVenuePanel({
   const [newCity, setNewCity] = useState('');
   const [newState, setNewState] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
+  const [isNameWarning, setIsNameWarning] = useState(false);
   const [duplicateId, setDuplicateId] = useState<string | null>(null);
   const [duplicateName, setDuplicateName] = useState<string | null>(null);
 
@@ -124,14 +125,10 @@ export default function LinkVenuePanel({
     }
   }
 
-  async function handleAddVenue(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newName.trim()) return;
-    if (!newAddress.trim()) {
-      setAddError('Address is required to prevent duplicate venues.');
-      return;
-    }
+  async function submitVenue(skipNameCheck = false) {
+    if (!newName.trim() || !newAddress.trim()) return;
     setAddError(null);
+    setIsNameWarning(false);
     setDuplicateId(null);
     setDuplicateName(null);
 
@@ -140,6 +137,7 @@ export default function LinkVenuePanel({
       address: newAddress.trim(),
       city: newCity.trim() || null,
       state: newState.trim() || null,
+      skipNameCheck,
     });
 
     if ('error' in result) {
@@ -148,6 +146,7 @@ export default function LinkVenuePanel({
         setDuplicateId(result.existingId);
         setDuplicateName(result.existingName ?? null);
       }
+      if (result.isWarning) setIsNameWarning(true);
       return;
     }
 
@@ -163,6 +162,11 @@ export default function LinkVenuePanel({
     setNewAddress('');
     setNewCity('');
     setNewState('');
+  }
+
+  async function handleAddVenue(e: React.FormEvent) {
+    e.preventDefault();
+    await submitVenue(false);
   }
 
   function handleUseDuplicate() {
@@ -285,17 +289,20 @@ export default function LinkVenuePanel({
           </div>
 
           {addError && (
-            <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-              {addError}
-              {duplicateId && (
-                <button
-                  type="button"
-                  onClick={handleUseDuplicate}
-                  className="ml-2 underline font-medium hover:text-amber-900"
-                >
-                  Use {duplicateName ?? 'that venue'}
-                </button>
-              )}
+            <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 flex flex-wrap items-center gap-2">
+              <span>{addError}</span>
+              <div className="flex gap-2 flex-wrap">
+                {duplicateId && (
+                  <button type="button" onClick={handleUseDuplicate} className="underline font-medium hover:text-amber-900">
+                    Use {duplicateName ?? 'that venue'}
+                  </button>
+                )}
+                {isNameWarning && (
+                  <button type="button" onClick={() => submitVenue(true)} className="underline font-medium hover:text-amber-900">
+                    Proceed anyway
+                  </button>
+                )}
+              </div>
             </div>
           )}
 

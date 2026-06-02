@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { normalizeAddress, normalizeName } from '@/lib/venues/normalize';
 
 // ─── Venues ──────────────────────────────────────────────
 
@@ -17,24 +18,43 @@ export async function createVenue(data: {
   contact_phone?: string | null;
   website?: string | null;
   notes?: string | null;
-}): Promise<{ id: string } | { error: string; existingId?: string; existingName?: string }> {
+  skipNameCheck?: boolean;
+}): Promise<{ id: string } | { error: string; existingId?: string; existingName?: string; isWarning?: boolean }> {
   const supabase = await createClient();
 
-  // Duplicate address check — soft, case-insensitive
-  if (data.address?.trim()) {
-    const normalized = data.address.trim().replace(/\s+/g, ' ');
-    const { data: existing } = await supabase
-      .from('venues')
-      .select('id, name')
-      .ilike('address', normalized)
-      .limit(1)
-      .maybeSingle();
-    if (existing) {
+  // Address is required to prevent duplicates
+  if (!data.address?.trim()) {
+    return { error: 'Address is required. Enter the venue street address to prevent duplicates.' };
+  }
+
+  // Fetch all existing venues for duplicate checks (small dataset)
+  const { data: allVenues } = await supabase.from('venues').select('id, name, address');
+
+  if (allVenues) {
+    const normNewAddr = normalizeAddress(data.address.trim());
+    const normNewName = normalizeName(data.name.trim());
+
+    // Hard block: exact address match (normalized)
+    const addrMatch = allVenues.find((v) => v.address && normalizeAddress(v.address) === normNewAddr);
+    if (addrMatch) {
       return {
-        error: `This address already exists as "${existing.name}". Use that venue instead.`,
-        existingId: existing.id,
-        existingName: existing.name,
+        error: `This address already exists as "${addrMatch.name}". Use that venue instead.`,
+        existingId: addrMatch.id,
+        existingName: addrMatch.name,
       };
+    }
+
+    // Soft warning: name normalizes to same string (skip if user acknowledged)
+    if (!data.skipNameCheck) {
+      const nameMatch = allVenues.find((v) => normalizeName(v.name) === normNewName);
+      if (nameMatch) {
+        return {
+          error: `A venue with a similar name already exists: "${nameMatch.name}". Did you mean that venue?`,
+          existingId: nameMatch.id,
+          existingName: nameMatch.name,
+          isWarning: true,
+        };
+      }
     }
   }
 
