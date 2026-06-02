@@ -95,7 +95,8 @@ export default function VenuePicker({ estimateId, programId, venues, venueSpaces
   }
 
   async function submitCreate(skipNameCheck = false) {
-    if (!cName.trim() || !cAddress.trim()) return;
+    if (!cName.trim()) { setCError('Venue name is required.'); return; }
+    if (!cAddress.trim()) { setCError('Address is required — needed to prevent duplicate venues.'); return; }
     setCError(null);
     setCDupId(null);
     setCDupName(null);
@@ -318,7 +319,7 @@ export default function VenuePicker({ estimateId, programId, venues, venueSpaces
 
           <button
             type="submit"
-            disabled={!cName.trim() || !cAddress.trim()}
+            disabled={!cName.trim()}
             className="bg-brand-brown text-white text-sm rounded px-4 py-1.5 hover:bg-brand-brown/90 disabled:opacity-50 transition-colors"
           >
             Create & select

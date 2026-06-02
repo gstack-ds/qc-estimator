@@ -49,8 +49,13 @@ export default function VenuesList({ venues }: Props) {
 
   // Add form state
   const [newName, setNewName] = useState('');
+  const [newAddress, setNewAddress] = useState('');
   const [newCity, setNewCity] = useState('');
   const [newState, setNewState] = useState('');
+  const [addError, setAddError] = useState<string | null>(null);
+  const [addDupId, setAddDupId] = useState<string | null>(null);
+  const [addDupName, setAddDupName] = useState<string | null>(null);
+  const [addIsWarning, setAddIsWarning] = useState(false);
 
   const uniqueCities = useMemo(() => {
     const cities = venues.map((v) => v.city).filter(Boolean) as string[];
@@ -77,18 +82,34 @@ export default function VenuesList({ venues }: Props) {
     });
   }, [venues, search, filterCity, filterState, filterStyle, filterCapMin, filterCapMax]);
 
-  async function handleAdd(e: React.FormEvent) {
+  async function handleAdd(e: React.FormEvent, skipNameCheck = false) {
     e.preventDefault();
     if (!newName.trim()) return;
+    setAddError(null);
+    setAddDupId(null);
+    setAddDupName(null);
+    setAddIsWarning(false);
     setIsPending(true);
-    const result = await createVenue({ name: newName.trim(), city: newCity || null, state: newState || null });
+    const result = await createVenue({
+      name: newName.trim(),
+      address: newAddress.trim() || null,
+      city: newCity || null,
+      state: newState || null,
+      skipNameCheck,
+    });
     setIsPending(false);
     if ('id' in result) {
       setShowAddForm(false);
       setNewName('');
+      setNewAddress('');
       setNewCity('');
       setNewState('');
+      setAddError(null);
       router.push(`/venues/${result.id}`);
+    } else {
+      setAddError(result.error);
+      if (result.existingId) { setAddDupId(result.existingId); setAddDupName(result.existingName ?? null); }
+      if (result.isWarning) setAddIsWarning(true);
     }
   }
 
@@ -163,53 +184,87 @@ export default function VenuesList({ venues }: Props) {
 
       {/* Add form */}
       {showAddForm && (
-        <form onSubmit={handleAdd} className="bg-brand-cream/30 border border-brand-silver/20 rounded-lg p-4 mb-4 flex items-end gap-3 flex-wrap">
-          <div>
-            <label className="block text-xs text-brand-silver mb-1">Venue Name *</label>
-            <input
-              autoFocus
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              className="border border-brand-silver/30 rounded px-3 py-1.5 text-sm w-48 bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
-              placeholder="e.g. The Ballantyne"
-            />
+        <form onSubmit={handleAdd} className="bg-brand-cream/30 border border-brand-silver/20 rounded-lg p-4 mb-4 space-y-3">
+          <div className="flex items-end gap-3 flex-wrap">
+            <div>
+              <label className="block text-xs text-brand-silver mb-1">Venue Name *</label>
+              <input
+                autoFocus
+                required
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                className="border border-brand-silver/30 rounded px-3 py-1.5 text-sm w-48 bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
+                placeholder="e.g. The Ballantyne"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-brand-silver mb-1">Address *</label>
+              <input
+                required
+                value={newAddress}
+                onChange={(e) => setNewAddress(e.target.value)}
+                className={`border rounded px-3 py-1.5 text-sm w-56 bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown ${!newAddress.trim() && addError ? 'border-red-400' : 'border-brand-silver/30'}`}
+                placeholder="123 Main St"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-brand-silver mb-1">City</label>
+              <input
+                value={newCity}
+                onChange={(e) => setNewCity(e.target.value)}
+                className="border border-brand-silver/30 rounded px-3 py-1.5 text-sm w-32 bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
+                placeholder="Charlotte"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-brand-silver mb-1">State</label>
+              <select
+                value={newState}
+                onChange={(e) => setNewState(e.target.value)}
+                className="border border-brand-silver/30 rounded px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
+              >
+                <option value="">—</option>
+                {ALL_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={isPending || !newName.trim()}
+                className="bg-brand-brown text-white text-sm px-4 py-1.5 rounded hover:bg-brand-brown/90 disabled:opacity-50"
+              >
+                {isPending ? 'Saving…' : 'Create & Edit'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowAddForm(false); setAddError(null); }}
+                className="text-sm text-brand-silver hover:text-brand-charcoal px-3 py-1.5"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-          <div>
-            <label className="block text-xs text-brand-silver mb-1">City</label>
-            <input
-              value={newCity}
-              onChange={(e) => setNewCity(e.target.value)}
-              className="border border-brand-silver/30 rounded px-3 py-1.5 text-sm w-36 bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
-              placeholder="Charlotte"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-brand-silver mb-1">State</label>
-            <select
-              value={newState}
-              onChange={(e) => setNewState(e.target.value)}
-              className="border border-brand-silver/30 rounded px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
-            >
-              <option value="">—</option>
-              {ALL_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={isPending || !newName.trim()}
-              className="bg-brand-brown text-white text-sm px-4 py-1.5 rounded hover:bg-brand-brown/90 disabled:opacity-50"
-            >
-              {isPending ? 'Saving…' : 'Create & Edit'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowAddForm(false)}
-              className="text-sm text-brand-silver hover:text-brand-charcoal px-3 py-1.5"
-            >
-              Cancel
-            </button>
-          </div>
+          {addError && (
+            <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 flex flex-wrap items-center gap-2">
+              <span>{addError}</span>
+              <div className="flex gap-2">
+                {addDupId && (
+                  <a href={`/venues/${addDupId}`} className="underline font-medium hover:text-amber-900">
+                    View {addDupName ?? 'that venue'}
+                  </a>
+                )}
+                {addIsWarning && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); handleAdd(e as unknown as React.FormEvent, true); }}
+                    className="underline font-medium hover:text-amber-900"
+                  >
+                    Create anyway
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </form>
       )}
 

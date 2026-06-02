@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { normalizeAddress, normalizeName } from '@/lib/venues/normalize';
+import { validateVenueInput } from '@/lib/venues/validate';
 
 // ─── Venues ──────────────────────────────────────────────
 
@@ -20,50 +21,48 @@ export async function createVenue(data: {
   notes?: string | null;
   skipNameCheck?: boolean;
 }): Promise<{ id: string } | { error: string; existingId?: string; existingName?: string; isWarning?: boolean }> {
+  console.log('[createVenue] called with name=%s address=%s', data.name, data.address ?? '(none)');
   const supabase = await createClient();
 
-  // Address is required to prevent duplicates
-  if (!data.address?.trim()) {
-    return { error: 'Address is required. Enter the venue street address to prevent duplicates.' };
-  }
-
-  // Fetch all existing venues for duplicate checks (small dataset)
+  // Fetch existing venues for duplicate checks
   const { data: allVenues } = await supabase.from('venues').select('id, name, address');
 
-  if (allVenues) {
-    const normNewAddr = normalizeAddress(data.address.trim());
-    const normNewName = normalizeName(data.name.trim());
+  const validation = validateVenueInput(data, allVenues ?? [], data.skipNameCheck);
 
-    // Hard block: exact address match (normalized)
-    const addrMatch = allVenues.find((v) => v.address && normalizeAddress(v.address) === normNewAddr);
-    if (addrMatch) {
+  if (!validation.ok) {
+    console.log('[createVenue] blocked — reason=%s', validation.reason);
+    if (validation.reason === 'missing_address') {
+      return { error: 'Address is required. Enter the venue street address to prevent duplicates.' };
+    }
+    if (validation.reason === 'duplicate_address') {
       return {
-        error: `This address already exists as "${addrMatch.name}". Use that venue instead.`,
-        existingId: addrMatch.id,
-        existingName: addrMatch.name,
+        error: `This address already exists as "${validation.existingName}". Use that venue instead.`,
+        existingId: validation.existingId,
+        existingName: validation.existingName,
       };
     }
-
-    // Soft warning: name normalizes to same string (skip if user acknowledged)
-    if (!data.skipNameCheck) {
-      const nameMatch = allVenues.find((v) => normalizeName(v.name) === normNewName);
-      if (nameMatch) {
-        return {
-          error: `A venue with a similar name already exists: "${nameMatch.name}". Did you mean that venue?`,
-          existingId: nameMatch.id,
-          existingName: nameMatch.name,
-          isWarning: true,
-        };
-      }
+    if (validation.reason === 'similar_name') {
+      return {
+        error: `A venue with a similar name already exists: "${validation.existingName}". Did you mean that venue?`,
+        existingId: validation.existingId,
+        existingName: validation.existingName,
+        isWarning: true,
+      };
     }
   }
 
+  // Exclude non-DB fields from insert
+  const { skipNameCheck: _skip, ...insertData } = data;
   const { data: venue, error } = await supabase
     .from('venues')
-    .insert({ ...data, service_styles: data.service_styles ?? [] })
+    .insert({ ...insertData, service_styles: insertData.service_styles ?? [] })
     .select('id')
     .single();
-  if (error) return { error: error.message };
+  if (error) {
+    console.log('[createVenue] DB insert error:', error.message);
+    return { error: error.message };
+  }
+  console.log('[createVenue] created id=%s', venue.id);
   revalidatePath('/venues');
   return { id: venue.id };
 }
@@ -335,6 +334,9 @@ export async function saveEstimateAsVenue(
     admin_fee_default?: number | null;
   },
 ): Promise<{ venueId: string; spaceId: string } | { error: string }> {
+  if (!venueData.address?.trim()) {
+    return { error: 'Address is required to save a venue.' };
+  }
   const supabase = await createClient();
 
   const { data: venue, error: ve } = await supabase
