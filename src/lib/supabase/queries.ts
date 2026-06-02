@@ -723,6 +723,135 @@ export async function getVenueWithSpaces(id: string): Promise<DbVenueWithSpaces 
   return data as unknown as DbVenueWithSpaces;
 }
 
+// ─── Venue History ────────────────────────────────────────
+
+export interface DbVenueEstimate {
+  id: string;
+  name: string;
+  type: string;
+  program_id: string;
+  program_name: string;
+  client_name: string | null;
+  event_date: string | null;
+  created_at: string;
+}
+
+export interface DbVenueAttachment {
+  id: string;
+  estimate_id: string;
+  estimate_name: string;
+  program_id: string;
+  program_name: string;
+  file_name: string;
+  storage_path: string;
+  mime_type: string;
+  created_at: string;
+}
+
+export interface DbVenueStat {
+  venue_id: string;
+  program_count: number;
+  file_count: number;
+}
+
+export async function getEstimatesForVenue(venueId: string): Promise<DbVenueEstimate[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('estimates')
+    .select('id, name, type, program_id, created_at, program:programs(name, client_name, event_date)')
+    .eq('venue_id', venueId)
+    .order('created_at', { ascending: false });
+  if (error) return [];
+  return (data ?? []).map((row) => {
+    const prog = row.program as unknown as { name: string; client_name: string | null; event_date: string | null } | null;
+    return {
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      program_id: row.program_id,
+      program_name: prog?.name ?? 'Unknown Program',
+      client_name: prog?.client_name ?? null,
+      event_date: prog?.event_date ?? null,
+      created_at: row.created_at,
+    };
+  });
+}
+
+export async function getAttachmentsForVenue(venueId: string): Promise<DbVenueAttachment[]> {
+  const supabase = await createClient();
+  // Get estimate IDs linked to this venue
+  const { data: estimates } = await supabase
+    .from('estimates')
+    .select('id, name, program_id, program:programs(name)')
+    .eq('venue_id', venueId);
+  if (!estimates || estimates.length === 0) return [];
+
+  const estimateIds = estimates.map((e) => e.id);
+  const estMap = new Map(estimates.map((e) => [
+    e.id,
+    { name: e.name, program_id: e.program_id, program_name: (e.program as unknown as { name: string } | null)?.name ?? '' },
+  ]));
+
+  const { data: attachments } = await supabase
+    .from('estimate_attachments')
+    .select('id, estimate_id, file_name, storage_path, mime_type, created_at')
+    .in('estimate_id', estimateIds)
+    .order('created_at', { ascending: false });
+
+  return (attachments ?? []).map((att) => {
+    const est = estMap.get(att.estimate_id);
+    return {
+      id: att.id,
+      estimate_id: att.estimate_id,
+      estimate_name: est?.name ?? '',
+      program_id: est?.program_id ?? '',
+      program_name: est?.program_name ?? '',
+      file_name: att.file_name,
+      storage_path: att.storage_path,
+      mime_type: att.mime_type,
+      created_at: att.created_at,
+    };
+  });
+}
+
+export async function getVenueStats(): Promise<DbVenueStat[]> {
+  const supabase = await createClient();
+  const { data: estimates } = await supabase
+    .from('estimates')
+    .select('id, venue_id, program_id')
+    .not('venue_id', 'is', null);
+  if (!estimates || estimates.length === 0) return [];
+
+  const programsByVenue = new Map<string, Set<string>>();
+  const estimateIds: string[] = [];
+  for (const est of estimates) {
+    if (!est.venue_id) continue;
+    estimateIds.push(est.id);
+    if (!programsByVenue.has(est.venue_id)) programsByVenue.set(est.venue_id, new Set());
+    programsByVenue.get(est.venue_id)!.add(est.program_id);
+  }
+
+  const filesByVenue = new Map<string, number>();
+  if (estimateIds.length > 0) {
+    const { data: attachments } = await supabase
+      .from('estimate_attachments')
+      .select('estimate_id')
+      .in('estimate_id', estimateIds);
+    const estToVenue = new Map(estimates.map((e) => [e.id, e.venue_id!]));
+    for (const att of (attachments ?? [])) {
+      const venueId = estToVenue.get(att.estimate_id);
+      if (!venueId) continue;
+      filesByVenue.set(venueId, (filesByVenue.get(venueId) ?? 0) + 1);
+    }
+  }
+
+  return [...programsByVenue.entries()].map(([venue_id, programs]) => ({
+    venue_id,
+    program_count: programs.size,
+    file_count: filesByVenue.get(venue_id) ?? 0,
+  }));
+}
+
 // ─── Leads ────────────────────────────────────────────────
 
 export type { LeadStatus, LeadStatusGroup } from '@/lib/leads/constants';

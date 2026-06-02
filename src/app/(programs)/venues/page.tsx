@@ -1,10 +1,10 @@
-import { getVenues, getAllVenueSpaces } from '@/lib/supabase/queries';
+import { getVenues, getAllVenueSpaces, getVenueStats } from '@/lib/supabase/queries';
 import VenuesList from '@/components/venues/VenuesList';
 
 export const dynamic = 'force-dynamic';
 
 export default async function VenuesPage() {
-  const [venues, allSpaces] = await Promise.all([getVenues(), getAllVenueSpaces()]);
+  const [venues, allSpaces, stats] = await Promise.all([getVenues(), getAllVenueSpaces(), getVenueStats()]);
 
   const spacesByVenue = new Map<string, typeof allSpaces>();
   for (const space of allSpaces) {
@@ -13,16 +13,21 @@ export default async function VenuesPage() {
     spacesByVenue.set(space.venue_id, arr);
   }
 
+  const statsMap = new Map(stats.map((s) => [s.venue_id, s]));
+
   const venueRows = venues.map((venue) => {
     const spaces = spacesByVenue.get(venue.id) ?? [];
     const capacities = spaces
       .flatMap((s) => [s.capacity_seated, s.capacity_standing])
       .filter((c): c is number => c !== null);
+    const stat = statsMap.get(venue.id);
     return {
       ...venue,
       space_count: spaces.length,
       capacity_min: capacities.length ? Math.min(...capacities) : null,
       capacity_max: capacities.length ? Math.max(...capacities) : null,
+      program_count: stat?.program_count ?? 0,
+      file_count: stat?.file_count ?? 0,
     };
   });
 

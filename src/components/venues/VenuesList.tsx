@@ -10,6 +10,8 @@ interface VenueRow extends DbVenue {
   space_count: number;
   capacity_min: number | null;
   capacity_max: number | null;
+  program_count: number;
+  file_count: number;
 }
 
 interface Props {
@@ -224,6 +226,8 @@ export default function VenuesList({ venues }: Props) {
                 <th className="pb-2 pr-4 text-xs font-medium text-brand-silver uppercase tracking-wide">Venue</th>
                 <th className="pb-2 pr-4 text-xs font-medium text-brand-silver uppercase tracking-wide">City / State</th>
                 <th className="pb-2 pr-4 text-xs font-medium text-brand-silver uppercase tracking-wide">Service Styles</th>
+                <th className="pb-2 pr-4 text-xs font-medium text-brand-silver uppercase tracking-wide text-right">Programs</th>
+                <th className="pb-2 pr-4 text-xs font-medium text-brand-silver uppercase tracking-wide text-right">Files</th>
                 <th className="pb-2 pr-4 text-xs font-medium text-brand-silver uppercase tracking-wide text-right">Spaces</th>
                 <th className="pb-2 pr-4 text-xs font-medium text-brand-silver uppercase tracking-wide text-right">Capacity</th>
                 <th className="pb-2 text-xs font-medium text-brand-silver uppercase tracking-wide">Last Used</th>
@@ -254,6 +258,8 @@ export default function VenuesList({ venues }: Props) {
                       }
                     </div>
                   </td>
+                  <td className="py-2.5 pr-4 text-right text-brand-charcoal">{venue.program_count || '—'}</td>
+                  <td className="py-2.5 pr-4 text-right text-brand-charcoal">{venue.file_count || '—'}</td>
                   <td className="py-2.5 pr-4 text-right text-brand-charcoal">{venue.space_count || '—'}</td>
                   <td className="py-2.5 pr-4 text-right text-brand-charcoal">
                     {venue.capacity_min !== null || venue.capacity_max !== null
