@@ -321,14 +321,13 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Package options for PDF menu extraction (migration 028): packageOptions JSONB + selected_package_id on estimate_line_items; Claude detects Package A/B/C groups and returns as single line item; PackageSelector accordion UI with radio buttons; selecting a package sets unitPrice; PDF shows selected package name + dishes; Slide 2 "Sync from selections" button; 14 new tests (251 total)
 
 ### Remaining
-- [ ] **Run migration 027 in production** — thumbnail_url + thumbnail_icon columns on estimate_line_items (if not yet done)
-- [ ] **Run migration 028 in production** — package_options + selected_package_id columns on estimate_line_items
+- [x] Migration 027 run in production — thumbnail_url + thumbnail_icon columns live
+- [x] Migration 028 run in production — package_options + selected_package_id columns live
 - [ ] **Tell Alex** — Bright Darling is not on Google Fonts; Cormorant Garamond is used in the preview instead; she should swap to Bright Darling in the actual Canva template
 - [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs (note: EXPECTED_QC_MARGIN values changed significantly with bug #5 fix and again with production fee tax)
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- Run migrations 027 and 028 in production if not yet applied.
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in preview; she swaps in Canva).
 - Google Maps is working in production — test the full travel time flow on a real estimate.
 - Test package options extraction on a real multi-package PDF menu.
