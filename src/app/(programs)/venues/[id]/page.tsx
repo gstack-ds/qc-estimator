@@ -20,12 +20,17 @@ function formatDate(val: string | null) {
 
 export default async function VenueDetailPage({ params }: Props) {
   const { id } = await params;
-  const [venue, estimates, attachments] = await Promise.all([
+  const [venue, estimatesResult, attachmentsResult] = await Promise.all([
     getVenueWithSpaces(id),
     getEstimatesForVenue(id),
     getAttachmentsForVenue(id),
   ]);
   if (!venue) notFound();
+
+  const estimates = estimatesResult.data;
+  const attachments = attachmentsResult.data;
+  const estimateError = estimatesResult.error;
+  const attachmentError = attachmentsResult.error;
 
   // Group estimates by program
   const programMap = new Map<string, typeof estimates>();
@@ -57,10 +62,27 @@ export default async function VenueDetailPage({ params }: Props) {
 
       {/* Program History */}
       <div className="bg-white border border-brand-silver/20 rounded-xl p-6">
-        <h2 className="text-base font-serif text-brand-charcoal mb-4">Program History</h2>
-        {estimates.length === 0 ? (
-          <p className="text-sm text-brand-silver">No estimates linked to this venue yet.</p>
-        ) : (
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-serif text-brand-charcoal">Program History</h2>
+          <span className="text-xs text-brand-silver">
+            {estimateError ? 'Error loading' : `${estimates.length} estimate${estimates.length !== 1 ? 's' : ''} linked`}
+          </span>
+        </div>
+
+        {estimateError && (
+          <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 text-xs text-red-700 mb-3">
+            Query error: {estimateError}
+          </div>
+        )}
+
+        {!estimateError && estimates.length === 0 && (
+          <div className="text-sm text-brand-silver space-y-1">
+            <p>No estimates linked to this venue yet.</p>
+            <p className="text-xs">When an estimate is linked here via the venue picker in the estimate builder, it will appear in this list.</p>
+          </div>
+        )}
+
+        {estimates.length > 0 && (
           <div className="space-y-4">
             {[...programMap.entries()].map(([, ests]) => {
               const first = ests[0];
@@ -105,9 +127,27 @@ export default async function VenueDetailPage({ params }: Props) {
       </div>
 
       {/* Attachments */}
-      {attachments.length > 0 && (
-        <div className="bg-white border border-brand-silver/20 rounded-xl p-6">
-          <h2 className="text-base font-serif text-brand-charcoal mb-4">Estimate Attachments</h2>
+      <div className="bg-white border border-brand-silver/20 rounded-xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-serif text-brand-charcoal">Estimate Attachments</h2>
+          <span className="text-xs text-brand-silver">
+            {attachmentError ? 'Error loading' : `${attachments.length} file${attachments.length !== 1 ? 's' : ''}`}
+          </span>
+        </div>
+
+        {attachmentError && (
+          <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 text-xs text-red-700 mb-3">
+            Query error: {attachmentError}
+          </div>
+        )}
+
+        {!attachmentError && attachments.length === 0 && (
+          <p className="text-sm text-brand-silver">
+            No attachments yet. Files uploaded to estimates at this venue will appear here.
+          </p>
+        )}
+
+        {attachments.length > 0 && (
           <div className="space-y-1.5">
             {attachments.map((att) => (
               <div key={att.id} className="flex items-center gap-3 text-sm">
@@ -125,8 +165,8 @@ export default async function VenueDetailPage({ params }: Props) {
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

@@ -754,15 +754,15 @@ export interface DbVenueStat {
   file_count: number;
 }
 
-export async function getEstimatesForVenue(venueId: string): Promise<DbVenueEstimate[]> {
+export async function getEstimatesForVenue(venueId: string): Promise<{ data: DbVenueEstimate[]; error: string | null; totalEstimatesAtVenue: number }> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('estimates')
     .select('id, name, type, program_id, created_at, program:programs(name, client_name, event_date)')
     .eq('venue_id', venueId)
     .order('created_at', { ascending: false });
-  if (error) return [];
-  return (data ?? []).map((row) => {
+  if (error) return { data: [], error: error.message, totalEstimatesAtVenue: 0 };
+  const rows = (data ?? []).map((row) => {
     const prog = row.program as unknown as { name: string; client_name: string | null; event_date: string | null } | null;
     return {
       id: row.id,
@@ -775,16 +775,18 @@ export async function getEstimatesForVenue(venueId: string): Promise<DbVenueEsti
       created_at: row.created_at,
     };
   });
+  return { data: rows, error: null, totalEstimatesAtVenue: rows.length };
 }
 
-export async function getAttachmentsForVenue(venueId: string): Promise<DbVenueAttachment[]> {
+export async function getAttachmentsForVenue(venueId: string): Promise<{ data: DbVenueAttachment[]; error: string | null }> {
   const supabase = await createClient();
-  // Get estimate IDs linked to this venue
-  const { data: estimates } = await supabase
+  // Step 1: Get estimate IDs linked to this venue
+  const { data: estimates, error: estErr } = await supabase
     .from('estimates')
     .select('id, name, program_id, program:programs(name)')
     .eq('venue_id', venueId);
-  if (!estimates || estimates.length === 0) return [];
+  if (estErr) return { data: [], error: estErr.message };
+  if (!estimates || estimates.length === 0) return { data: [], error: null };
 
   const estimateIds = estimates.map((e) => e.id);
   const estMap = new Map(estimates.map((e) => [
@@ -792,26 +794,30 @@ export async function getAttachmentsForVenue(venueId: string): Promise<DbVenueAt
     { name: e.name, program_id: e.program_id, program_name: (e.program as unknown as { name: string } | null)?.name ?? '' },
   ]));
 
-  const { data: attachments } = await supabase
+  const { data: attachments, error: attErr } = await supabase
     .from('estimate_attachments')
     .select('id, estimate_id, file_name, storage_path, mime_type, created_at')
     .in('estimate_id', estimateIds)
     .order('created_at', { ascending: false });
+  if (attErr) return { data: [], error: attErr.message };
 
-  return (attachments ?? []).map((att) => {
-    const est = estMap.get(att.estimate_id);
-    return {
-      id: att.id,
-      estimate_id: att.estimate_id,
-      estimate_name: est?.name ?? '',
-      program_id: est?.program_id ?? '',
-      program_name: est?.program_name ?? '',
-      file_name: att.file_name,
-      storage_path: att.storage_path,
-      mime_type: att.mime_type,
-      created_at: att.created_at,
-    };
-  });
+  return {
+    data: (attachments ?? []).map((att) => {
+      const est = estMap.get(att.estimate_id);
+      return {
+        id: att.id,
+        estimate_id: att.estimate_id,
+        estimate_name: est?.name ?? '',
+        program_id: est?.program_id ?? '',
+        program_name: est?.program_name ?? '',
+        file_name: att.file_name,
+        storage_path: att.storage_path,
+        mime_type: att.mime_type,
+        created_at: att.created_at,
+      };
+    }),
+    error: null,
+  };
 }
 
 export async function getVenueStats(): Promise<DbVenueStat[]> {
