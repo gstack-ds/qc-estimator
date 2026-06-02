@@ -823,21 +823,23 @@ export default function EstimateBuilder({
             markups={markups}
             onImport={handleImportItems}
           />
-          <ExportButtons
-            programId={program.id}
-            programName={program.name}
-            estimateId={estimate.id}
-            estimateName={est.name}
-            clientName={program.client_name}
-            clientCompany={program.company_name}
-            summary={summary}
-            guestCount={program.guest_count}
-            lineItems={lineItems}
-            orderedSections={[...sections].sort((a, b) => a.sortOrder - b.sortOrder).map((s) => s.name)}
-            markups={markups}
-            taxExempt={est.taxExempt}
-            location={programConfig.location}
-          />
+          <span title={!linkedVenueId ? 'Link a venue before exporting' : undefined} className={!linkedVenueId ? 'pointer-events-none opacity-40' : ''}>
+            <ExportButtons
+              programId={program.id}
+              programName={program.name}
+              estimateId={estimate.id}
+              estimateName={est.name}
+              clientName={program.client_name}
+              clientCompany={program.company_name}
+              summary={summary}
+              guestCount={program.guest_count}
+              lineItems={lineItems}
+              orderedSections={[...sections].sort((a, b) => a.sortOrder - b.sortOrder).map((s) => s.name)}
+              markups={markups}
+              taxExempt={est.taxExempt}
+              location={programConfig.location}
+            />
+          </span>
           <button
             onClick={() => setShowMath(v => !v)}
             className={`text-xs px-2.5 py-1 rounded border transition-colors ${showMath ? 'border-brand-copper/60 bg-brand-offwhite text-brand-brown' : 'border-brand-cream bg-white text-brand-charcoal/70 hover:text-brand-charcoal hover:bg-brand-offwhite'}`}
@@ -866,32 +868,23 @@ export default function EstimateBuilder({
               venues={venues}
               venueSpaces={venueSpaces}
               onAutoFill={handleVenueAutoFill}
-              onLinkChange={(venueId, spaceId) => {
+              onLinkChange={(venueId, spaceId, venueCity) => {
                 setLinkedVenueId(venueId);
                 setLinkedSpaceId(spaceId);
-                // Auto-suggest tax location when venue has city/state and program has no location or a different one
-                if (venueId && allLocations.length > 0) {
-                  const venue = venues.find((v) => v.id === venueId);
-                  if (venue?.city) {
-                    const cityLower = venue.city.toLowerCase();
-                    const matches = allLocations.filter((l) => l.name.toLowerCase().includes(cityLower));
-                    if (matches.length === 1 && matches[0].id !== program.location_id) {
-                      setLocationSuggestion({ locationId: matches[0].id, locationName: matches[0].name });
-                    }
+                // venueCity is passed directly by LinkVenuePanel — works for both existing and newly created venues
+                if (venueId && venueCity && allLocations.length > 0) {
+                  const cityLower = venueCity.toLowerCase();
+                  const matches = allLocations.filter((l) => l.name.toLowerCase().includes(cityLower));
+                  if (matches.length === 1 && matches[0].id !== program.location_id) {
+                    setLocationSuggestion({ locationId: matches[0].id, locationName: matches[0].name });
+                  } else if (matches.length === 0) {
+                    setLocationSuggestion({ locationId: '', locationName: `No tax location found for "${venueCity}" — add one in Admin → Reference Data` });
                   }
                 } else if (!venueId) {
                   setLocationSuggestion(null);
                 }
               }}
             />
-
-            {/* Required venue warning */}
-            {!linkedVenueId && (
-              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-xs text-amber-800">
-                <span className="text-amber-500 text-sm">⚠</span>
-                Venue required — select from the dropdown or add a new one above. A venue will be created automatically when you name this estimate.
-              </div>
-            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -900,9 +893,9 @@ export default function EstimateBuilder({
                   type="text"
                   value={est.name}
                   onChange={(e) => updateEstField({ name: e.target.value })}
-                  onBlur={() => { saveEstimate({ name: est.name }); triggerAutoLink(); }}
+                  onBlur={() => saveEstimate({ name: est.name })}
                   className={fieldClass}
-                  placeholder="e.g., The Belmond — Ballroom"
+                  placeholder="e.g., Ballroom A, Summer Reception"
                 />
               </div>
               <div>
@@ -918,23 +911,33 @@ export default function EstimateBuilder({
               </div>
             </div>
 
-            {/* Tax location suggestion banner */}
+            {/* Tax location suggestion / diagnostic banner */}
             {locationSuggestion && (
-              <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-sm text-blue-800">
-                <span>Tax location auto-suggested: <strong>{locationSuggestion.locationName}</strong></span>
-                <button
-                  onClick={async () => {
-                    await updateProgram(program.id, { location_id: locationSuggestion.locationId });
-                    setLocationSuggestion(null);
-                    router.refresh();
-                  }}
-                  className="text-xs bg-blue-600 text-white rounded px-2 py-0.5 hover:bg-blue-700 transition-colors whitespace-nowrap"
-                >
-                  Apply
-                </button>
+              <div className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm ${
+                locationSuggestion.locationId
+                  ? 'bg-blue-50 border border-blue-200 text-blue-800'
+                  : 'bg-amber-50 border border-amber-200 text-amber-800'
+              }`}>
+                <span className="flex-1">{
+                  locationSuggestion.locationId
+                    ? <>Tax location suggested: <strong>{locationSuggestion.locationName}</strong></>
+                    : locationSuggestion.locationName
+                }</span>
+                {locationSuggestion.locationId && (
+                  <button
+                    onClick={async () => {
+                      await updateProgram(program.id, { location_id: locationSuggestion.locationId });
+                      setLocationSuggestion(null);
+                      router.refresh();
+                    }}
+                    className="text-xs bg-blue-600 text-white rounded px-2 py-0.5 hover:bg-blue-700 transition-colors whitespace-nowrap"
+                  >
+                    Apply
+                  </button>
+                )}
                 <button
                   onClick={() => setLocationSuggestion(null)}
-                  className="ml-auto text-blue-500 hover:text-blue-800 text-base leading-none"
+                  className="text-current/50 hover:text-current text-base leading-none flex-shrink-0"
                   aria-label="Dismiss"
                 >
                   &times;
@@ -1127,8 +1130,16 @@ export default function EstimateBuilder({
           {/* Attachments */}
           <AttachmentsPanel estimateId={estimate.id} onPopulateLineItems={handlePopulateFromExtraction} onPopulateEstimateDetails={handlePopulateEstimateDetails} onLoadMenuToSlide={handleLoadMenuToSlide} />
 
+          {/* Venue required — blocks line items + slide copy + travel */}
+          {!linkedVenueId && (
+            <div className="rounded-lg border-2 border-dashed border-amber-300 bg-amber-50/60 px-6 py-10 text-center">
+              <p className="text-sm font-medium text-amber-800">Select a venue to add line items</p>
+              <p className="text-xs text-amber-700/70 mt-1">Use the Venue dropdown above or add a new venue.</p>
+            </div>
+          )}
+
           {/* Guest count mismatch banner */}
-          {program.guest_count > 0 && lineItems.filter((li) => li.qty > 0 && li.qty !== program.guest_count).length > 0 && (
+          {linkedVenueId && program.guest_count > 0 && lineItems.filter((li) => li.qty > 0 && li.qty !== program.guest_count).length > 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded-md px-4 py-2 text-sm text-amber-800">
               {(() => {
                 const n = lineItems.filter((li) => li.qty > 0 && li.qty !== program.guest_count).length;
@@ -1137,8 +1148,8 @@ export default function EstimateBuilder({
             </div>
           )}
 
-          {/* Line item sections */}
-          <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-6">
+          {/* Line item sections — hidden until venue is linked */}
+          {linkedVenueId && <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-6">
             {/* Move action bar */}
             {selectedItems.size > 0 && (
               <div className="flex items-center gap-3 bg-brand-offwhite border border-brand-copper/30 rounded px-3 py-2 text-sm flex-wrap">
@@ -1251,9 +1262,10 @@ export default function EstimateBuilder({
                 </button>
               )}
             </div>
-          </div>
+          </div>}
 
-          {/* Slide Copy */}
+          {/* Slide Copy — only when venue linked */}
+          {linkedVenueId && <>
           <div ref={slideCopyRef}>
             <SlideCopySection
               estimate={estimate}
@@ -1278,6 +1290,7 @@ export default function EstimateBuilder({
             refs={travelRefs}
             onTotalChange={setTravelExpenses}
           />
+          </>}
         </div>
 
         {/* Right sidebar — summary + margin */}

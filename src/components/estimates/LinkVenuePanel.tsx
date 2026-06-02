@@ -18,7 +18,9 @@ interface Props {
     gratuityOverride?: number | null;
     adminFeeOverride?: number | null;
   }) => void;
-  onLinkChange?: (venueId: string | null, spaceId: string | null) => void;
+  // venueCity is passed as the 3rd arg so callers can do location auto-suggest
+  // even for venues just created (not yet in the venues prop array)
+  onLinkChange?: (venueId: string | null, spaceId: string | null, venueCity?: string | null) => void;
 }
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -29,6 +31,8 @@ function formatDate(dateStr: string | null) {
   const y = dateStr.slice(0, 4);
   return `${MONTHS[m - 1]} ${y}`;
 }
+
+const ADD_NEW_SENTINEL = '__add_new__';
 
 export default function LinkVenuePanel({
   estimateId, programId, currentVenueId, currentVenueSpaceId,
@@ -51,7 +55,6 @@ export default function LinkVenuePanel({
   const [duplicateId, setDuplicateId] = useState<string | null>(null);
   const [duplicateName, setDuplicateName] = useState<string | null>(null);
 
-  // Sync when parent updates venue link (e.g. after auto-link)
   useEffect(() => {
     if (currentVenueId && currentVenueId !== selectedVenueId) {
       setSelectedVenueId(currentVenueId);
@@ -71,22 +74,29 @@ export default function LinkVenuePanel({
   const selectedVenue = venues.find((v) => v.id === selectedVenueId) ?? null;
   const filteredSpaces = spaces.filter((s) => s.venue_id === selectedVenueId);
 
-  async function handleVenueChange(venueId: string) {
-    setSelectedVenueId(venueId);
+  async function handleVenueChange(value: string) {
+    if (value === ADD_NEW_SENTINEL) {
+      setShowAddForm(true);
+      return;
+    }
+
+    setSelectedVenueId(value);
     setSelectedSpaceId('');
-    onLinkChange?.(venueId || null, null);
-    if (!venueId) {
+    const venue = venues.find((v) => v.id === value) ?? null;
+    onLinkChange?.(value || null, null, venue?.city ?? null);
+
+    if (!value) {
       startTransition(async () => {
         await linkVenueToEstimate(estimateId, programId, null, null);
       });
       return;
     }
-    const venue = venues.find((v) => v.id === venueId);
-    const hasSpaces = spaces.some((s) => s.venue_id === venueId);
+
+    const hasSpaces = spaces.some((s) => s.venue_id === value);
     if (!hasSpaces && venue) {
       onAutoFill({ roomSpace: venue.name });
       startTransition(async () => {
-        await linkVenueToEstimate(estimateId, programId, venueId, null);
+        await linkVenueToEstimate(estimateId, programId, value, null);
       });
     }
   }
@@ -95,7 +105,7 @@ export default function LinkVenuePanel({
     setSelectedSpaceId(spaceId);
     const space = spaces.find((s) => s.id === spaceId);
     if (spaceId && space) {
-      onLinkChange?.(selectedVenueId || null, spaceId);
+      onLinkChange?.(selectedVenueId || null, spaceId, selectedVenue?.city ?? null);
       onAutoFill({
         roomSpace: space.name,
         fbMinimum: space.fb_minimum,
@@ -107,7 +117,7 @@ export default function LinkVenuePanel({
         await linkVenueToEstimate(estimateId, programId, selectedVenueId, spaceId);
       });
     } else if (selectedVenueId) {
-      onLinkChange?.(selectedVenueId || null, null);
+      onLinkChange?.(selectedVenueId || null, null, selectedVenue?.city ?? null);
       startTransition(async () => {
         await linkVenueToEstimate(estimateId, programId, selectedVenueId, null);
       });
@@ -117,13 +127,17 @@ export default function LinkVenuePanel({
   async function handleAddVenue(e: React.FormEvent) {
     e.preventDefault();
     if (!newName.trim()) return;
+    if (!newAddress.trim()) {
+      setAddError('Address is required to prevent duplicate venues.');
+      return;
+    }
     setAddError(null);
     setDuplicateId(null);
     setDuplicateName(null);
 
     const result = await createVenue({
       name: newName.trim(),
-      address: newAddress.trim() || null,
+      address: newAddress.trim(),
       city: newCity.trim() || null,
       state: newState.trim() || null,
     });
@@ -142,7 +156,7 @@ export default function LinkVenuePanel({
       await linkVenueToEstimate(estimateId, programId, result.id, null);
     });
     setSelectedVenueId(result.id);
-    onLinkChange?.(result.id, null);
+    onLinkChange?.(result.id, null, newCity.trim() || null);
     onAutoFill({ roomSpace: newName.trim() });
     setShowAddForm(false);
     setNewName('');
@@ -166,23 +180,26 @@ export default function LinkVenuePanel({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-3 flex-wrap">
-        {/* Venue dropdown */}
+        {/* Venue dropdown — "Add new venue" is last option */}
         <div className="flex items-center gap-2">
-          <label className="text-xs text-brand-silver whitespace-nowrap">
-            Linked Venue: <span className="text-red-400">*</span>
+          <label className="text-xs font-medium text-brand-charcoal whitespace-nowrap">
+            Venue <span className="text-red-400">*</span>
           </label>
           <select
             value={selectedVenueId}
             onChange={(e) => handleVenueChange(e.target.value)}
-            disabled={isPending}
-            className={`border rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown min-w-[160px] max-w-[220px] ${
-              !selectedVenueId ? 'border-amber-400' : 'border-brand-silver/30'
+            disabled={isPending || showAddForm}
+            className={`border rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown min-w-[180px] max-w-[280px] ${
+              !selectedVenueId ? 'border-amber-400 text-brand-silver' : 'border-brand-silver/30 text-brand-charcoal'
             }`}
           >
             <option value="">— Select venue —</option>
             {venues.map((v) => (
-              <option key={v.id} value={v.id}>{v.name}</option>
+              <option key={v.id} value={v.id}>
+                {v.name}{v.last_used_date ? ` (last: ${formatDate(v.last_used_date)})` : ''}
+              </option>
             ))}
+            <option value={ADD_NEW_SENTINEL}>+ Add new venue…</option>
           </select>
         </div>
 
@@ -204,35 +221,26 @@ export default function LinkVenuePanel({
           </div>
         )}
         {selectedVenueId && filteredSpaces.length === 0 && (
-          <span className="text-xs text-brand-silver italic">No spaces added — add them in Venues</span>
-        )}
-
-        {/* Last priced badge */}
-        {selectedVenue?.last_used_date && (
-          <span className="text-xs text-brand-silver bg-brand-cream/50 border border-brand-silver/20 rounded px-2 py-0.5">
-            Last priced: {formatDate(selectedVenue.last_used_date)}
-          </span>
-        )}
-
-        {/* Add new venue toggle */}
-        {!showAddForm && (
-          <button
-            type="button"
-            onClick={() => setShowAddForm(true)}
-            className="text-xs text-brand-brown hover:text-brand-charcoal underline-offset-2 hover:underline transition-colors"
-          >
-            + Add new venue
-          </button>
+          <span className="text-xs text-brand-silver italic">No spaces — add in Venues</span>
         )}
       </div>
 
-      {/* Inline add-venue form */}
+      {/* Inline add-venue form — shown when "Add new venue…" selected */}
       {showAddForm && (
         <form
           onSubmit={handleAddVenue}
-          className="bg-brand-cream/30 border border-brand-silver/20 rounded-lg p-3 space-y-2"
+          className="bg-brand-cream/30 border border-amber-200 rounded-lg p-3 space-y-2"
         >
-          <p className="text-xs font-medium text-brand-charcoal">New venue</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-brand-charcoal">Add new venue</p>
+            <button
+              type="button"
+              onClick={() => { setShowAddForm(false); setAddError(null); }}
+              className="text-xs text-brand-silver hover:text-brand-charcoal"
+            >
+              Cancel
+            </button>
+          </div>
           <div className="flex gap-2 flex-wrap">
             <div>
               <label className="block text-[10px] text-brand-silver mb-0.5">Name *</label>
@@ -246,8 +254,9 @@ export default function LinkVenuePanel({
               />
             </div>
             <div>
-              <label className="block text-[10px] text-brand-silver mb-0.5">Address</label>
+              <label className="block text-[10px] text-brand-silver mb-0.5">Address *</label>
               <input
+                required
                 value={newAddress}
                 onChange={(e) => setNewAddress(e.target.value)}
                 className="border border-brand-silver/30 rounded px-2 py-1 text-xs w-52 bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
@@ -290,29 +299,13 @@ export default function LinkVenuePanel({
             </div>
           )}
 
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={isPending || !newName.trim()}
-              className="text-xs bg-brand-brown text-white rounded px-3 py-1 hover:bg-brand-brown/90 disabled:opacity-50 transition-colors"
-            >
-              Add venue
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowAddForm(false);
-                setAddError(null);
-                setNewName('');
-                setNewAddress('');
-                setNewCity('');
-                setNewState('');
-              }}
-              className="text-xs text-brand-silver hover:text-brand-charcoal transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={isPending || !newName.trim() || !newAddress.trim()}
+            className="text-xs bg-brand-brown text-white rounded px-3 py-1 hover:bg-brand-brown/90 disabled:opacity-50 transition-colors"
+          >
+            Add venue
+          </button>
         </form>
       )}
     </div>
