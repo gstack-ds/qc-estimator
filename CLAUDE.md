@@ -224,6 +224,11 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-06-02 | PDF section order: pass orderedSections[] from each builder to ProposalDocument | ProposalDocument previously derived section order from Array.from(new Set(lineItems.map(li => li.section))) — item-level sort_order, not section-level. Each builder now computes [...sections].sort((a,b) => a.sortOrder - b.sortOrder).map(s => s.name) and passes it through ExportButtons. | Derive from lineItems insertion order (arbitrary when sections share sort_order 0) |
 | 2026-06-02 | PDF extraction: removed 5-10 item cap; raised max_tokens to 16000 | "aim for 5–10 total" caused Claude to intentionally omit items on larger menus. max_tokens: 4096 cut off JSON responses for menus with many packages. Both fixed for text and document extraction paths. | Keep cap (rejects — legitimately misses items) |
 | 2026-06-02 | Package options: packageOptions JSONB + selected_package_id on line items | When PDF has Package A/B/C at different prices, Claude returns one menuItem with packageOptions instead of separate flat items. PackageSelector component renders radio buttons. Selecting a package sets unitPrice = pricePerPerson. package-derived Slide 2 courses sync via "Sync from selections" button. | Separate line item per package (loses the group relationship), needsSelection (wrong — options have different prices, not sub-items within one price) |
+| 2026-06-03 | Program lifecycle status: text column (not enum) with CHECK constraint | Three statuses: active/completed/did_not_book. Text avoids ALTER TYPE migrations when adding statuses later. archived_at set automatically when status → completed/did_not_book, cleared when → active. Default tab is Active. | PG enum (hard to extend), separate archived boolean (redundant with status) |
+| 2026-06-03 | Venue force-address: required banner + inline add form in EstimateBuilder | venues.venue_id already exists on estimates (migration 015). Force is implemented as an amber warning banner (not a hard block) that disappears once auto-link fires on name blur. Inline "Add new venue" form in LinkVenuePanel creates venue + links estimate in one action. | Hard block (rejects — estimates are useful before venue is set); separate create-venue page (breaks flow) |
+| 2026-06-03 | Duplicate venue address: soft check in createVenue action, no DB UNIQUE constraint | Returns { error, existingId, existingName } so the inline form can offer "Use that venue" button. address is nullable (NULL ≠ NULL so a DB unique constraint would need a partial index), and we want a user-friendly message not a DB error. | DB UNIQUE constraint (gives raw error, doesn't handle NULL); no check (allows silent duplicates) |
+| 2026-06-03 | Auto-suggest tax location: fires from onLinkChange in EstimateBuilder when venue.city matches exactly one location row | City-in-name matching (location.name.toLowerCase().includes(cityLower)). If exactly one match and it's not the current program location, shows a blue banner with Apply button that calls updateProgram + router.refresh(). Multiple matches = no suggestion (ambiguous). | Auto-apply without confirmation (too aggressive — overwrites intentional location choice) |
+| 2026-06-03 | Venue profile history: getEstimatesForVenue + getAttachmentsForVenue via two-step queries | Supabase doesn't support filtering on related-table columns in a single query. Step 1: get estimate IDs for venue. Step 2: get attachments for those IDs. Estimates grouped by program in the detail page. | Single JOIN query via raw SQL (would need a DB function) |
 
 ## Gotchas Log
 
@@ -323,14 +328,22 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 ### Remaining
 - [x] Migration 027 run in production — thumbnail_url + thumbnail_icon columns live
 - [x] Migration 028 run in production — package_options + selected_package_id columns live
+- [x] Program lifecycle status (migration 029, Active/Completed/Did Not Book tabs, inline dropdown, detail page dropdown, archived_at)
+- [x] Venue force-address: required banner in EstimateBuilder, inline "Add new venue" form with duplicate check, auto-suggest tax location banner
+- [x] Venue profile: program history + attachments section on venue detail page
+- [x] Venues list: Programs and Files count columns added
+
+### Remaining
+- [ ] **Run migration 029 in production** — `status TEXT DEFAULT 'active'` + `archived_at TIMESTAMPTZ` on programs
 - [ ] **Tell Alex** — Bright Darling is not on Google Fonts; Cormorant Garamond is used in the preview instead; she should swap to Bright Darling in the actual Canva template
 - [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs (note: EXPECTED_QC_MARGIN values changed significantly with bug #5 fix and again with production fee tax)
+- [ ] Venue profile: attachment download links (currently shows filename only — needs signed URL for clickable download)
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
+- Run migration 029 in production first (program status columns).
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in preview; she swaps in Canva).
-- Google Maps is working in production — test the full travel time flow on a real estimate.
-- Test package options extraction on a real multi-package PDF menu.
-- Proposal validation against Excel is the next quality check.
+- Venue profile attachment downloads: the history section shows filenames but no download link — needs signed URL generation server-side.
 - Scanner is live and working. Run `npm run dedup` if duplicate leads accumulate.
+- Proposal validation against Excel is the next quality check.
 - Role-based access (admin vs user UI enforcement) is the remaining backlog item after Excel validation.
