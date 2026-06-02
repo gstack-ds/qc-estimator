@@ -220,6 +220,10 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-06-01 | Production fee taxed: new formula adds productionFeeTax to totalClient | Alex invoices include prod fee; clients pay tax on it. QC margin unchanged (prod fee tax is a pass-through). subtotalClient (tax-inclusive line items) remains the production fee calculation base — no circular dependency. | Apply before productionFee (circular), separate tax line (unnecessary complexity) |
 | 2026-06-01 | Merge dialog: field comparison shows only differing fields; survivor pre-selected by updated_at | Most recently updated record is likeliest to be "correct." User can override. Confirmation step + warning before delete. | Show all fields (overwhelming with 40+ lead fields) |
 | 2026-06-01 | ThumbnailCell: icon picker inline popover, photo via base64 upload to server action | API key never reaches browser. suggestIcon() keyword matching is instant + free; Claude API would add latency per new item. Icon SVGs in react-pdf are complex — photos shown via Image, icons show a placeholder square. | Client-side Claude call (rejected — exposes key) |
+| 2026-06-02 | Travel time uses free-form From/To address inputs, not locked to client_hotel/linked venue | Team needs to calculate from restaurants, airports, and other non-hotel origins. Inputs default to client_hotel/venue when available but are fully editable. Values persist in slide_copy_data (travelOrigin, travelDest). | Hard-coded to program.client_hotel (rejected — too restrictive) |
+| 2026-06-02 | PDF section order: pass orderedSections[] from each builder to ProposalDocument | ProposalDocument previously derived section order from Array.from(new Set(lineItems.map(li => li.section))) — item-level sort_order, not section-level. Each builder now computes [...sections].sort((a,b) => a.sortOrder - b.sortOrder).map(s => s.name) and passes it through ExportButtons. | Derive from lineItems insertion order (arbitrary when sections share sort_order 0) |
+| 2026-06-02 | PDF extraction: removed 5-10 item cap; raised max_tokens to 16000 | "aim for 5–10 total" caused Claude to intentionally omit items on larger menus. max_tokens: 4096 cut off JSON responses for menus with many packages. Both fixed for text and document extraction paths. | Keep cap (rejects — legitimately misses items) |
+| 2026-06-02 | Package options: packageOptions JSONB + selected_package_id on line items | When PDF has Package A/B/C at different prices, Claude returns one menuItem with packageOptions instead of separate flat items. PackageSelector component renders radio buttons. Selecting a package sets unitPrice = pricePerPerson. package-derived Slide 2 courses sync via "Sync from selections" button. | Separate line item per package (loses the group relationship), needsSelection (wrong — options have different prices, not sub-items within one price) |
 
 ## Gotchas Log
 
@@ -245,6 +249,9 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-05-05 | Migration 017 + 020 created parallel column sets for the same data | Migration 017 created source_advisor/source_coordinator/third_party_company/lead_source. Migration 020 added gdp_advisor/gdp_coordinator/third_party/lead_source_type as new columns. Both exist in DB. Scanner was writing to old, UI reading from new → data invisible in dropdowns. Fix: writer.ts explicitly maps new cols. Historical rows may need a one-time UPDATE backfill. |
 | 2026-05-13 | Proposal validation EXPECTED_* values: manually computed via algebra, not by running engine | Engine subtotalClient INCLUDES vendor-side taxes (foodTaxOur etc.) per engine code. vendorCostsBase = subtotalOur - vendorTaxesTotal. ccProcessingAmount uses tax-inclusive subtotalClient. Algebraic verify: qcRevenue = markup + markupRevenue*clientComm - gdpComm - thirdParty. Get this wrong and test values look right but aren't. |
 | 2026-05-28 | Synchronous export in 'use server' file causes Vercel build failure | Next.js enforces that all exports in a 'use server' module are async functions (server actions). A plain `export function` (non-async) triggers a build error. Any pure utility accidentally placed in actions.ts must be moved to a separate non-server file. |
+| 2026-06-02 | uploadLineItemThumbnail pointed at wrong bucket ('estimates' instead of 'line-item-thumbnails') | 'estimates' is the DB table name, not a storage bucket. The upload silently failed — Supabase returned an error but the server action swallowed it. Always verify bucket names in Storage dashboard before writing upload code. |
+| 2026-06-02 | PDF section order was arbitrary — items sorted by item-level sort_order, not section-level | Array.from(new Set(lineItems.map(li => li.section))) gives section order from the first item of each section encountered. When multiple sections have items at sort_order 0, the output is unpredictable. Fix: pass orderedSections[] from each builder. |
+| 2026-06-02 | PDF extraction silently capped at 5-10 items — prompt said "aim for 5-10 total" | Claude honored the instruction and deliberately skipped items on larger menus. The cap was a leftover from early development. Removed from prompt; max_tokens raised from 4096 to 16000. Always check extraction prompts for unintended quantity limits. |
 
 ## Current TODOs
 
@@ -308,17 +315,23 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Google Maps travel time: better error messages (key-absent vs API-error), fetchMapsDistance logs failures to server, try/catch around server action call in SlideCopySection
 - [x] Merge duplicate leads/programs: checkboxes on leads table and programs table; MergeLeadsDialog and MergeProgramsDialog show side-by-side field comparison (most recently updated is default survivor, radio buttons per differing field, confirmation step); mergeLeads re-points linked programs; mergePrograms moves estimates+events to survivor; LeadRow refactored into LeadRowCells
 - [x] Line item thumbnails: migration 027 (thumbnail_url, thumbnail_icon on estimate_line_items); ThumbnailCell component with Lucide icon picker (18 icons) and Supabase Storage photo upload; client-side suggestIcon() keyword matcher; display in all 3 builders; PDF shows uploaded photos; lucide-react installed
+- [x] Travel time: free-form From/To address inputs replace locked client_hotel/venue fields; values persist in slide_copy_data; Google Maps billing activated, Distance Matrix API enabled — travel time working in production
+- [x] PDF section order fix: builders pass orderedSections[] (sorted by estimate_sections.sort_order) through ExportButtons to ProposalDocument; user drag-and-drop order now preserved in PDF
+- [x] PDF extraction fixes: removed "aim for 5–10 total" cap from venue prompt; raised max_tokens from 4096 to 16000 on both extraction paths
+- [x] Package options for PDF menu extraction (migration 028): packageOptions JSONB + selected_package_id on estimate_line_items; Claude detects Package A/B/C groups and returns as single line item; PackageSelector accordion UI with radio buttons; selecting a package sets unitPrice; PDF shows selected package name + dishes; Slide 2 "Sync from selections" button; 14 new tests (251 total)
 
 ### Remaining
-- [ ] **Provision GOOGLE_MAPS_API_KEY** — set in Vercel env vars with Distance Matrix API enabled; until then drive time returns an error in production
+- [ ] **Run migration 027 in production** — thumbnail_url + thumbnail_icon columns on estimate_line_items (if not yet done)
+- [ ] **Run migration 028 in production** — package_options + selected_package_id columns on estimate_line_items
 - [ ] **Tell Alex** — Bright Darling is not on Google Fonts; Cormorant Garamond is used in the preview instead; she should swap to Bright Darling in the actual Canva template
-- [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs (note: EXPECTED_QC_MARGIN values changed significantly with bug #5 fix)
+- [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs (note: EXPECTED_QC_MARGIN values changed significantly with bug #5 fix and again with production fee tax)
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- Provision GOOGLE_MAPS_API_KEY in Vercel — Distance Matrix API must be enabled in GCP console; drive time shows an error in production until this is set.
+- Run migrations 027 and 028 in production if not yet applied.
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in preview; she swaps in Canva).
-- Migration 027 (thumbnail_url, thumbnail_icon) — confirm it has been run in production before testing thumbnails.
-- Proposal validation against Excel is the next quality check — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values.
+- Google Maps is working in production — test the full travel time flow on a real estimate.
+- Test package options extraction on a real multi-package PDF menu.
+- Proposal validation against Excel is the next quality check.
 - Scanner is live and working. Run `npm run dedup` if duplicate leads accumulate.
 - Role-based access (admin vs user UI enforcement) is the remaining backlog item after Excel validation.
