@@ -97,11 +97,13 @@ export default function LeadCard({ lead, teamMembers, laneStatuses, onUpdate }: 
       <div className={`border border-brand-cream rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow ${styles.cardBg}`}>
         <div className={`border-l-4 ${styles.cardBorder}`}>
 
-          {/* Drag handle — grip icon top-right, visible on hover */}
+          {/* Drag handle — grip icon top-right, visible on hover.
+               listeners MUST be spread without a separate onPointerDown override:
+               adding onPointerDown after {...listeners} in JSX would overwrite
+               dnd-kit's own pointer-down handler and prevent drag from starting. */}
           <div
             {...listeners}
             {...attributes}
-            onPointerDown={(e) => e.stopPropagation()}
             className="absolute top-1.5 right-1.5 z-10 opacity-0 group-hover:opacity-30 hover:!opacity-60 cursor-grab active:cursor-grabbing p-1 rounded"
             title="Drag"
           >
