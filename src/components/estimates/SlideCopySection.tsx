@@ -123,6 +123,8 @@ export default function SlideCopySection({
   const [bioLoading, setBioLoading] = useState(false);
   const [bioError, setBioError] = useState<string | null>(null);
   const [menuCourses, setMenuCourses] = useState<MenuCourse[]>(initialData?.menuSelections ?? []);
+  const [itinerary, setItinerary] = useState(initialData?.itinerary ?? '');
+  const [barNotes, setBarNotes] = useState(initialData?.barNotes ?? '');
   const [menuLoading, setMenuLoading] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -160,6 +162,8 @@ export default function SlideCopySection({
         sqft: sqft ? Number(sqft) : undefined,
         maxCapacity: maxCapacity || undefined,
         venueBio: venueBio || undefined,
+        itinerary: itinerary || undefined,
+        barNotes: barNotes || undefined,
         inclusions,
         menuSelections: menuCourses.length > 0 ? menuCourses : undefined,
         travelResult: travelResult ?? undefined,
@@ -169,7 +173,7 @@ export default function SlideCopySection({
       saveSlideCopyData(estimate.id, data);
     }, 1500);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [venueUrl, sqft, maxCapacity, inclusions, travelResult, menuCourses, venueBio, travelOrigin, travelDest]);
+  }, [venueUrl, sqft, maxCapacity, inclusions, travelResult, menuCourses, venueBio, travelOrigin, travelDest, itinerary, barNotes]);
 
   const handleCalculateTravel = useCallback(async () => {
     const origin = travelOrigin.trim();
@@ -220,19 +224,26 @@ export default function SlideCopySection({
   const eventDate = event?.event_date ?? program.event_date;
   const startTime = event?.start_time ?? program.event_start_time;
   const eventName = event?.name ?? program.name;
+  const pricingGuestCount = program.guest_count;
 
+  // Max capacity line appended to venue header
   const slide1Header = [
     venueName ?? '',
     venueSpaceName ?? '',
     program.name,
+    maxCapacity ? `Max Capacity: ${maxCapacity}` : '',
   ].filter(Boolean).join('\n');
 
-  const totalTaxes = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax;
+  // Tax total now includes production fee tax (taxed since 2026-06-01)
+  const totalTaxes = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax + summary.productionFeeTax;
+
   const s = sections ?? [];
   const venueLabel = s.find((sec) => sec.taxBucket === 'venue')?.name ?? 'Venue Rental';
   const fbLabel = s.find((sec) => sec.taxBucket === 'fb')?.name ?? 'Food and Beverage';
   const staffingLabel = s.find((sec) => sec.taxBucket === 'staffing')?.name ?? 'Bar Staffing';
   const equipLabel = s.find((sec) => sec.taxBucket === 'equipment')?.name ?? 'Catering Equipment and Staffing';
+
+  // Client-facing cost rows — Production Fee is internal margin, not shown
   const summaryRows = ([
     [venueLabel, summary.venueSubtotalClient],
     [fbLabel, summary.fbSubtotalClient],
@@ -240,16 +251,16 @@ export default function SlideCopySection({
     [equipLabel, summary.equipmentSubtotalClient],
     ['Service Charge', summary.serviceChargeClient],
     ['Gratuity', summary.gratuityClient],
-    ['Production Fee', summary.productionFee],
+    ['Admin Fee', summary.adminFeeClient],
     ['Tax', totalTaxes],
   ] as [string, number][]).filter(([, v]) => v > 0);
 
-  const COL = 36;
-  const slide1Summary = [
-    ...summaryRows.map(([label, val]) => `${label.padEnd(COL)}${formatCurrency(val)}`),
-    '─'.repeat(COL + 10),
-    `TOTAL ESTIMATE${' '.repeat(COL - 14)}${formatCurrency(summary.totalClient)}`,
-    `PRICE PER PERSON${' '.repeat(COL - 16)}${formatCurrency(summary.pricePerPerson)}`,
+  // Raw copy: uppercase labels, no padding columns (Canva template style)
+  const costSummaryText = [
+    ...summaryRows.map(([label, val]) => `${String(label).toUpperCase()}   ${formatCurrency(val)}`),
+    '─'.repeat(28),
+    `TOTAL ESTIMATE   ${formatCurrency(summary.totalClient)}`,
+    `PRICE PER PERSON   ${formatCurrency(summary.pricePerPerson)}`,
   ].join('\n');
 
   const slide2Header = [
@@ -261,6 +272,15 @@ export default function SlideCopySection({
     ...INCLUSION_LABELS.filter(([key]) => inclusions[key]).map(([, label]) => label),
     inclusions.customInclusion || null,
   ].filter(Boolean) as string[];
+
+  // Pricing callout block: "Starting at $X (based on N)\nIncluding:\n• ...\nPrice Per Person: $X"
+  const slide1PricingCallout = [
+    `Starting at ${formatCurrency(summary.totalClient)}${pricingGuestCount ? ` (based on ${pricingGuestCount})` : ''}`,
+    activeInclusions.length > 0
+      ? '\nIncluding:\n' + activeInclusions.map((l) => `• ${l}`).join('\n')
+      : '',
+    `\nPrice Per Person: ${formatCurrency(summary.pricePerPerson)}`,
+  ].filter(Boolean).join('');
 
   const slide2Inclusions = activeInclusions.length > 0
     ? 'WHAT\'S INCLUDED:\n' + activeInclusions.map((l) => `• ${l}`).join('\n')
@@ -283,21 +303,41 @@ export default function SlideCopySection({
     })
     .filter(Boolean) as import('@/types/slideCopy').MenuCourse[];
 
-  const menuCopyText = menuCourses.length > 0
-    ? menuCourses.map((c) => {
-        const selected = c.options.filter((o) => o.selected);
-        const lines = selected.map((o) => {
-          const tagStr = o.tags?.length ? ` [${o.tags.join(', ')}]` : '';
-          return `• ${o.name}${tagStr}`;
-        });
-        return `${c.name}:\n${lines.join('\n') || '(no selections yet)'}`;
-      }).join('\n\n')
+  // Bar/spirit course detection — "VODKA / Tito's, Sobieski" format
+  const BAR_COURSE_RE = /^(vodka|whiskey|whisky|bourbon|gin|rum|tequila|scotch|beer|wine|champagne|prosecco|spirits|cocktail|liquor|full\s+bar|premium\s+bar|open\s+bar|hosted\s+bar|bar\b)/i;
+
+  const menuCopyText = (menuCourses.length > 0 || barNotes)
+    ? ([
+        ...menuCourses.map((c) => {
+          if (BAR_COURSE_RE.test(c.name)) {
+            // Spirit category row: VODKA / Tito's, Sobieski
+            const brands = c.options.map((o) => o.name).filter(Boolean).join(', ');
+            return brands ? `${c.name.toUpperCase()} / ${brands}` : c.name.toUpperCase();
+          }
+          // Food/selection course: uppercase header with optional CHOOSE N
+          const headerLabel = c.selectionRule
+            ? `${c.name.toUpperCase()} (${c.selectionRule.toUpperCase()})`
+            : c.name.toUpperCase();
+          // Sample menus (needs_selection) show ALL options; finalized menus show selected only
+          const optionsToShow = c.scenario === 'needs_selection'
+            ? c.options
+            : c.options.filter((o) => o.selected);
+          const lines = optionsToShow.map((o) => {
+            const tagStr = o.tags?.length ? ` [${o.tags.join(', ')}]` : '';
+            return `• ${o.name}${tagStr}`;
+          });
+          return `${headerLabel}\n${lines.join('\n') || '(no selections yet)'}`;
+        }),
+        barNotes ? `BAR\n${barNotes}` : null,
+      ] as (string | null)[]).filter(Boolean).join('\n\n')
     : '';
 
   const allSections = [
     { marker: '--- SLIDE 1 HEADER ---', text: slide1Header },
+    { marker: '--- SLIDE 1 PRICING CALLOUT ---', text: slide1PricingCallout },
     { marker: '--- SLIDE 1 DESCRIPTION ---', text: venueBio },
-    { marker: '--- SLIDE 1 SUMMARY ---', text: slide1Summary },
+    { marker: '--- SLIDE 1 ROUTE / ITINERARY ---', text: itinerary },
+    { marker: '--- COST SUMMARY ---', text: costSummaryText },
     { marker: '--- SLIDE 2 HEADER ---', text: slide2Header },
     { marker: '--- SLIDE 2 INCLUSIONS ---', text: slide2Inclusions },
     { marker: '--- SLIDE 2 DRIVE TIME ---', text: driveLine },
@@ -306,6 +346,7 @@ export default function SlideCopySection({
   ];
 
   const allCopyText = allSections
+    .filter(({ text }) => text.trim())
     .map(({ marker, text }) => `${marker}\n${text}`)
     .join('\n\n');
 
@@ -367,6 +408,16 @@ export default function SlideCopySection({
                 className="w-full text-xs border border-brand-copper/30 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-brand-copper"
               />
             </div>
+          </div>
+          <div className="mt-2">
+            <label className="text-[11px] text-brand-charcoal/60 block mb-0.5">Route / Itinerary (optional)</label>
+            <textarea
+              value={itinerary}
+              onChange={(e) => setItinerary(e.target.value)}
+              rows={3}
+              placeholder="Charter route, run of show, key stops — one line per item"
+              className="w-full text-xs border border-brand-copper/30 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-brand-copper resize-y"
+            />
           </div>
         </div>
 
@@ -434,22 +485,13 @@ export default function SlideCopySection({
             />
           ) : (
           <div className="space-y-3">
-            {/* Slide 1 Header */}
+            {/* Slide 1 — Venue Header (venue name + space + program + max capacity) */}
             <CopyBlock marker="SLIDE 1 — Venue Header" text={slide1Header} />
 
-            {/* Slide 1 Summary */}
-            <CopyBlock marker="SLIDE 1 — Estimate Summary" text={slide1Summary} monospace />
+            {/* Slide 1 — Pricing Callout (total, guest count, inclusions list, price per person) */}
+            <CopyBlock marker="SLIDE 1 — Pricing Callout" text={slide1PricingCallout} />
 
-            {/* Slide 2 Header */}
-            <CopyBlock marker="SLIDE 2 — Event Header" text={slide2Header} />
-
-            {/* Slide 2 Inclusions */}
-            <CopyBlock marker="SLIDE 2 — Inclusions" text={slide2Inclusions || '(no inclusions selected)'} />
-
-            {/* Slide 2 Service Team */}
-            <CopyBlock marker="SLIDE 2 — Service Team" text={teamSummary || '(no staffing line items)'} />
-
-            {/* Slide 1 Description / Venue Bio */}
+            {/* Slide 1 — Venue Description */}
             <VenueBioBlock
               bio={venueBio}
               loading={bioLoading}
@@ -458,6 +500,21 @@ export default function SlideCopySection({
               onGenerate={handleGenerateBio}
               onChange={setVenueBio}
             />
+
+            {/* Slide 1 — Route / Itinerary (only rendered when filled) */}
+            {itinerary.trim() && <CopyBlock marker="SLIDE 1 — Route / Itinerary" text={itinerary} />}
+
+            {/* Cost Summary — uppercase labels, no production fee, totals at bottom */}
+            <CopyBlock marker="Cost Summary" text={costSummaryText} monospace />
+
+            {/* Slide 2 — Event Header */}
+            <CopyBlock marker="SLIDE 2 — Event Header" text={slide2Header} />
+
+            {/* Slide 2 — Inclusions */}
+            <CopyBlock marker="SLIDE 2 — Inclusions" text={slide2Inclusions || '(no inclusions selected)'} />
+
+            {/* Slide 2 — Service Team */}
+            <CopyBlock marker="SLIDE 2 — Service Team" text={teamSummary || '(no staffing line items)'} />
 
             {/* Drive Time */}
             <DriveTimeBlock
@@ -471,12 +528,12 @@ export default function SlideCopySection({
               onCalculate={handleCalculateTravel}
             />
 
-            {/* Menu Selections */}
+            {/* Menu Selections + Bar Notes */}
             <div className="border border-brand-copper/20 rounded bg-white">
               <div className="flex items-center justify-between px-3 py-1.5 border-b border-brand-copper/10 bg-brand-offwhite rounded-t">
                 <span className="text-[11px] font-medium text-brand-charcoal/70">SLIDE 2 — Menu Selections</span>
                 <div className="flex items-center gap-2">
-                  {menuCourses.length > 0 && <CopyButton text={menuCopyText} label="Copy Menu" />}
+                  {(menuCourses.length > 0 || barNotes) && <CopyButton text={menuCopyText} label="Copy Menu" />}
                   {packageDerivedCourses.length > 0 && (
                     <button
                       type="button"
@@ -497,7 +554,7 @@ export default function SlideCopySection({
                   </button>
                 </div>
               </div>
-              <div className="p-3">
+              <div className="p-3 space-y-3">
                 {menuCourses.length === 0 ? (
                   <p className="text-xs text-brand-charcoal/40 italic">
                     {packageDerivedCourses.length > 0
@@ -507,6 +564,19 @@ export default function SlideCopySection({
                 ) : (
                   <MenuSelectionPanel courses={menuCourses} onChange={setMenuCourses} />
                 )}
+                <div>
+                  <label className="text-[11px] text-brand-charcoal/60 block mb-0.5">Bar Menu (optional)</label>
+                  <textarea
+                    value={barNotes}
+                    onChange={(e) => setBarNotes(e.target.value)}
+                    rows={3}
+                    placeholder={'Vodka / Tito\'s, Sobieski\nWhiskey / Jack Daniel\'s, Crown Royal\n…'}
+                    className="w-full text-xs border border-brand-copper/20 rounded px-2 py-1.5 bg-brand-offwhite/40 focus:outline-none focus:border-brand-copper resize-y font-mono"
+                  />
+                  <p className="text-[10px] text-brand-silver/60 mt-0.5">
+                    One category per line. Spirit courses extracted from PDFs appear automatically above.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

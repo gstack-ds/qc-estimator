@@ -42,6 +42,8 @@ export interface SlideCopyData {
   sqft?: number;
   maxCapacity?: string;
   venueBio?: string;
+  itinerary?: string;       // route / run-of-show for Slide 1
+  barNotes?: string;        // free-text bar menu for Slide 2 (manual entry or paste)
   inclusions: InclusionToggles;
   menuSelections?: MenuCourse[];
   travelResult?: TravelResult;
