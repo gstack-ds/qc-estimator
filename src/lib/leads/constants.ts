@@ -12,6 +12,21 @@ export type LeadStatus =
   | 'did_not_book'
   | 'completed';
 
+export const STATUS_LABELS: Record<LeadStatus, string> = {
+  new_lead:                 'New Lead',
+  proposal_in_progress:     'Proposal in Progress',
+  pending_client_review:    'Pending Client Review',
+  pending_contract_payment: 'Pending Contract/Payment',
+  under_contract:           'Under Contract',
+  planning:                 'Planning',
+  unresponsive:             'Unresponsive',
+  post_event_close_out:     'Post Event Close Out',
+  halted:                   'Halted',
+  planning_not_started:     'Planning Not Started',
+  did_not_book:             'Did Not Book',
+  completed:                'Completed',
+};
+
 export type LeadStatusGroup = 'all' | 'open' | 'paused' | 'closed';
 
 export const OPEN_STATUSES: LeadStatus[] = [

@@ -48,7 +48,7 @@ export const PIPELINE_LANES: PipelineLane[] = [
     canonicalStatus: 'pending_client_review',
     // pending_contract_payment: client reviewing before signing/paying
     statuses: ['pending_client_review', 'pending_contract_payment'],
-    color: 'orange',
+    color: 'purple',
   },
   {
     id: 'under_contract',
@@ -113,7 +113,7 @@ export function getLane(laneId: string): PipelineLane | undefined {
 export const LANE_DOT_CLASSES: Record<string, string> = {
   blue:    'bg-blue-400',
   amber:   'bg-amber-400',
-  orange:  'bg-orange-400',
+  purple:  'bg-purple-400',
   green:   'bg-green-500',
   teal:    'bg-teal-500',
   emerald: 'bg-emerald-500',
@@ -123,7 +123,7 @@ export const LANE_DOT_CLASSES: Record<string, string> = {
 export const LANE_ACCENT_CLASSES: Record<string, string> = {
   blue:    'border-t-blue-400',
   amber:   'border-t-amber-400',
-  orange:  'border-t-orange-400',
+  purple:  'border-t-purple-400',
   green:   'border-t-green-500',
   teal:    'border-t-teal-500',
   emerald: 'border-t-emerald-500',
