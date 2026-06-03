@@ -996,3 +996,108 @@ describe('taxBucket routing', () => {
     expect(s.qcStaffingSubtotalClient).toBeCloseTo(760);
   });
 });
+
+// ─── Tax Rate Overrides ───────────────────────────────────
+
+describe('calculateVenueEstimate — tax overrides', () => {
+  const FOOD_ITEM: LineItem = {
+    id: 'f1', section: 'F&B', taxBucket: 'fb', name: 'Food',
+    qty: 1, unitPrice: 1000, categoryMarkupPct: 0.55, taxType: 'food',
+  };
+  const ALCOHOL_ITEM: LineItem = {
+    id: 'a1', section: 'F&B', taxBucket: 'fb', name: 'Bar',
+    qty: 1, unitPrice: 1000, categoryMarkupPct: 0.55, taxType: 'alcohol',
+  };
+  const EQUIPMENT_ITEM: LineItem = {
+    id: 'e1', section: 'AV', taxBucket: 'equipment', name: 'AV Gear',
+    qty: 1, unitPrice: 1000, categoryMarkupPct: 0.65, taxType: 'general',
+  };
+  const NO_COMM_CONFIG: ProgramConfig = {
+    ...BASE_CONFIG,
+    ccProcessingFee: 0, clientCommission: 0, gdpCommissionEnabled: false,
+    serviceChargeDefault: 0, gratuityDefault: 0, adminFeeDefault: 0,
+  };
+  const BASE_INPUT: VenueEstimateInput = {
+    name: 'Override Test', fbMinimum: 0, isVenueTaxable: false,
+    serviceCharge: 0, gratuity: 0, adminFee: 0, lineItems: [],
+  };
+
+  it('no override: food tax uses location default 7.25%', () => {
+    const input: VenueEstimateInput = { ...BASE_INPUT, lineItems: [FOOD_ITEM] };
+    const s = calculateVenueEstimate(input, NO_COMM_CONFIG);
+    expect(s.foodTax).toBeCloseTo(1550 * 0.0725);
+  });
+
+  it('foodTaxOverride replaces default for food items', () => {
+    const input: VenueEstimateInput = { ...BASE_INPUT, lineItems: [FOOD_ITEM], foodTaxOverride: 0.10 };
+    const s = calculateVenueEstimate(input, NO_COMM_CONFIG);
+    expect(s.foodTax).toBeCloseTo(1550 * 0.10);
+  });
+
+  it('foodTaxOverride does not affect alcohol items', () => {
+    const input: VenueEstimateInput = {
+      ...BASE_INPUT, lineItems: [FOOD_ITEM, ALCOHOL_ITEM], foodTaxOverride: 0.10,
+    };
+    const s = calculateVenueEstimate(input, NO_COMM_CONFIG);
+    expect(s.alcoholTax).toBeCloseTo(1550 * 0.0725);
+    expect(s.foodTax).toBeCloseTo(1550 * 0.10);
+  });
+
+  it('alcoholTaxOverride replaces default for alcohol items only', () => {
+    const input: VenueEstimateInput = {
+      ...BASE_INPUT, lineItems: [FOOD_ITEM, ALCOHOL_ITEM], alcoholTaxOverride: 0.12,
+    };
+    const s = calculateVenueEstimate(input, NO_COMM_CONFIG);
+    expect(s.alcoholTax).toBeCloseTo(1550 * 0.12);
+    expect(s.foodTax).toBeCloseTo(1550 * 0.0725);
+  });
+
+  it('generalTaxOverride replaces default for equipment tax', () => {
+    const input: VenueEstimateInput = {
+      ...BASE_INPUT, lineItems: [EQUIPMENT_ITEM], generalTaxOverride: 0.06,
+    };
+    const s = calculateVenueEstimate(input, NO_COMM_CONFIG);
+    expect(s.equipmentTax).toBeCloseTo(1650 * 0.06);
+  });
+
+  it('generalTaxOverride does not affect food or alcohol tax', () => {
+    const input: VenueEstimateInput = {
+      ...BASE_INPUT, lineItems: [FOOD_ITEM, ALCOHOL_ITEM], generalTaxOverride: 0.06,
+    };
+    const s = calculateVenueEstimate(input, NO_COMM_CONFIG);
+    expect(s.foodTax).toBeCloseTo(1550 * 0.0725);
+    expect(s.alcoholTax).toBeCloseTo(1550 * 0.0725);
+  });
+
+  it('null override falls back to location default', () => {
+    const input: VenueEstimateInput = {
+      ...BASE_INPUT, lineItems: [FOOD_ITEM],
+      foodTaxOverride: null, alcoholTaxOverride: null, generalTaxOverride: null,
+    };
+    const s = calculateVenueEstimate(input, NO_COMM_CONFIG);
+    expect(s.foodTax).toBeCloseTo(1550 * 0.0725);
+  });
+
+  it('all three overrides work independently at the same time', () => {
+    const input: VenueEstimateInput = {
+      ...BASE_INPUT,
+      lineItems: [FOOD_ITEM, ALCOHOL_ITEM, EQUIPMENT_ITEM],
+      foodTaxOverride: 0.10,
+      alcoholTaxOverride: 0.12,
+      generalTaxOverride: 0.06,
+    };
+    const s = calculateVenueEstimate(input, NO_COMM_CONFIG);
+    expect(s.foodTax).toBeCloseTo(1550 * 0.10);
+    expect(s.alcoholTax).toBeCloseTo(1550 * 0.12);
+    expect(s.equipmentTax).toBeCloseTo(1650 * 0.06);
+  });
+
+  it('override rate appears on individual line item (not default)', () => {
+    const input: VenueEstimateInput = {
+      ...BASE_INPUT, lineItems: [FOOD_ITEM], foodTaxOverride: 0.085,
+    };
+    const s = calculateVenueEstimate(input, NO_COMM_CONFIG);
+    expect(s.foodTax).toBeCloseTo(1550 * 0.085);
+    expect(s.foodTax).not.toBeCloseTo(1550 * 0.0725);
+  });
+});

@@ -95,6 +95,9 @@ export interface VenueEstimateInput {
   lineItems: LineItem[];
   discount?: { type: 'percent' | 'flat'; value: number } | null;
   taxExempt?: boolean;
+  foodTaxOverride?: number | null;
+  alcoholTaxOverride?: number | null;
+  generalTaxOverride?: number | null;
 }
 
 export interface EstimateSummary {

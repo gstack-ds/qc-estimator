@@ -69,6 +69,9 @@ interface LocalEstimate {
   discountType: 'percent' | 'flat' | null;
   discountValue: number;
   taxExempt: boolean;
+  foodTaxOverride: number | null;
+  alcoholTaxOverride: number | null;
+  generalTaxOverride: number | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -218,6 +221,9 @@ export default function EstimateBuilder({
     discountType: estimate.discount_type ?? null,
     discountValue: estimate.discount_value ?? 0,
     taxExempt: estimate.tax_exempt ?? false,
+    foodTaxOverride: estimate.food_tax_override ?? null,
+    alcoholTaxOverride: estimate.alcohol_tax_override ?? null,
+    generalTaxOverride: estimate.general_tax_override ?? null,
   });
 
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -318,7 +324,20 @@ export default function EstimateBuilder({
       ? { type: est.discountType, value: est.discountValue }
       : null,
     taxExempt: est.taxExempt,
+    foodTaxOverride: est.foodTaxOverride,
+    alcoholTaxOverride: est.alcoholTaxOverride,
+    generalTaxOverride: est.generalTaxOverride,
   }), [est, lineItems, program]);
+
+  // Effective location: merges location rates with per-estimate overrides.
+  // Passed to LineItemSection and ExportButtons so the tax column and PDF
+  // reflect the overridden rates (same name, different rate values).
+  const effectiveLocation = useMemo(() => ({
+    ...programConfig.location,
+    foodTaxRate: est.foodTaxOverride ?? programConfig.location.foodTaxRate,
+    alcoholTaxRate: est.alcoholTaxOverride ?? programConfig.location.alcoholTaxRate,
+    generalTaxRate: est.generalTaxOverride ?? programConfig.location.generalTaxRate,
+  }), [programConfig.location, est.foodTaxOverride, est.alcoholTaxOverride, est.generalTaxOverride]);
 
   const summary = useMemo(
     () => calculateVenueEstimate(venueInput, programConfig),
@@ -386,6 +405,9 @@ export default function EstimateBuilder({
       discount_type: merged.discountType,
       discount_value: merged.discountValue,
       tax_exempt: merged.taxExempt,
+      food_tax_override: merged.foodTaxOverride,
+      alcohol_tax_override: merged.alcoholTaxOverride,
+      general_tax_override: merged.generalTaxOverride,
     }));
   }
 
@@ -838,7 +860,7 @@ export default function EstimateBuilder({
               orderedSections={[...sections].sort((a, b) => a.sortOrder - b.sortOrder).map((s) => s.name)}
               markups={markups}
               taxExempt={est.taxExempt}
-              location={programConfig.location}
+              location={effectiveLocation}
             />
             <button
               onClick={() => setShowMath(v => !v)}
@@ -1110,6 +1132,50 @@ export default function EstimateBuilder({
                 <span className="text-[10px] font-bold tracking-widest px-2 py-0.5 rounded border border-amber-400 bg-amber-50 text-amber-700 uppercase">TAX EXEMPT</span>
               )}
             </div>
+
+            {/* Tax Rate Overrides */}
+            <div className="pt-1 border-t border-brand-cream/60">
+              <label className={labelClass + ' mb-2'}>
+                Tax Rate Overrides
+                <span className="ml-1 font-normal text-brand-silver">(leave blank to use location defaults)</span>
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {(['food', 'alcohol', 'general'] as const).map((type) => {
+                  const key = `${type}TaxOverride` as 'foodTaxOverride' | 'alcoholTaxOverride' | 'generalTaxOverride';
+                  const locKey = `${type}TaxRate` as 'foodTaxRate' | 'alcoholTaxRate' | 'generalTaxRate';
+                  const defaultRate = programConfig.location[locKey];
+                  const val = est[key];
+                  return (
+                    <div key={type}>
+                      <label className={labelClass}>
+                        {type === 'food' ? 'Food Tax' : type === 'alcohol' ? 'Alcohol Tax' : 'General Tax'}
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={val !== null ? parseFloat((val * 100).toFixed(4)) : ''}
+                          placeholder={`${parseFloat((defaultRate * 100).toFixed(3))}% (default)`}
+                          onChange={(e) => {
+                            const v = e.target.value === '' ? null : parseFloat(e.target.value) / 100;
+                            updateEstField({ [key]: v } as Partial<LocalEstimate>);
+                          }}
+                          onBlur={() => saveEstimate({ [key]: est[key] } as Partial<LocalEstimate>)}
+                          className={`border rounded px-2 py-1.5 pr-6 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper text-brand-charcoal w-full text-right ${
+                            val !== null
+                              ? 'border-yellow-300 bg-yellow-50 focus:border-yellow-400'
+                              : 'border-brand-cream bg-white'
+                          }`}
+                        />
+                        <span className="absolute right-2 top-1.5 text-brand-silver text-xs pointer-events-none">%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           {/* Attachments */}
@@ -1198,7 +1264,7 @@ export default function EstimateBuilder({
                         onRename={handleRenameSection}
                         onDeleteSection={handleDeleteSection}
                         onReorderItems={handleReorderItems}
-                        location={programConfig.location}
+                        location={effectiveLocation}
                         showMath={showMath}
                         taxExempt={est.taxExempt}
                       />

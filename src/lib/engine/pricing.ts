@@ -60,7 +60,22 @@ export function calculateVenueEstimate(
   input: VenueEstimateInput,
   config: ProgramConfig
 ): EstimateSummary {
-  const calculated = input.lineItems.map((li) => calculateLineItem(li, config));
+  // Apply per-estimate tax overrides — override beats location default when non-null
+  const effectiveConfig: ProgramConfig = (
+    input.foodTaxOverride != null ||
+    input.alcoholTaxOverride != null ||
+    input.generalTaxOverride != null
+  ) ? {
+    ...config,
+    location: {
+      ...config.location,
+      foodTaxRate: input.foodTaxOverride ?? config.location.foodTaxRate,
+      alcoholTaxRate: input.alcoholTaxOverride ?? config.location.alcoholTaxRate,
+      generalTaxRate: input.generalTaxOverride ?? config.location.generalTaxRate,
+    },
+  } : config;
+
+  const calculated = input.lineItems.map((li) => calculateLineItem(li, effectiveConfig));
 
   // Group by taxBucket — section display name is irrelevant to pricing
   const fb = calculated.filter((li) => li.taxBucket === 'fb');
@@ -93,11 +108,11 @@ export function calculateVenueEstimate(
   const alcoholTax = tm * alcoholItems.reduce((s, li) => s + li.clientCost * li.taxRate, 0);
 
   // Tax — equipment (general sales tax)
-  const equipmentTaxOur = tm * equipmentSubtotalOur * config.location.generalTaxRate;
-  const equipmentTax = tm * equipmentSubtotalClient * config.location.generalTaxRate;
+  const equipmentTaxOur = tm * equipmentSubtotalOur * effectiveConfig.location.generalTaxRate;
+  const equipmentTax = tm * equipmentSubtotalClient * effectiveConfig.location.generalTaxRate;
 
   // Tax — venue (if taxable)
-  const venueTaxRate = input.isVenueTaxable ? config.location.generalTaxRate : 0;
+  const venueTaxRate = input.isVenueTaxable ? effectiveConfig.location.generalTaxRate : 0;
   const venueTaxOur = tm * venueSubtotalOur * venueTaxRate;
   const venueTax = tm * venueSubtotalClient * venueTaxRate;
 
@@ -139,7 +154,7 @@ export function calculateVenueEstimate(
     markupRevenue * config.clientCommission;
 
   // Production fee is taxable at the general sales rate
-  const productionFeeTax = tm * productionFee * config.location.generalTaxRate;
+  const productionFeeTax = tm * productionFee * effectiveConfig.location.generalTaxRate;
 
   // Display subtotals (no taxes in these two fields)
   const lineItemsSubtotalClient = markupRevenue; // items before any tax

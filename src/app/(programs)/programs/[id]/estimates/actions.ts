@@ -31,6 +31,9 @@ export async function updateEstimate(id: string, programId: string, data: Partia
   discount_type: 'percent' | 'flat' | null;
   discount_value: number;
   tax_exempt: boolean;
+  food_tax_override: number | null;
+  alcohol_tax_override: number | null;
+  general_tax_override: number | null;
 }>) {
   const supabase = await createClient();
   const { error } = await supabase.from('estimates').update(data).eq('id', id);
