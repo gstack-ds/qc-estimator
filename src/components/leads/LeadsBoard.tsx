@@ -23,8 +23,7 @@ import {
   PIPELINE_LANES,
   statusToLaneId,
   getLane,
-  LANE_DOT_CLASSES,
-  LANE_ACCENT_CLASSES,
+  laneStyles,
   type PipelineLane,
 } from '@/lib/leads/pipeline';
 import type { LeadStatus } from '@/lib/leads/constants';
@@ -61,6 +60,7 @@ function KanbanLane({
   onCardUpdate: (leadId: string, patch: Partial<LeadInput>) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: lane.id });
+  const styles = laneStyles(lane.id);
 
   if (collapsed) {
     return (
@@ -68,12 +68,12 @@ function KanbanLane({
         ref={setNodeRef}
         onClick={onToggleCollapse}
         className={`flex flex-col items-center w-10 flex-shrink-0 rounded-lg border border-t-2 cursor-pointer select-none transition-colors ${
-          LANE_ACCENT_CLASSES[lane.color]
+          styles.headerBorder
         } ${isOver ? 'bg-brand-copper/10 border-brand-copper/30' : 'bg-brand-offwhite/60 border-brand-cream hover:bg-brand-offwhite'}`}
       >
         <div className="flex flex-col items-center py-2.5 gap-2 w-full">
           <ChevronRight size={12} className="text-brand-silver flex-shrink-0" />
-          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${LANE_DOT_CLASSES[lane.color]}`} />
+          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${styles.dot}`} />
           <span className="text-[10px] font-semibold text-brand-silver bg-brand-cream/80 rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
             {leads.length}
           </span>
@@ -91,9 +91,9 @@ function KanbanLane({
   return (
     <div className="flex flex-col min-w-[220px] w-[220px] flex-shrink-0">
       {/* Lane header */}
-      <div className={`bg-white border border-brand-cream border-t-2 rounded-t-lg px-3 py-2.5 ${LANE_ACCENT_CLASSES[lane.color]}`}>
+      <div className={`bg-white border border-brand-cream border-t-2 rounded-t-lg px-3 py-2.5 ${styles.headerBorder}`}>
         <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${LANE_DOT_CLASSES[lane.color]}`} />
+          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${styles.dot}`} />
           <span className="text-xs font-semibold text-brand-charcoal leading-tight flex-1">{lane.label}</span>
           <span className="text-[10px] font-medium text-brand-silver bg-brand-offwhite border border-brand-cream rounded-full px-1.5 py-0.5 flex-shrink-0">
             {leads.length}

@@ -109,23 +109,79 @@ export function getLane(laneId: string): PipelineLane | undefined {
   return PIPELINE_LANES.find(l => l.id === laneId);
 }
 
-// Dot color classes per lane color
-export const LANE_DOT_CLASSES: Record<string, string> = {
-  blue:    'bg-blue-400',
-  amber:   'bg-amber-400',
-  purple:  'bg-purple-400',
-  green:   'bg-green-500',
-  teal:    'bg-teal-500',
-  emerald: 'bg-emerald-500',
-  slate:   'bg-slate-400',
+// ─── Per-lane style lookup ────────────────────────────────
+//
+// ALL class strings are explicit literals so Tailwind's JIT scanner
+// includes every class in the production build regardless of which
+// lane is active at runtime. Never construct classes dynamically
+// (e.g. `bg-${color}-500`) — those get purged at build time.
+//
+// Keys are lane IDs (as returned by PIPELINE_LANES[n].id).
+
+export interface LaneStyles {
+  /** Bold dot — lane header and card */
+  dot: string;
+  /** Top border on the lane header (3px) */
+  headerBorder: string;
+  /** Very light background wash on cards (the -50 shade) */
+  cardBg: string;
+  /** Left border stripe on cards (4px, the -400/-500 shade) */
+  cardBorder: string;
+}
+
+export const LANE_STYLES: Record<string, LaneStyles> = {
+  new_lead: {
+    dot:          'bg-blue-500',
+    headerBorder: 'border-t-blue-400',
+    cardBg:       'bg-blue-50',
+    cardBorder:   'border-l-blue-400',
+  },
+  proposal: {
+    dot:          'bg-amber-500',
+    headerBorder: 'border-t-amber-400',
+    cardBg:       'bg-amber-50',
+    cardBorder:   'border-l-amber-400',
+  },
+  pending_client_review: {
+    dot:          'bg-purple-500',
+    headerBorder: 'border-t-purple-400',
+    cardBg:       'bg-purple-50',
+    cardBorder:   'border-l-purple-400',
+  },
+  under_contract: {
+    dot:          'bg-green-500',
+    headerBorder: 'border-t-green-500',
+    cardBg:       'bg-green-50',
+    cardBorder:   'border-l-green-500',
+  },
+  planning: {
+    dot:          'bg-teal-500',
+    headerBorder: 'border-t-teal-500',
+    cardBg:       'bg-teal-50',
+    cardBorder:   'border-l-teal-500',
+  },
+  completed: {
+    dot:          'bg-emerald-500',
+    headerBorder: 'border-t-emerald-500',
+    cardBg:       'bg-emerald-50',
+    cardBorder:   'border-l-emerald-500',
+  },
+  did_not_book: {
+    dot:          'bg-slate-400',
+    headerBorder: 'border-t-slate-400',
+    cardBg:       'bg-slate-50',
+    cardBorder:   'border-l-slate-400',
+  },
 };
 
-export const LANE_ACCENT_CLASSES: Record<string, string> = {
-  blue:    'border-t-blue-400',
-  amber:   'border-t-amber-400',
-  purple:  'border-t-purple-400',
-  green:   'border-t-green-500',
-  teal:    'border-t-teal-500',
-  emerald: 'border-t-emerald-500',
-  slate:   'border-t-slate-400',
+// Fallback for any lane ID not found in the lookup
+const FALLBACK_STYLES: LaneStyles = {
+  dot:          'bg-slate-400',
+  headerBorder: 'border-t-slate-400',
+  cardBg:       'bg-slate-50',
+  cardBorder:   'border-l-slate-400',
 };
+
+export function laneStyles(laneId: string): LaneStyles {
+  return LANE_STYLES[laneId] ?? FALLBACK_STYLES;
+}
