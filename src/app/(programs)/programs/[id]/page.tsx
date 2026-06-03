@@ -22,6 +22,8 @@ import {
 import TravelSection from '@/components/programs/TravelSection';
 import DocumentsSection from '@/components/programs/DocumentsSection';
 import GenerateBriefButton from '@/components/programs/GenerateBriefButton';
+import BudgetExportButton from '@/components/programs/BudgetExportButton';
+import type { BudgetExportData, BudgetEstimate, BudgetLineItem } from '@/lib/utils/budgetExport';
 import ProgramForm from '@/components/estimates/ProgramForm';
 import EventsView, { type EventRow } from '@/components/estimates/EventsView';
 import { type EstimateCard } from '@/components/estimates/ComparisonView';
@@ -186,6 +188,99 @@ function buildEstimateData(
   return { card, pnlRow };
 }
 
+// ─── Budget export builder ────────────────────────────────
+
+function buildBudgetEstimate(
+  estimate: DbEstimate,
+  items: DbLineItem[],
+  markups: DbMarkup[],
+  config: ProgramConfig,
+  tiers: TeamHoursTier[],
+): BudgetEstimate {
+  if (estimate.type === 'transportation') {
+    return {
+      id: estimate.id,
+      name: estimate.name,
+      type: estimate.type,
+      lineItems: [],
+      serviceChargeOur: 0, serviceChargeClient: 0, serviceChargeLabel: '',
+      gratuityOur: 0, gratuityClient: 0, gratuityLabel: '',
+      adminFeeOur: 0, adminFeeClient: 0, adminFeeLabel: '',
+      foodTax: 0, alcoholTax: 0, equipmentTax: 0, venueTax: 0, productionFeeTax: 0,
+      productionFee: 0, travelInFee: 0, discountAmount: 0,
+      subtotalOur: 0, totalTaxes: 0, totalClient: 0,
+      vendorCosts: 0, commissions: 0, qcMargin: 0, qcMarginPct: 0,
+    };
+  }
+
+  const lineItems = buildLineItems(items, markups);
+  const sc = estimate.service_charge_override ?? config.serviceChargeDefault;
+  const gr = estimate.gratuity_override ?? config.gratuityDefault;
+  const af = estimate.admin_fee_override ?? config.adminFeeDefault;
+  const discount = estimate.discount_type && estimate.discount_value > 0
+    ? { type: estimate.discount_type, value: estimate.discount_value }
+    : null;
+
+  const summary = calculateVenueEstimate(
+    { name: estimate.name, fbMinimum: estimate.fb_minimum, isVenueTaxable: estimate.is_venue_taxable, serviceCharge: sc, gratuity: gr, adminFee: af, lineItems, discount },
+    config,
+  );
+  const margin = calculateMarginAnalysis(summary, config, tiers);
+
+  const budgetLineItems: BudgetLineItem[] = lineItems.map((li) => {
+    const ourTotal = li.clientCostOverride !== undefined ? 0 : li.qty * li.unitPrice;
+    const budgeted = li.clientCostOverride !== undefined
+      ? li.clientCostOverride
+      : li.qty * li.unitPrice * (1 + li.categoryMarkupPct);
+    const isCustom = li.clientCostOverride !== undefined;
+    return {
+      section: li.section,
+      name: li.name,
+      isRevenueItem: li.isRevenueItem ?? false,
+      qty: li.qty,
+      unitCost: li.unitPrice,
+      ourTotal: li.isRevenueItem ? 0 : ourTotal,
+      markupDisplay: isCustom ? 'Custom' : `${(li.categoryMarkupPct * 100).toFixed(1)}%`,
+      clientUnitPrice: li.qty > 0 ? budgeted / li.qty : 0,
+      budgeted,
+      taxType: li.taxType,
+    };
+  });
+
+  const totalTaxes = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax + summary.productionFeeTax;
+
+  return {
+    id: estimate.id,
+    name: estimate.name,
+    type: estimate.type,
+    lineItems: budgetLineItems,
+    serviceChargeOur: summary.serviceChargeOur,
+    serviceChargeClient: summary.serviceChargeClient,
+    serviceChargeLabel: sc > 0 ? `Service Charge (${(sc * 100).toFixed(1)}%)` : '',
+    gratuityOur: summary.gratuityOur,
+    gratuityClient: summary.gratuityClient,
+    gratuityLabel: gr > 0 ? `Gratuity (${(gr * 100).toFixed(1)}%)` : '',
+    adminFeeOur: summary.adminFeeOur,
+    adminFeeClient: summary.adminFeeClient,
+    adminFeeLabel: af > 0 ? `Admin Fee (${(af * 100).toFixed(1)}%)` : '',
+    foodTax: summary.foodTax,
+    alcoholTax: summary.alcoholTax,
+    equipmentTax: summary.equipmentTax,
+    venueTax: summary.venueTax,
+    productionFeeTax: summary.productionFeeTax,
+    productionFee: summary.productionFee,
+    travelInFee: summary.travelInProductionFee,
+    discountAmount: summary.discountAmount,
+    subtotalOur: summary.totalOur,
+    totalTaxes,
+    totalClient: summary.totalClient,
+    vendorCosts: margin.vendorCostsBase,
+    commissions: margin.ccProcessingAmount + margin.gdpCommissionAmount + margin.thirdPartyCommissionsTotal,
+    qcMargin: margin.qcRevenue,
+    qcMarginPct: margin.qcMarginPct,
+  };
+}
+
 // ─── Page ─────────────────────────────────────────────────
 
 export default async function ProgramPage({ params }: Props) {
@@ -229,16 +324,54 @@ export default async function ProgramPage({ params }: Props) {
   ]);
   const programConfig = buildProgramConfig(program, program.location);
 
-  // Build a card and P&L row for each estimate
+  // Build a card and P&L row for each estimate + budget export data
   const cardMap = new Map<string, EstimateCard>();
   const pnlRows: PnLRow[] = [];
+  const budgetEstimates: BudgetEstimate[] = [];
   for (const est of estimates) {
     const items = allLineItems.filter((li) => li.estimate_id === est.id);
     const transportAgg = transportAggregates.find((a) => a.estimate_id === est.id);
     const { card, pnlRow } = buildEstimateData(est, items, markups, programConfig, tiers, transportAgg);
     cardMap.set(est.id, card);
     if (est.include_in_budget) pnlRows.push(pnlRow);
+    // Always include in budget export (all estimates, not just include_in_budget)
+    budgetEstimates.push(buildBudgetEstimate(est, items, markups, programConfig, tiers));
   }
+
+  // Programme-level travel total
+  const programTravelTotal = travelItems.reduce((s, ti) => s + ti.qty * ti.unit_price, 0);
+
+  // Grand totals for budget export
+  const grandOurCost = budgetEstimates.reduce((s, e) => s + e.subtotalOur, 0);
+  const grandBudgeted = budgetEstimates.reduce((s, e) => s + e.totalClient, 0);
+  const grandTaxes = budgetEstimates.reduce((s, e) => s + e.totalTaxes, 0);
+  const grandCommissions = budgetEstimates.reduce((s, e) => s + e.commissions, 0);
+  const grandQcMargin = budgetEstimates.reduce((s, e) => s + e.qcMargin, 0)
+    - (program.include_travel_in_production_fee ? 0 : programTravelTotal);
+  const grandMarginPct = grandBudgeted > 0 ? grandQcMargin / grandBudgeted : 0;
+
+  const budgetExportData: BudgetExportData = {
+    programName: program.name,
+    clientName: program.client_name,
+    eventDate: program.event_date,
+    guestCount: program.guest_count,
+    exportedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    estimates: budgetEstimates,
+    travelItems: travelItems.map(ti => ({
+      description: ti.description,
+      qty: ti.qty,
+      unitPrice: ti.unit_price,
+      total: ti.qty * ti.unit_price,
+    })),
+    programTravelTotal,
+    includeTravelInFee: program.include_travel_in_production_fee ?? false,
+    grandOurCost,
+    grandBudgeted,
+    grandTaxes,
+    grandCommissions,
+    grandQcMargin,
+    grandMarginPct,
+  };
 
   // Group estimates by event_id
   const eventCardMap = new Map<string, EstimateCard[]>();
@@ -280,7 +413,10 @@ export default async function ProgramPage({ params }: Props) {
             <ProgramStatusDropdown programId={id} status={(program.status ?? 'active') as ProgramStatus} />
           </div>
         </div>
-        <DeleteProgramButton programId={id} />
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <BudgetExportButton data={budgetExportData} />
+          <DeleteProgramButton programId={id} />
+        </div>
       </div>
 
       {/* Program form — constrained width */}
