@@ -11,6 +11,22 @@ export interface PipelineLane {
   color: string;
 }
 
+// ─── 7-lane pipeline ──────────────────────────────────────
+//
+// No migration required — all 12 LeadStatus enum values already exist.
+// Enum values: new_lead, proposal_in_progress, pending_client_review,
+//   pending_contract_payment, under_contract, planning, unresponsive,
+//   post_event_close_out, halted, planning_not_started, did_not_book, completed.
+//
+// Status → lane reconciliation:
+//   pending_contract_payment → Pending Client Review (waiting for client action before contract)
+//   planning_not_started     → Planning (same stage, not yet begun)
+//   post_event_close_out     → Planning (final active-work phase)
+//   unresponsive             → Did Not Book (stalled; client unreachable)
+//   halted                   → Did Not Book (stopped before close)
+//
+// Cards can move between any lanes in either direction.
+
 export const PIPELINE_LANES: PipelineLane[] = [
   {
     id: 'new_lead',
@@ -20,8 +36,8 @@ export const PIPELINE_LANES: PipelineLane[] = [
     color: 'blue',
   },
   {
-    id: 'proposal_in_progress',
-    label: 'Proposal in Progress',
+    id: 'proposal',
+    label: 'Proposal',
     canonicalStatus: 'proposal_in_progress',
     statuses: ['proposal_in_progress'],
     color: 'amber',
@@ -30,7 +46,7 @@ export const PIPELINE_LANES: PipelineLane[] = [
     id: 'pending_client_review',
     label: 'Pending Client Review',
     canonicalStatus: 'pending_client_review',
-    // pending_contract_payment is at the same review/approval stage
+    // pending_contract_payment: client reviewing before signing/paying
     statuses: ['pending_client_review', 'pending_contract_payment'],
     color: 'orange',
   },
@@ -45,36 +61,41 @@ export const PIPELINE_LANES: PipelineLane[] = [
     id: 'planning',
     label: 'Planning',
     canonicalStatus: 'planning',
-    // planning_not_started is at the planning stage (just hasn't begun)
-    // post_event_close_out is the final active phase of a program
     statuses: ['planning', 'planning_not_started', 'post_event_close_out'],
     color: 'teal',
   },
   {
-    id: 'inactive',
-    label: 'Inactive / Saved',
-    canonicalStatus: 'halted',
-    // unresponsive, halted = paused; did_not_book, completed = closed
-    statuses: ['unresponsive', 'halted', 'did_not_book', 'completed'],
+    id: 'completed',
+    label: 'Completed',
+    canonicalStatus: 'completed',
+    statuses: ['completed'],
+    color: 'emerald',
+  },
+  {
+    id: 'did_not_book',
+    label: 'Did Not Book',
+    canonicalStatus: 'did_not_book',
+    // unresponsive + halted: dead/stalled deals that didn't convert
+    statuses: ['did_not_book', 'unresponsive', 'halted'],
     color: 'slate',
   },
 ];
 
-// Build a fast lookup map: status → lane
+// Build a fast lookup map: status → lane ID
 const STATUS_TO_LANE_ID = new Map<LeadStatus, string>(
   PIPELINE_LANES.flatMap(lane => lane.statuses.map(s => [s, lane.id] as [LeadStatus, string]))
 );
 
 /**
  * Returns the lane ID for a given lead status.
- * Falls back to 'inactive' for any unmapped status (should not happen with current 12 values).
+ * Falls back to 'did_not_book' for any unmapped status (safety net).
  */
 export function statusToLaneId(status: LeadStatus): string {
-  return STATUS_TO_LANE_ID.get(status) ?? 'inactive';
+  return STATUS_TO_LANE_ID.get(status) ?? 'did_not_book';
 }
 
 /**
- * Returns the lane for a given lead status, or null if unmapped.
+ * Returns the lane for a given lead status.
  */
 export function statusToLane(status: LeadStatus): PipelineLane | undefined {
   const id = statusToLaneId(status);
@@ -90,19 +111,21 @@ export function getLane(laneId: string): PipelineLane | undefined {
 
 // Dot color classes per lane color
 export const LANE_DOT_CLASSES: Record<string, string> = {
-  blue:   'bg-blue-400',
-  amber:  'bg-amber-400',
-  orange: 'bg-orange-400',
-  green:  'bg-green-500',
-  teal:   'bg-teal-500',
-  slate:  'bg-slate-400',
+  blue:    'bg-blue-400',
+  amber:   'bg-amber-400',
+  orange:  'bg-orange-400',
+  green:   'bg-green-500',
+  teal:    'bg-teal-500',
+  emerald: 'bg-emerald-500',
+  slate:   'bg-slate-400',
 };
 
 export const LANE_ACCENT_CLASSES: Record<string, string> = {
-  blue:   'border-t-blue-400',
-  amber:  'border-t-amber-400',
-  orange: 'border-t-orange-400',
-  green:  'border-t-green-500',
-  teal:   'border-t-teal-500',
-  slate:  'border-t-slate-400',
+  blue:    'border-t-blue-400',
+  amber:   'border-t-amber-400',
+  orange:  'border-t-orange-400',
+  green:   'border-t-green-500',
+  teal:    'border-t-teal-500',
+  emerald: 'border-t-emerald-500',
+  slate:   'border-t-slate-400',
 };

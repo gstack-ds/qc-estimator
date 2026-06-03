@@ -7,7 +7,7 @@ import {
 } from '@/lib/leads/pipeline';
 import type { LeadStatus } from '@/lib/leads/constants';
 
-// Every lead status that exists in the system
+// All 12 lead statuses that exist in the database enum
 const ALL_STATUSES: LeadStatus[] = [
   'new_lead',
   'proposal_in_progress',
@@ -23,18 +23,22 @@ const ALL_STATUSES: LeadStatus[] = [
   'completed',
 ];
 
-describe('PIPELINE_LANES — completeness', () => {
-  it('has exactly 6 lanes', () => {
-    expect(PIPELINE_LANES).toHaveLength(6);
+describe('PIPELINE_LANES — structure', () => {
+  it('has exactly 7 lanes', () => {
+    expect(PIPELINE_LANES).toHaveLength(7);
   });
 
-  it('every lead status maps to exactly one lane', () => {
-    for (const status of ALL_STATUSES) {
-      const laneId = statusToLaneId(status);
-      expect(laneId, `${status} has no lane`).toBeTruthy();
-      const lane = getLane(laneId);
-      expect(lane, `lane ${laneId} not found`).toBeDefined();
-    }
+  it('lanes are in the correct left-to-right order', () => {
+    const ids = PIPELINE_LANES.map(l => l.id);
+    expect(ids).toEqual([
+      'new_lead',
+      'proposal',
+      'pending_client_review',
+      'under_contract',
+      'planning',
+      'completed',
+      'did_not_book',
+    ]);
   });
 
   it('no status appears in more than one lane', () => {
@@ -47,110 +51,152 @@ describe('PIPELINE_LANES — completeness', () => {
     }
   });
 
-  it('every status in a lane.statuses array resolves back to that lane', () => {
+  it('every lane canonicalStatus is inside its own statuses array', () => {
     for (const lane of PIPELINE_LANES) {
-      for (const s of lane.statuses) {
-        expect(statusToLaneId(s as LeadStatus)).toBe(lane.id);
-      }
+      expect(lane.statuses, `${lane.id} canonical not in its statuses`).toContain(lane.canonicalStatus);
     }
   });
 
-  it('each lane has a valid canonicalStatus inside its own statuses array', () => {
+  it('every status in a lane.statuses resolves back to that lane', () => {
     for (const lane of PIPELINE_LANES) {
-      expect(lane.statuses).toContain(lane.canonicalStatus);
+      for (const s of lane.statuses) {
+        expect(statusToLaneId(s as LeadStatus), `${s} should map to ${lane.id}`).toBe(lane.id);
+      }
+    }
+  });
+});
+
+describe('PIPELINE_LANES — completeness', () => {
+  it('every lead status maps to a lane', () => {
+    for (const status of ALL_STATUSES) {
+      const laneId = statusToLaneId(status);
+      const lane = getLane(laneId);
+      expect(lane, `no lane found for status ${status}`).toBeDefined();
+    }
+  });
+
+  it('all 12 statuses are covered (no gaps)', () => {
+    const coveredStatuses = new Set(
+      PIPELINE_LANES.flatMap(l => l.statuses)
+    );
+    for (const s of ALL_STATUSES) {
+      expect(coveredStatuses.has(s), `${s} not covered by any lane`).toBe(true);
     }
   });
 });
 
 describe('statusToLaneId — per-status spot checks', () => {
-  it('new_lead → new_lead lane', () => {
+  it('new_lead → new_lead', () => {
     expect(statusToLaneId('new_lead')).toBe('new_lead');
   });
 
-  it('proposal_in_progress → proposal_in_progress lane', () => {
-    expect(statusToLaneId('proposal_in_progress')).toBe('proposal_in_progress');
+  it('proposal_in_progress → proposal', () => {
+    expect(statusToLaneId('proposal_in_progress')).toBe('proposal');
   });
 
-  it('pending_client_review → pending_client_review lane', () => {
+  it('pending_client_review → pending_client_review', () => {
     expect(statusToLaneId('pending_client_review')).toBe('pending_client_review');
   });
 
-  it('pending_contract_payment → pending_client_review lane (same review/approval stage)', () => {
+  it('pending_contract_payment → pending_client_review (pre-contract client action)', () => {
     expect(statusToLaneId('pending_contract_payment')).toBe('pending_client_review');
   });
 
-  it('under_contract → under_contract lane', () => {
+  it('under_contract → under_contract', () => {
     expect(statusToLaneId('under_contract')).toBe('under_contract');
   });
 
-  it('planning → planning lane', () => {
+  it('planning → planning', () => {
     expect(statusToLaneId('planning')).toBe('planning');
   });
 
-  it('planning_not_started → planning lane', () => {
+  it('planning_not_started → planning', () => {
     expect(statusToLaneId('planning_not_started')).toBe('planning');
   });
 
-  it('post_event_close_out → planning lane', () => {
+  it('post_event_close_out → planning', () => {
     expect(statusToLaneId('post_event_close_out')).toBe('planning');
   });
 
-  it('unresponsive → inactive lane', () => {
-    expect(statusToLaneId('unresponsive')).toBe('inactive');
+  it('completed → completed (own lane)', () => {
+    expect(statusToLaneId('completed')).toBe('completed');
   });
 
-  it('halted → inactive lane', () => {
-    expect(statusToLaneId('halted')).toBe('inactive');
+  it('did_not_book → did_not_book (own lane)', () => {
+    expect(statusToLaneId('did_not_book')).toBe('did_not_book');
   });
 
-  it('did_not_book → inactive lane', () => {
-    expect(statusToLaneId('did_not_book')).toBe('inactive');
+  it('unresponsive → did_not_book (stalled / unreachable)', () => {
+    expect(statusToLaneId('unresponsive')).toBe('did_not_book');
   });
 
-  it('completed → inactive lane', () => {
-    expect(statusToLaneId('completed')).toBe('inactive');
+  it('halted → did_not_book (deal stopped)', () => {
+    expect(statusToLaneId('halted')).toBe('did_not_book');
+  });
+});
+
+describe('canonical status per lane (what gets written on drag-and-drop)', () => {
+  it('New Lead → new_lead', () => {
+    expect(getLane('new_lead')!.canonicalStatus).toBe('new_lead');
+  });
+
+  it('Proposal → proposal_in_progress', () => {
+    expect(getLane('proposal')!.canonicalStatus).toBe('proposal_in_progress');
+  });
+
+  it('Pending Client Review → pending_client_review', () => {
+    expect(getLane('pending_client_review')!.canonicalStatus).toBe('pending_client_review');
+  });
+
+  it('Under Contract → under_contract', () => {
+    expect(getLane('under_contract')!.canonicalStatus).toBe('under_contract');
+  });
+
+  it('Planning → planning', () => {
+    expect(getLane('planning')!.canonicalStatus).toBe('planning');
+  });
+
+  it('Completed → completed', () => {
+    expect(getLane('completed')!.canonicalStatus).toBe('completed');
+  });
+
+  it('Did Not Book → did_not_book', () => {
+    expect(getLane('did_not_book')!.canonicalStatus).toBe('did_not_book');
   });
 });
 
 describe('statusToLane — returns full lane object', () => {
-  it('returns the lane object with all fields', () => {
-    const lane = statusToLane('under_contract');
+  it('completed returns Completed lane with correct label', () => {
+    const lane = statusToLane('completed');
     expect(lane).toBeDefined();
-    expect(lane!.label).toBe('Under Contract');
-    expect(lane!.canonicalStatus).toBe('under_contract');
-    expect(lane!.color).toBe('green');
+    expect(lane!.label).toBe('Completed');
+    expect(lane!.canonicalStatus).toBe('completed');
+    expect(lane!.color).toBe('emerald');
   });
 
-  it('returns undefined for non-existent status (type safety boundary)', () => {
-    // Cast to bypass TypeScript — confirms fallback behavior
-    const lane = statusToLane('unknown_status' as LeadStatus);
-    expect(lane).toBeDefined(); // falls back to 'inactive' lane
+  it('did_not_book returns Did Not Book lane', () => {
+    const lane = statusToLane('did_not_book');
+    expect(lane!.label).toBe('Did Not Book');
+    expect(lane!.color).toBe('slate');
+  });
+
+  it('completed and did_not_book are in separate lanes (not merged)', () => {
+    expect(statusToLaneId('completed')).not.toBe(statusToLaneId('did_not_book'));
+  });
+
+  it('proposal_in_progress is labeled Proposal (short label)', () => {
+    const lane = statusToLane('proposal_in_progress');
+    expect(lane!.label).toBe('Proposal');
   });
 });
 
-describe('canonical status per lane', () => {
-  it('dropping to New Lead lane → new_lead', () => {
-    const lane = getLane('new_lead')!;
-    expect(lane.canonicalStatus).toBe('new_lead');
+describe('no migration needed — enum values confirmed', () => {
+  it('completed status already exists in the enum (no migration required)', () => {
+    // If this compiles and the status maps correctly, the enum value exists
+    expect(statusToLaneId('completed')).toBe('completed');
   });
 
-  it('dropping to Proposal in Progress → proposal_in_progress', () => {
-    expect(getLane('proposal_in_progress')!.canonicalStatus).toBe('proposal_in_progress');
-  });
-
-  it('dropping to Pending Client Review → pending_client_review', () => {
-    expect(getLane('pending_client_review')!.canonicalStatus).toBe('pending_client_review');
-  });
-
-  it('dropping to Under Contract → under_contract', () => {
-    expect(getLane('under_contract')!.canonicalStatus).toBe('under_contract');
-  });
-
-  it('dropping to Planning → planning', () => {
-    expect(getLane('planning')!.canonicalStatus).toBe('planning');
-  });
-
-  it('dropping to Inactive / Saved → halted (parked, not deleted)', () => {
-    expect(getLane('inactive')!.canonicalStatus).toBe('halted');
+  it('did_not_book status already exists in the enum (no migration required)', () => {
+    expect(statusToLaneId('did_not_book')).toBe('did_not_book');
   });
 });
