@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import {
   getProgram,
+  getLead,
   getLocations,
   getEstimatesForProgram,
   getEventsForProgram,
@@ -307,7 +308,7 @@ export default async function ProgramPage({ params }: Props) {
   if (!program) notFound();
 
   const estimateIds = estimates.map((e) => e.id);
-  const [allLineItems, transportAggregates, estimateAttachmentCount] = await Promise.all([
+  const [allLineItems, transportAggregates, estimateAttachmentCount, sourceLead] = await Promise.all([
     getLineItemsForEstimates(estimateIds),
     getTransportAggregatesForProgram(id),
     // Roll-up count of estimate-level attachments for display in Documents section
@@ -321,6 +322,7 @@ export default async function ProgramPage({ params }: Props) {
         .in('estimate_id', estimateIds);
       return count ?? 0;
     })(),
+    program.lead_id ? getLead(program.lead_id) : Promise.resolve(null),
   ]);
   const programConfig = buildProgramConfig(program, program.location);
 
@@ -409,8 +411,13 @@ export default async function ProgramPage({ params }: Props) {
             ← Programs
           </Link>
           <h1 className="font-serif text-2xl font-medium text-brand-charcoal mt-1">{program.name}</h1>
-          <div className="mt-2">
+          <div className="mt-2 flex items-center gap-3">
             <ProgramStatusDropdown programId={id} status={(program.status ?? 'active') as ProgramStatus} />
+            {sourceLead && program.lead_id && (
+              <Link href={`/leads/${program.lead_id}`} className="text-xs text-brand-silver hover:text-brand-brown transition-colors">
+                ← Lead: {sourceLead.client_name ?? '—'}
+              </Link>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">

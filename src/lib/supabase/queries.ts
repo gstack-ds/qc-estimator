@@ -1092,9 +1092,8 @@ export async function getLeadCounts(): Promise<Record<LeadStatusGroup, number>> 
 }
 
 /**
- * Returns ALL programs linked to a lead. A lead can spawn more than one
- * program (e.g. a re-book or a split event), so we never assume exactly one.
- * Ordered most-recent first so callers can use [0] for the primary link.
+ * Returns the single program linked to a lead (one-per-lead enforced by
+ * the UNIQUE constraint added in migration 034). Returns null if none.
  */
 export async function getProgramsForLead(leadId: string): Promise<{ id: string; name: string; event_date: string | null }[]> {
   const supabase = await createClient();
@@ -1105,6 +1104,39 @@ export async function getProgramsForLead(leadId: string): Promise<{ id: string; 
     .order('created_at', { ascending: false });
   if (error) return [];
   return data ?? [];
+}
+
+/**
+ * Returns a Record<leadId, program> for ALL leads that have a linked program.
+ * Used by the Kanban board to render converted lead cards as program cards.
+ */
+export interface LinkedProgramSummary {
+  id: string;
+  name: string;
+  event_date: string | null;
+  guest_count: number;
+  program_status: string;
+}
+
+export async function getLinkedProgramsByLeadId(): Promise<Record<string, LinkedProgramSummary>> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('programs')
+    .select('id, name, event_date, guest_count, status, lead_id')
+    .not('lead_id', 'is', null);
+  const result: Record<string, LinkedProgramSummary> = {};
+  for (const p of data ?? []) {
+    if (p.lead_id) {
+      result[p.lead_id] = {
+        id: p.id,
+        name: p.name,
+        event_date: p.event_date,
+        guest_count: p.guest_count,
+        program_status: p.status,
+      };
+    }
+  }
+  return result;
 }
 
 export interface DbTeamMember {

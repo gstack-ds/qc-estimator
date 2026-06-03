@@ -16,9 +16,10 @@ import {
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { ChevronRight, ChevronDown } from 'lucide-react';
-import type { DbLead, DbTeamMember } from '@/lib/supabase/queries';
+import type { DbLead, DbTeamMember, LinkedProgramSummary } from '@/lib/supabase/queries';
 import type { LeadInput } from '@/app/(programs)/leads/actions';
 import { updateLead } from '@/app/(programs)/leads/actions';
+import { syncProgramStatusFromLead } from '@/app/(programs)/programs/actions';
 import {
   PIPELINE_LANES,
   statusToLaneId,
@@ -52,11 +53,12 @@ function saveCollapsed(collapsed: Set<string>) {
 // dropping anywhere in a lane — including the header — registers correctly.
 
 function KanbanLane({
-  lane, leads, teamMembers, collapsed, onToggleCollapse, onCardUpdate, justMovedId,
+  lane, leads, teamMembers, linkedPrograms, collapsed, onToggleCollapse, onCardUpdate, justMovedId,
 }: {
   lane: PipelineLane;
   leads: DbLead[];
   teamMembers: DbTeamMember[];
+  linkedPrograms: Record<string, LinkedProgramSummary>;
   collapsed: boolean;
   onToggleCollapse: () => void;
   onCardUpdate: (leadId: string, patch: Partial<LeadInput>) => void;
@@ -137,6 +139,7 @@ function KanbanLane({
             laneStatuses={lane.statuses as LeadStatus[]}
             onUpdate={onCardUpdate}
             isJustMoved={lead.id === justMovedId}
+            linkedProgram={linkedPrograms[lead.id]}
           />
         ))}
         {leads.length === 0 && (
@@ -156,11 +159,12 @@ function KanbanLane({
 interface Props {
   leads: DbLead[];
   teamMembers: DbTeamMember[];
+  linkedPrograms: Record<string, LinkedProgramSummary>;
 }
 
 const JUST_MOVED_TTL_MS = 3000;
 
-export default function LeadsBoard({ leads, teamMembers }: Props) {
+export default function LeadsBoard({ leads, teamMembers, linkedPrograms }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
@@ -275,6 +279,13 @@ export default function LeadsBoard({ leads, teamMembers }: Props) {
     const newStatus = targetLane.canonicalStatus;
     handleUpdate(leadId, { status: newStatus });
     markJustMoved(leadId);
+
+    const linked = linkedPrograms[leadId];
+    if (linked) {
+      startTransition(async () => {
+        await syncProgramStatusFromLead(linked.id, newStatus);
+      });
+    }
   }
 
   const activeMembers = teamMembers.filter(m => m.is_active);
@@ -333,6 +344,7 @@ export default function LeadsBoard({ leads, teamMembers }: Props) {
                 lane={lane}
                 leads={leadsByLane.get(lane.id) ?? []}
                 teamMembers={teamMembers}
+                linkedPrograms={linkedPrograms}
                 collapsed={collapsed.has(lane.id)}
                 onToggleCollapse={() => toggleCollapse(lane.id)}
                 onCardUpdate={handleUpdate}

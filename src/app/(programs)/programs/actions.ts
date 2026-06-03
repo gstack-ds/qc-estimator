@@ -71,6 +71,24 @@ export async function updateProgram(id: string, data: Partial<{
   return { error: null };
 }
 
+// ─── Program status sync (from board drag) ───────────────
+// Maps the 12-value lead pipeline status to the 3-value program lifecycle status.
+const LEAD_STATUS_TO_PROGRAM_STATUS: Record<string, 'active' | 'completed' | 'did_not_book'> = {
+  did_not_book: 'did_not_book',
+  completed: 'completed',
+  unresponsive: 'did_not_book',
+  halted: 'did_not_book',
+};
+
+export async function syncProgramStatusFromLead(
+  programId: string,
+  leadStatus: string,
+): Promise<void> {
+  const programStatus = LEAD_STATUS_TO_PROGRAM_STATUS[leadStatus] ?? 'active';
+  const supabase = await createClient();
+  await supabase.from('programs').update({ status: programStatus }).eq('id', programId);
+}
+
 // ─── Program documents ────────────────────────────────────
 
 import type { DocumentCategory } from '@/lib/programs/documentTypes';

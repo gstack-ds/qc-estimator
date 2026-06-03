@@ -1,11 +1,16 @@
-import { getLeads, getLeadCounts, getTeamMembers } from '@/lib/supabase/queries';
+import { getLeads, getLeadCounts, getTeamMembers, getLinkedProgramsByLeadId } from '@/lib/supabase/queries';
 import LeadsView from '@/components/leads/LeadsView';
 import ScanNowButton from '@/components/leads/ScanNowButton';
 
 export const dynamic = 'force-dynamic';
 
 export default async function LeadsPage() {
-  const [leads, counts, teamMembers] = await Promise.all([getLeads(), getLeadCounts(), getTeamMembers()]);
+  const [leads, counts, teamMembers, linkedPrograms] = await Promise.all([
+    getLeads(),
+    getLeadCounts(),
+    getTeamMembers(),
+    getLinkedProgramsByLeadId(),
+  ]);
 
   return (
     <div className="px-4 sm:px-6 py-8">
@@ -16,7 +21,7 @@ export default async function LeadsPage() {
         </div>
         <ScanNowButton />
       </div>
-      <LeadsView leads={leads} counts={counts} teamMembers={teamMembers} />
+      <LeadsView leads={leads} counts={counts} teamMembers={teamMembers} linkedPrograms={linkedPrograms} />
     </div>
   );
 }

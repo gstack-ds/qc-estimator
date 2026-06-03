@@ -5,7 +5,7 @@ import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical } from 'lucide-react';
 import Link from 'next/link';
-import type { DbLead, DbTeamMember } from '@/lib/supabase/queries';
+import type { DbLead, DbTeamMember, LinkedProgramSummary } from '@/lib/supabase/queries';
 import { statusToLane, laneStyles } from '@/lib/leads/pipeline';
 import { STATUS_LABELS, type LeadStatus } from '@/lib/leads/constants';
 import type { LeadInput } from '@/app/(programs)/leads/actions';
@@ -23,9 +23,10 @@ interface ContentProps {
   lead: DbLead;
   teamMembers: DbTeamMember[];
   isOverlay?: boolean;
+  linkedProgram?: LinkedProgramSummary;
 }
 
-export function LeadCardContent({ lead, teamMembers, isOverlay = false }: ContentProps) {
+export function LeadCardContent({ lead, teamMembers, isOverlay = false, linkedProgram }: ContentProps) {
   const lane = statusToLane(lead.status);
   const styles = laneStyles(lane?.id ?? 'did_not_book');
   const owner = teamMembers.find(m => m.id === lead.assigned_to);
@@ -55,6 +56,9 @@ export function LeadCardContent({ lead, teamMembers, isOverlay = false }: Conten
             )}
           </div>
         </div>
+        {linkedProgram && (
+          <div className="text-[9px] font-semibold text-brand-copper truncate">→ {linkedProgram.name}</div>
+        )}
       </div>
     </div>
   );
@@ -68,9 +72,10 @@ interface CardProps {
   laneStatuses: LeadStatus[];
   onUpdate: (leadId: string, patch: Partial<LeadInput>) => void;
   isJustMoved?: boolean;
+  linkedProgram?: LinkedProgramSummary;
 }
 
-export default function LeadCard({ lead, teamMembers, laneStatuses, onUpdate, isJustMoved = false }: CardProps) {
+export default function LeadCard({ lead, teamMembers, laneStatuses, onUpdate, isJustMoved = false, linkedProgram }: CardProps) {
   const [, startTransition] = useTransition();
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: lead.id,
@@ -147,6 +152,18 @@ export default function LeadCard({ lead, teamMembers, laneStatuses, onUpdate, is
               </div>
             </div>
           </Link>
+
+          {/* Converted-lead banner — navigates to the linked program, suppresses drag */}
+          {linkedProgram && (
+            <Link
+              href={`/programs/${linkedProgram.id}`}
+              onPointerDown={noPropagate}
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 px-3 py-1 bg-brand-copper/10 border-t border-brand-copper/15 hover:bg-brand-copper/20 transition-colors"
+            >
+              <span className="text-[9px] font-semibold text-brand-copper truncate">→ {linkedProgram.name}</span>
+            </Link>
+          )}
 
           {/* Inline edit controls — hover-revealed, don't trigger navigation */}
           <div

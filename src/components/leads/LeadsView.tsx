@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import type { DbLead, DbTeamMember } from '@/lib/supabase/queries';
+import type { DbLead, DbTeamMember, LinkedProgramSummary } from '@/lib/supabase/queries';
 import type { LeadStatusGroup } from '@/lib/leads/constants';
 import LeadsList from './LeadsList';
 import LeadsBoard from './LeadsBoard';
@@ -14,9 +14,10 @@ interface Props {
   leads: DbLead[];
   counts: Record<LeadStatusGroup, number>;
   teamMembers: DbTeamMember[];
+  linkedPrograms: Record<string, LinkedProgramSummary>;
 }
 
-export default function LeadsView({ leads, counts, teamMembers }: Props) {
+export default function LeadsView({ leads, counts, teamMembers, linkedPrograms }: Props) {
   const [view, setView] = useState<ViewMode>('board');
 
   // Load persisted view on mount
@@ -62,7 +63,7 @@ export default function LeadsView({ leads, counts, teamMembers }: Props) {
 
       {view === 'table'
         ? <LeadsList leads={leads} counts={counts} teamMembers={teamMembers} />
-        : <LeadsBoard leads={leads} teamMembers={teamMembers} />
+        : <LeadsBoard leads={leads} teamMembers={teamMembers} linkedPrograms={linkedPrograms} />
       }
     </div>
   );
