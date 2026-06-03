@@ -17,7 +17,7 @@ interface Props {
 }
 
 export default function LeadsView({ leads, counts, teamMembers }: Props) {
-  const [view, setView] = useState<ViewMode>('table');
+  const [view, setView] = useState<ViewMode>('board');
 
   // Load persisted view on mount
   useEffect(() => {
