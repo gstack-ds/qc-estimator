@@ -1,5 +1,5 @@
 import { getLeads, getLeadCounts, getTeamMembers } from '@/lib/supabase/queries';
-import LeadsList from '@/components/leads/LeadsList';
+import LeadsView from '@/components/leads/LeadsView';
 import ScanNowButton from '@/components/leads/ScanNowButton';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +16,7 @@ export default async function LeadsPage() {
         </div>
         <ScanNowButton />
       </div>
-      <LeadsList leads={leads} counts={counts} teamMembers={teamMembers} />
+      <LeadsView leads={leads} counts={counts} teamMembers={teamMembers} />
     </div>
   );
 }
