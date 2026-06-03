@@ -336,13 +336,11 @@ export default function LeadDetail({ lead: initialLead, linkedPrograms, teamMemb
         </div>
       </div>
 
-      {/* Linked programs */}
+      {/* Linked program — one per lead (UNIQUE constraint: migration 034) */}
       <div className="bg-brand-offwhite border border-brand-cream rounded-lg p-4 space-y-3">
         {linkedPrograms.length > 0 ? (
           <div className="space-y-1.5">
-            <p className="text-xs font-medium text-brand-charcoal/60 uppercase tracking-wide">
-              Linked {linkedPrograms.length === 1 ? 'program' : `programs (${linkedPrograms.length})`}
-            </p>
+            <p className="text-xs font-medium text-brand-charcoal/60 uppercase tracking-wide">Linked Program</p>
             {linkedPrograms.map(prog => (
               <div key={prog.id} className="flex items-center gap-2">
                 <a
@@ -358,26 +356,23 @@ export default function LeadDetail({ lead: initialLead, linkedPrograms, teamMemb
             ))}
           </div>
         ) : (
-          <div>
-            <p className="text-sm text-brand-charcoal font-medium">Ready to build this estimate?</p>
-            <p className="text-xs text-brand-charcoal/60 mt-0.5">Creates a program pre-filled with lead data and marks this lead as Proposal in Progress.</p>
-          </div>
+          <>
+            <div>
+              <p className="text-sm text-brand-charcoal font-medium">Ready to build this estimate?</p>
+              <p className="text-xs text-brand-charcoal/60 mt-0.5">Creates a program pre-filled with lead data and marks this lead as Proposal in Progress.</p>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                onClick={handleCreateProgram}
+                disabled={creatingProgram}
+                className="text-sm font-medium bg-brand-brown text-white rounded px-4 py-1.5 hover:bg-brand-charcoal transition-colors disabled:opacity-50"
+              >
+                {creatingProgram ? 'Creating…' : 'Create Program →'}
+              </button>
+              {progError && <p className="text-xs text-red-500">{progError}</p>}
+            </div>
+          </>
         )}
-
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={handleCreateProgram}
-            disabled={creatingProgram}
-            className="text-sm font-medium bg-brand-brown text-white rounded px-4 py-1.5 hover:bg-brand-charcoal transition-colors disabled:opacity-50"
-          >
-            {creatingProgram
-              ? 'Creating…'
-              : linkedPrograms.length === 0
-                ? 'Create Program →'
-                : 'Create another program →'}
-          </button>
-          {progError && <p className="text-xs text-red-500">{progError}</p>}
-        </div>
       </div>
 
       {/* Client Info */}
