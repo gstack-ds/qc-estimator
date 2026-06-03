@@ -3,8 +3,8 @@
 import { useState, useRef, useTransition, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { FileText, Image, FileSpreadsheet, File, Upload, Trash2, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
-import type { DbProgramDocument, DocumentCategory } from '@/lib/supabase/queries';
-import { DOCUMENT_CATEGORIES } from '@/lib/supabase/queries';
+import type { DbProgramDocument, DocumentCategory } from '@/lib/programs/documentTypes';
+import { DOCUMENT_CATEGORIES } from '@/lib/programs/documentTypes';
 import {
   registerProgramDocument,
   updateProgramDocument,

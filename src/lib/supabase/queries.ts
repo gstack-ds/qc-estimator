@@ -163,30 +163,12 @@ export async function getProgram(id: string): Promise<DbProgramWithLocation | nu
 }
 
 // ─── Program documents ────────────────────────────────────
+// Types live in src/lib/programs/documentTypes.ts (server-free) so client
+// components can import them without pulling in next/headers via this file.
 
-export type DocumentCategory =
-  | 'Menu' | 'Contract' | 'Invoice' | 'Floor Plan' | 'BEO'
-  | 'Insurance' | 'Proposal' | 'Correspondence' | 'Other';
-
-export const DOCUMENT_CATEGORIES: DocumentCategory[] = [
-  'Menu', 'Contract', 'Invoice', 'Floor Plan', 'BEO',
-  'Insurance', 'Proposal', 'Correspondence', 'Other',
-];
-
-export interface DbProgramDocument {
-  id: string;
-  program_id: string;
-  file_name: string;
-  storage_path: string;
-  file_size: number;
-  mime_type: string;
-  category: DocumentCategory;
-  notes: string | null;
-  uploaded_by: string | null;
-  created_at: string;
-  updated_at: string;
-  url?: string; // signed URL, generated at read time
-}
+export type { DocumentCategory, DbProgramDocument } from '@/lib/programs/documentTypes';
+export { DOCUMENT_CATEGORIES } from '@/lib/programs/documentTypes';
+import type { DbProgramDocument } from '@/lib/programs/documentTypes';
 
 export async function getProgramDocuments(programId: string): Promise<DbProgramDocument[]> {
   const supabase = await createClient();

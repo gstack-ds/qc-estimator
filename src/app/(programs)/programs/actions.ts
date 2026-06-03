@@ -73,7 +73,7 @@ export async function updateProgram(id: string, data: Partial<{
 
 // ─── Program documents ────────────────────────────────────
 
-import type { DocumentCategory } from '@/lib/supabase/queries';
+import type { DocumentCategory } from '@/lib/programs/documentTypes';
 
 export async function registerProgramDocument(data: {
   programId: string;
