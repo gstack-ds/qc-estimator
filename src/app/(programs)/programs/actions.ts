@@ -71,6 +71,68 @@ export async function updateProgram(id: string, data: Partial<{
   return { error: null };
 }
 
+// ─── Program documents ────────────────────────────────────
+
+import type { DocumentCategory } from '@/lib/supabase/queries';
+
+export async function registerProgramDocument(data: {
+  programId: string;
+  storagePath: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  category: DocumentCategory;
+  notes?: string | null;
+}): Promise<{ id: string | null; error: string | null }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: doc, error } = await supabase
+    .from('program_documents')
+    .insert({
+      program_id: data.programId,
+      file_name: data.fileName,
+      storage_path: data.storagePath,
+      file_size: data.fileSize,
+      mime_type: data.mimeType,
+      category: data.category,
+      notes: data.notes ?? null,
+      uploaded_by: user?.id ?? null,
+    })
+    .select('id')
+    .single();
+  if (error) return { id: null, error: error.message };
+  revalidatePath(`/programs/${data.programId}`);
+  return { id: doc.id as string, error: null };
+}
+
+export async function updateProgramDocument(
+  id: string,
+  programId: string,
+  data: Partial<{ category: DocumentCategory; notes: string | null }>,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('program_documents')
+    .update({ ...data, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath(`/programs/${programId}`);
+  return { error: null };
+}
+
+export async function deleteProgramDocument(
+  id: string,
+  programId: string,
+  storagePath: string,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  await supabase.storage.from('estimate-attachments').remove([storagePath]);
+  const { error } = await supabase.from('program_documents').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath(`/programs/${programId}`);
+  return { error: null };
+}
+
 // ─── Program travel items ─────────────────────────────────
 
 export async function addTravelItem(programId: string): Promise<{ id: string | null; error: string | null }> {

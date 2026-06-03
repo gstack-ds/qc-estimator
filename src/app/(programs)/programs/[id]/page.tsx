@@ -10,6 +10,7 @@ import {
   getLineItemsForEstimates,
   getTransportAggregatesForProgram,
   getTravelItems,
+  getProgramDocuments,
   type DbEstimate,
   type DbLineItem,
   type DbMarkup,
@@ -18,6 +19,7 @@ import {
   type TransportAggregate,
 } from '@/lib/supabase/queries';
 import TravelSection from '@/components/programs/TravelSection';
+import DocumentsSection from '@/components/programs/DocumentsSection';
 import ProgramForm from '@/components/estimates/ProgramForm';
 import EventsView, { type EventRow } from '@/components/estimates/EventsView';
 import { type EstimateCard } from '@/components/estimates/ComparisonView';
@@ -187,7 +189,7 @@ function buildEstimateData(
 export default async function ProgramPage({ params }: Props) {
   const { id } = await params;
 
-  const [program, locations, estimates, dbEvents, markups, dbTiers, travelItems] = await Promise.all([
+  const [program, locations, estimates, dbEvents, markups, dbTiers, travelItems, programDocs] = await Promise.all([
     getProgram(id),
     getLocations(),
     getEstimatesForProgram(id),
@@ -195,6 +197,7 @@ export default async function ProgramPage({ params }: Props) {
     getMarkups(),
     getTiers(),
     getTravelItems(id),
+    getProgramDocuments(id),
   ]);
 
   const tiers: TeamHoursTier[] = dbTiers.map((t) => ({
@@ -206,9 +209,20 @@ export default async function ProgramPage({ params }: Props) {
   if (!program) notFound();
 
   const estimateIds = estimates.map((e) => e.id);
-  const [allLineItems, transportAggregates] = await Promise.all([
+  const [allLineItems, transportAggregates, estimateAttachmentCount] = await Promise.all([
     getLineItemsForEstimates(estimateIds),
     getTransportAggregatesForProgram(id),
+    // Roll-up count of estimate-level attachments for display in Documents section
+    (async () => {
+      if (estimateIds.length === 0) return 0;
+      const { createClient } = await import('@/lib/supabase/server');
+      const supabase = await createClient();
+      const { count } = await supabase
+        .from('estimate_attachments')
+        .select('*', { count: 'exact', head: true })
+        .in('estimate_id', estimateIds);
+      return count ?? 0;
+    })(),
   ]);
   const programConfig = buildProgramConfig(program, program.location);
 
@@ -278,6 +292,17 @@ export default async function ProgramPage({ params }: Props) {
             programId={id}
             initialItems={travelItems}
             initialIncludeInFee={program.include_travel_in_production_fee ?? false}
+          />
+        </div>
+      </div>
+
+      {/* Documents */}
+      <div className="max-w-3xl">
+        <div className="bg-white border border-brand-cream rounded-lg p-5">
+          <DocumentsSection
+            programId={id}
+            initialDocs={programDocs}
+            estimateAttachmentCount={estimateAttachmentCount}
           />
         </div>
       </div>

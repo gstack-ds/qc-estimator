@@ -162,6 +162,53 @@ export async function getProgram(id: string): Promise<DbProgramWithLocation | nu
   return data as unknown as DbProgramWithLocation;
 }
 
+// ─── Program documents ────────────────────────────────────
+
+export type DocumentCategory =
+  | 'Menu' | 'Contract' | 'Invoice' | 'Floor Plan' | 'BEO'
+  | 'Insurance' | 'Proposal' | 'Correspondence' | 'Other';
+
+export const DOCUMENT_CATEGORIES: DocumentCategory[] = [
+  'Menu', 'Contract', 'Invoice', 'Floor Plan', 'BEO',
+  'Insurance', 'Proposal', 'Correspondence', 'Other',
+];
+
+export interface DbProgramDocument {
+  id: string;
+  program_id: string;
+  file_name: string;
+  storage_path: string;
+  file_size: number;
+  mime_type: string;
+  category: DocumentCategory;
+  notes: string | null;
+  uploaded_by: string | null;
+  created_at: string;
+  updated_at: string;
+  url?: string; // signed URL, generated at read time
+}
+
+export async function getProgramDocuments(programId: string): Promise<DbProgramDocument[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('program_documents')
+    .select('id, program_id, file_name, storage_path, file_size, mime_type, category, notes, uploaded_by, created_at, updated_at')
+    .eq('program_id', programId)
+    .order('category')
+    .order('created_at', { ascending: false });
+  if (error) return [];
+  // Generate signed URLs for all documents
+  const withUrls = await Promise.all(
+    (data ?? []).map(async (row) => {
+      const { data: signed } = await supabase.storage
+        .from('estimate-attachments')
+        .createSignedUrl(row.storage_path, 3600);
+      return { ...row, url: signed?.signedUrl ?? '' } as DbProgramDocument;
+    })
+  );
+  return withUrls;
+}
+
 // ─── Program travel items ─────────────────────────────────
 
 export interface DbTravelItem {
