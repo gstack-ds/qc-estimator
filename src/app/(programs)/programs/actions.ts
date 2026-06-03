@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import Anthropic from '@anthropic-ai/sdk';
-import type { ProgramStatus } from '@/lib/programs/constants';
+import { programStatusToLeadStatus, type ProgramStatus } from '@/lib/programs/constants';
 import type { DocumentBlockParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
 
 // ─── Programs ────────────────────────────────────────────
@@ -518,8 +518,23 @@ export async function updateProgramStatus(id: string, status: ProgramStatus): Pr
   const archived_at = (status === 'completed' || status === 'did_not_book')
     ? new Date().toISOString()
     : null;
-  const { error } = await supabase.from('programs').update({ status, archived_at }).eq('id', id);
+  const { data: updated, error } = await supabase
+    .from('programs')
+    .update({ status, archived_at })
+    .eq('id', id)
+    .select('lead_id')
+    .single();
   if (error) return { error: error.message };
+
+  // Back-propagate terminal states to the source lead (completed / did_not_book only).
+  // active → no-op: the reverse mapping is lossy, leave the lead's pipeline status alone.
+  const leadStatus = programStatusToLeadStatus(status);
+  if (leadStatus && updated?.lead_id) {
+    await supabase.from('leads').update({ status: leadStatus }).eq('id', updated.lead_id);
+    revalidatePath('/leads');
+    revalidatePath(`/leads/${updated.lead_id}`);
+  }
+
   revalidatePath('/programs');
   revalidatePath(`/programs/${id}`);
   return { error: null };

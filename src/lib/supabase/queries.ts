@@ -121,13 +121,14 @@ export interface DbProgramSummary {
   updated_at: string;
   estimate_count: number;
   latest_total: number | null;
+  lead_id: string | null;
 }
 
 export async function getPrograms(): Promise<DbProgramSummary[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('programs')
-    .select('id, name, client_name, event_date, status, archived_at, created_at, updated_at, latest_total, estimates(count)')
+    .select('id, name, client_name, event_date, status, archived_at, created_at, updated_at, latest_total, lead_id, estimates(count)')
     .order('updated_at', { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []).map((p) => ({
@@ -140,6 +141,7 @@ export async function getPrograms(): Promise<DbProgramSummary[]> {
     created_at: p.created_at,
     updated_at: p.updated_at,
     latest_total: (p as unknown as { latest_total: number | null }).latest_total,
+    lead_id: (p as unknown as { lead_id: string | null }).lead_id ?? null,
     estimate_count: (p.estimates as unknown as [{ count: number }])[0]?.count ?? 0,
   }));
 }

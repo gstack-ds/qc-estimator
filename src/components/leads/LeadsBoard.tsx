@@ -361,7 +361,12 @@ export default function LeadsBoard({ leads, teamMembers, linkedPrograms }: Props
           >
             {activeLead && (
               <div className="w-[210px] rotate-1 opacity-90 drop-shadow-lg">
-                <LeadCardContent lead={activeLead} teamMembers={teamMembers} isOverlay />
+                <LeadCardContent
+                  lead={activeLead}
+                  teamMembers={teamMembers}
+                  isOverlay
+                  linkedProgram={linkedPrograms[activeLead.id]}
+                />
               </div>
             )}
           </DragOverlay>

@@ -201,6 +201,15 @@ export default function ProgramsTable({ programs }: Props) {
                     >
                       {program.name}
                     </Link>
+                    {program.lead_id && (
+                      <Link
+                        href={`/leads/${program.lead_id}`}
+                        onClick={stopProp}
+                        className="block text-[10px] text-brand-silver hover:text-brand-brown transition-colors mt-0.5"
+                      >
+                        ← Lead
+                      </Link>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {program.client_name ? (
