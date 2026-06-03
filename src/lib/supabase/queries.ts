@@ -191,6 +191,65 @@ export async function getProgramDocuments(programId: string): Promise<DbProgramD
   return withUrls;
 }
 
+// ─── Program briefs ───────────────────────────────────────
+
+import type { ProgramBrief, BriefContent } from '@/lib/briefs/types';
+export type { ProgramBrief } from '@/lib/briefs/types';
+
+export async function getProgramBrief(programId: string): Promise<ProgramBrief | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('program_briefs')
+    .select('id, program_id, content, section_owners, generated_at, last_edited_at')
+    .eq('program_id', programId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as unknown as ProgramBrief;
+}
+
+export async function upsertProgramBrief(
+  programId: string,
+  content: BriefContent,
+  sectionOwners: Record<string, number | null> = {},
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('program_briefs')
+    .upsert({
+      program_id: programId,
+      content,
+      section_owners: sectionOwners,
+      generated_at: new Date().toISOString(),
+      last_edited_at: new Date().toISOString(),
+    }, { onConflict: 'program_id' });
+  return { error: error?.message ?? null };
+}
+
+export async function updateBriefSection(
+  programId: string,
+  sectionKey: string,
+  content: string,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  // Fetch current content, patch the one section, write back
+  const { data: current } = await supabase
+    .from('program_briefs')
+    .select('content')
+    .eq('program_id', programId)
+    .maybeSingle();
+  const existing = (current?.content ?? {}) as Record<string, unknown>;
+  const section = (existing[sectionKey] ?? {}) as Record<string, unknown>;
+  const updated = {
+    ...existing,
+    [sectionKey]: { ...section, content, isAiDraft: false, lastEditedAt: new Date().toISOString() },
+  };
+  const { error } = await supabase
+    .from('program_briefs')
+    .update({ content: updated, last_edited_at: new Date().toISOString() })
+    .eq('program_id', programId);
+  return { error: error?.message ?? null };
+}
+
 // ─── Program travel items ─────────────────────────────────
 
 export interface DbTravelItem {

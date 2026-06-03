@@ -11,6 +11,7 @@ import {
   getTransportAggregatesForProgram,
   getTravelItems,
   getProgramDocuments,
+  getProgramBrief,
   type DbEstimate,
   type DbLineItem,
   type DbMarkup,
@@ -20,6 +21,7 @@ import {
 } from '@/lib/supabase/queries';
 import TravelSection from '@/components/programs/TravelSection';
 import DocumentsSection from '@/components/programs/DocumentsSection';
+import GenerateBriefButton from '@/components/programs/GenerateBriefButton';
 import ProgramForm from '@/components/estimates/ProgramForm';
 import EventsView, { type EventRow } from '@/components/estimates/EventsView';
 import { type EstimateCard } from '@/components/estimates/ComparisonView';
@@ -189,7 +191,7 @@ function buildEstimateData(
 export default async function ProgramPage({ params }: Props) {
   const { id } = await params;
 
-  const [program, locations, estimates, dbEvents, markups, dbTiers, travelItems, programDocs] = await Promise.all([
+  const [program, locations, estimates, dbEvents, markups, dbTiers, travelItems, programDocs, existingBrief] = await Promise.all([
     getProgram(id),
     getLocations(),
     getEstimatesForProgram(id),
@@ -198,6 +200,7 @@ export default async function ProgramPage({ params }: Props) {
     getTiers(),
     getTravelItems(id),
     getProgramDocuments(id),
+    getProgramBrief(id),
   ]);
 
   const tiers: TeamHoursTier[] = dbTiers.map((t) => ({
@@ -306,6 +309,21 @@ export default async function ProgramPage({ params }: Props) {
           />
         </div>
       </div>
+
+      {/* Onsite Brief — only for active programs */}
+      {program.status === 'active' && (
+        <div className="max-w-3xl">
+          <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-2">
+            <div>
+              <h3 className="text-sm font-semibold text-brand-charcoal">Onsite Brief</h3>
+              <p className="text-xs text-brand-silver mt-0.5">
+                Auto-drafts an event brief from program data, uploaded documents, and email threads.
+              </p>
+            </div>
+            <GenerateBriefButton programId={id} hasBrief={!!existingBrief} />
+          </div>
+        </div>
+      )}
 
       {/* Events + Estimates section */}
       <div>

@@ -133,6 +133,190 @@ export async function deleteProgramDocument(
   return { error: null };
 }
 
+// ─── Onsite Brief ─────────────────────────────────────────
+
+export async function generateOnsiteBrief(
+  programId: string,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+
+  // ── 1. Load all program data ──────────────────────────────
+  const [programData, estimates, events, travelItems, documents] = await Promise.all([
+    supabase.from('programs').select(`
+      id, name, client_name, company_name, event_date, event_start_time, event_end_time,
+      guest_count, service_style, alcohol_type, client_hotel,
+      cc_processing_fee, client_commission, gdp_commission_enabled, gdp_commission_rate,
+      service_charge_default, gratuity_default, admin_fee_default,
+      third_party_commissions, include_travel_in_production_fee,
+      location:locations(id, name, food_tax_rate, alcohol_tax_rate, general_tax_rate)
+    `).eq('id', programId).single(),
+    supabase.from('estimates').select('*').eq('program_id', programId).eq('type', 'venue').order('sort_order').limit(1),
+    supabase.from('events').select('*').eq('program_id', programId).order('sort_order'),
+    supabase.from('program_travel_items').select('*').eq('program_id', programId).order('sort_order'),
+    supabase.from('program_documents').select('id, file_name, storage_path, category, mime_type').eq('program_id', programId),
+  ]);
+
+  if (programData.error || !programData.data) {
+    return { error: programData.error?.message ?? 'Program not found' };
+  }
+
+  const program = programData.data as unknown as import('@/lib/supabase/queries').DbProgramWithLocation;
+  const venueEstimate = (estimates.data ?? [])[0] as import('@/lib/supabase/queries').DbEstimate | undefined ?? null;
+  const eventsList = (events.data ?? []) as import('@/lib/supabase/queries').DbEvent[];
+  const travelList = (travelItems.data ?? []) as import('@/lib/supabase/queries').DbTravelItem[];
+  const programTravelTotal = travelList.reduce((s, it) => s + it.qty * it.unit_price, 0);
+
+  // ── 2. Load venue + space if linked ──────────────────────
+  let venue: import('@/lib/supabase/queries').DbVenue | null = null;
+  let venueSpace: import('@/lib/supabase/queries').DbVenueSpace | null = null;
+  if (venueEstimate?.venue_id) {
+    const vr = await supabase.from('venues').select('*').eq('id', venueEstimate.venue_id).maybeSingle();
+    if (vr.data) venue = vr.data as unknown as import('@/lib/supabase/queries').DbVenue;
+    if (venueEstimate.venue_space_id) {
+      const sr = await supabase.from('venue_spaces').select('*').eq('id', venueEstimate.venue_space_id).maybeSingle();
+      if (sr.data) venueSpace = sr.data as unknown as import('@/lib/supabase/queries').DbVenueSpace;
+    }
+  }
+
+  // ── 3. Run engine for financial summary if we have an estimate ──
+  let summary: import('@/types').EstimateSummary | null = null;
+  let programConfig: import('@/types').ProgramConfig | null = null;
+  if (venueEstimate) {
+    const { data: lineItemsData } = await supabase
+      .from('estimate_line_items').select('*').eq('estimate_id', venueEstimate.id);
+    const { data: markupsData } = await supabase.from('category_markups').select('id, markup_pct');
+    const { data: sectionsData } = await supabase
+      .from('estimate_sections').select('*').eq('estimate_id', venueEstimate.id);
+
+    if (lineItemsData && markupsData) {
+      const loc = program.location as unknown as { id: string; name: string; food_tax_rate: number; alcohol_tax_rate: number; general_tax_rate: number } | null;
+      programConfig = {
+        guestCount: program.guest_count,
+        location: loc ? {
+          id: loc.id, name: loc.name,
+          foodTaxRate: loc.food_tax_rate,
+          alcoholTaxRate: loc.alcohol_tax_rate,
+          generalTaxRate: loc.general_tax_rate,
+        } : { id: '', name: '', foodTaxRate: 0, alcoholTaxRate: 0, generalTaxRate: 0 },
+        ccProcessingFee: program.cc_processing_fee,
+        clientCommission: program.client_commission,
+        gdpCommissionEnabled: program.gdp_commission_enabled,
+        gdpCommissionRate: program.gdp_commission_rate,
+        serviceChargeDefault: program.service_charge_default,
+        gratuityDefault: program.gratuity_default,
+        adminFeeDefault: program.admin_fee_default,
+        thirdPartyCommissions: program.third_party_commissions ?? [],
+      };
+
+      const sectionNames = new Map((sectionsData ?? []).map(s => [s.id, s.name]));
+      const lineItems = lineItemsData.map(li => {
+        const markupObj = markupsData.find(m => m.id === li.category_id);
+        const effectiveMarkup = li.markup_override ?? markupObj?.markup_pct ?? 0.5;
+        const isCustom = li.custom_client_unit_price != null;
+        const sectionName = sectionNames.get(li.section_id) ?? li.section ?? 'Other';
+        const taxBucket: import('@/types').TaxBucket =
+          sectionName.includes('F&B') ? 'fb'
+          : sectionName.includes('Venue') ? 'venue'
+          : (sectionName.includes('Staff') || sectionName.includes('Non-Tax')) ? 'staffing'
+          : 'equipment';
+        return {
+          id: li.id,
+          section: sectionName,
+          taxBucket,
+          name: li.name,
+          qty: li.qty,
+          unitPrice: li.unit_price,
+          categoryMarkupPct: isCustom ? 0 : effectiveMarkup,
+          taxType: li.tax_type as import('@/types').TaxType,
+          isRevenueItem: li.is_revenue_item,
+          clientCostOverride: isCustom ? li.qty * li.custom_client_unit_price! : undefined,
+        };
+      });
+
+      const { calculateVenueEstimate } = await import('@/lib/engine/pricing');
+      const sc = venueEstimate.service_charge_override ?? program.service_charge_default;
+      const gr = venueEstimate.gratuity_override ?? program.gratuity_default;
+      const af = venueEstimate.admin_fee_override ?? program.admin_fee_default;
+      const discount = venueEstimate.discount_type && venueEstimate.discount_value > 0
+        ? { type: venueEstimate.discount_type, value: venueEstimate.discount_value }
+        : null;
+
+      summary = calculateVenueEstimate({
+        name: venueEstimate.name,
+        fbMinimum: venueEstimate.fb_minimum,
+        isVenueTaxable: venueEstimate.is_venue_taxable,
+        serviceCharge: sc,
+        gratuity: gr,
+        adminFee: af,
+        lineItems,
+        discount,
+        taxExempt: venueEstimate.tax_exempt,
+        travelTotal: programTravelTotal,
+        includeTravelInProductionFee: program.include_travel_in_production_fee,
+        foodTaxOverride: venueEstimate.food_tax_override,
+        alcoholTaxOverride: venueEstimate.alcohol_tax_override,
+        generalTaxOverride: venueEstimate.general_tax_override,
+      }, programConfig);
+    }
+  }
+
+  // ── 4. Build structured sections ─────────────────────────
+  const { buildStructuredSections } = await import('@/lib/briefs/structured');
+  const { emptyBrief } = await import('@/lib/briefs/types');
+  const brief = emptyBrief();
+
+  const structured = buildStructuredSections({
+    program,
+    events: eventsList,
+    venueEstimate,
+    venue,
+    venueSpace,
+    summary,
+    programConfig,
+    travelItems: travelList,
+    programTravelTotal,
+  });
+
+  // Merge structured sections into brief
+  for (const [key, section] of Object.entries(structured)) {
+    if (section) {
+      (brief as Record<string, unknown>)[key] = section;
+    }
+  }
+
+  // AI sections get placeholder text until Phase 2 synthesis
+  const docList = (documents.data ?? []).map((d: { file_name: string; category: string }) => `• ${d.file_name} (${d.category})`).join('\n');
+  const aiPlaceholder = (hint: string) =>
+    `[AI DRAFT PENDING]\n${hint}\n\nDocuments available:\n${docList || '(none uploaded yet)'}\n\nTo generate AI content, use the Regenerate button.`;
+
+  if (!brief.menuBar.content) brief.menuBar.content = aiPlaceholder('Menu & bar details — AI will read uploaded menu PDFs');
+  if (!brief.dietaryRestrictions.content) brief.dietaryRestrictions.content = aiPlaceholder('Dietary restrictions — AI will cross-reference menu PDFs and estimate notes');
+  if (!brief.dayOfLogistics.content) brief.dayOfLogistics.content = aiPlaceholder('Day-of timeline, load-in, contacts — AI will synthesize from emails and documents');
+  if (!brief.contractTerms.content) brief.contractTerms.content = aiPlaceholder('Key contract terms — AI will read uploaded contract PDF');
+  if (!brief.openItems.content) brief.openItems.content = aiPlaceholder('Open items and TBDs — AI will flag unconfirmed details across all sources');
+  if (!brief.summary.content) brief.summary.content = aiPlaceholder('Plain-language summary paragraph for the onsite lead');
+
+  // ── 5. Save to DB ─────────────────────────────────────────
+  const { upsertProgramBrief } = await import('@/lib/supabase/queries');
+  const { error: saveErr } = await upsertProgramBrief(programId, brief);
+  if (saveErr) return { error: saveErr };
+
+  revalidatePath(`/programs/${programId}`);
+  revalidatePath(`/programs/${programId}/brief`);
+  return { error: null };
+}
+
+export async function saveBriefSection(
+  programId: string,
+  sectionKey: string,
+  content: string,
+): Promise<{ error: string | null }> {
+  const { updateBriefSection } = await import('@/lib/supabase/queries');
+  const result = await updateBriefSection(programId, sectionKey, content);
+  if (!result.error) revalidatePath(`/programs/${programId}/brief`);
+  return result;
+}
+
 // ─── Program travel items ─────────────────────────────────
 
 export async function addTravelItem(programId: string): Promise<{ id: string | null; error: string | null }> {
