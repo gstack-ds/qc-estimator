@@ -359,6 +359,26 @@ export async function saveBriefSection(
   return result;
 }
 
+export async function saveBriefSectionOwner(
+  programId: string,
+  sectionKey: string,
+  ownerId: number | null,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { data: current } = await supabase
+    .from('program_briefs')
+    .select('section_owners')
+    .eq('program_id', programId)
+    .maybeSingle();
+  const existing = (current?.section_owners ?? {}) as Record<string, number | null>;
+  const updated = { ...existing, [sectionKey]: ownerId };
+  const { error } = await supabase
+    .from('program_briefs')
+    .update({ section_owners: updated, last_edited_at: new Date().toISOString() })
+    .eq('program_id', programId);
+  return { error: error?.message ?? null };
+}
+
 // ─── Program travel items ─────────────────────────────────
 
 export async function addTravelItem(programId: string): Promise<{ id: string | null; error: string | null }> {

@@ -6,7 +6,7 @@ import { Sparkles, Edit3, Check, Copy, ChevronDown, ChevronRight, User } from 'l
 import type { ProgramBrief } from '@/lib/briefs/types';
 import { BRIEF_SECTIONS, BRIEF_SECTION_LABELS, AI_SECTIONS, type BriefSectionKey } from '@/lib/briefs/types';
 import type { DbTeamMember } from '@/lib/supabase/queries';
-import { saveBriefSection } from '@/app/(programs)/programs/actions';
+import { saveBriefSection, saveBriefSectionOwner } from '@/app/(programs)/programs/actions';
 
 interface Props {
   programId: string;
@@ -34,13 +34,22 @@ function BriefSection({
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(section?.content ?? '');
+  const [ownerId, setOwnerId] = useState<string>(String(brief.section_owners?.[sectionKey] ?? ''));
   const [, startTransition] = useTransition();
   const isAi = section?.isAiDraft !== false && AI_SECTIONS.has(sectionKey);
+  const owner = teamMembers.find(m => String(m.id) === ownerId);
 
   function handleSave() {
     setEditing(false);
     startTransition(async () => {
       await saveBriefSection(programId, sectionKey, draft);
+    });
+  }
+
+  function handleOwnerChange(newOwnerId: string) {
+    setOwnerId(newOwnerId);
+    startTransition(async () => {
+      await saveBriefSectionOwner(programId, sectionKey, newOwnerId ? Number(newOwnerId) : null);
     });
   }
 
@@ -55,10 +64,17 @@ function BriefSection({
       >
         {expanded ? <ChevronDown size={14} className="text-brand-silver flex-shrink-0" /> : <ChevronRight size={14} className="text-brand-silver flex-shrink-0" />}
         <span className="text-sm font-semibold text-brand-charcoal flex-1">{BRIEF_SECTION_LABELS[sectionKey]}</span>
+        {/* Owner badge */}
+        {owner && (
+          <span className="flex items-center gap-1 text-[10px] text-brand-silver bg-brand-cream/60 rounded-full px-2 py-0.5 flex-shrink-0">
+            <User size={9} />
+            {owner.first_name}
+          </span>
+        )}
         {isAi && (
           <span className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-700 flex-shrink-0">
             <Sparkles size={9} />
-            AI draft — review before sharing
+            AI draft
           </span>
         )}
       </button>
@@ -113,6 +129,20 @@ function BriefSection({
           {section?.sourceHint && (
             <p className="text-[10px] text-brand-silver/60">Source: {section.sourceHint}</p>
           )}
+          {/* Owner assignment */}
+          <div className="flex items-center gap-2 pt-1" onClick={stopProp}>
+            <User size={10} className="text-brand-silver/60" />
+            <select
+              value={ownerId}
+              onChange={e => handleOwnerChange(e.target.value)}
+              className="text-[10px] border border-brand-cream rounded px-1.5 py-0.5 bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
+            >
+              <option value="">No owner</option>
+              {teamMembers.map(m => (
+                <option key={m.id} value={String(m.id)}>{m.first_name} {m.last_name}</option>
+              ))}
+            </select>
+          </div>
         </div>
       )}
     </div>
