@@ -231,6 +231,13 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-06-03 | Venue profile history: getEstimatesForVenue + getAttachmentsForVenue now return { data, error } | Silent [] return masked query failures. Both functions expose error strings; venue detail page shows red error banners vs empty-state explanations vs populated data. Two-step query: get estimate IDs for venue → get attachments for those IDs. | Single JOIN query via raw SQL (would need a DB function) |
 | 2026-06-03 | Force venue blocking: line items, Slide Copy, Travel, and ExportButtons hidden/disabled until venue_id is linked | triggerAutoLink (auto-create venue from estimate name on blur) removed — venue must be explicitly chosen. "Add new venue" is now the last <option> in the dropdown (sentinel __add_new__) rather than a separate button. | Warn-only amber banner (insufficient — allows saving without venue) |
 | 2026-06-03 | Duplicate venue prevention: address required + name fuzzy check in createVenue | Hard block on exact normalized address match. Soft warning on normalized name match (strip all non-alphanumeric → "5Church" == "5 Church"). skipNameCheck param lets user bypass the warning after confirming "Proceed anyway." Address required server-side (not just client-side validation). normalizeAddress/normalizeName in src/lib/venues/normalize.ts with 12 unit tests. | Address-only check (missed name-only dupes) |
+| 2026-06-03 | Lead/program unification (Path B): getLinkedProgramsByLeadId + board threading | One bulk query fetches Record<leadId, LinkedProgramSummary> for all programs with lead_id set. Threaded through LeadsPage → LeadsView → LeadsBoard → KanbanLane → LeadCard. Converted lead cards show a copper "→ Program Name" banner (clickable link to program, suppresses drag via onPointerDown stop). DragOverlay passes linkedProgram so the ghost card matches. | Per-card queries (N+1), separate board fetch |
+| 2026-06-03 | syncProgramStatusFromLead fires on board drag (lead → program, one direction) | handleDragEnd: after updateLead, checks linkedPrograms[leadId] and calls syncProgramStatusFromLead(programId, newLeadStatus) in a startTransition. Maps 12 lead statuses → 3 program statuses (did_not_book/unresponsive/halted → did_not_book, completed → completed, else → active). | Sync on every field edit (too aggressive), WebSocket (overkill) |
+| 2026-06-03 | Reverse status sync (program → lead, terminal states only) | updateProgramStatus uses UPDATE...SELECT('lead_id') to get lead_id in one round trip. If programStatus is completed or did_not_book, writes that status to leads. active → no-op (reverse is lossy). programStatusToLeadStatus() is a pure function in constants.ts with 6 unit tests. | Sync all states (completed ↔ lossy reverse); separate lookup query (extra round trip) |
+| 2026-06-03 | "Create another program" removed — one lead, one program | Button gated inside linkedPrograms.length === 0 branch in LeadDetail so it is absent from the DOM when a program already exists. A genuine re-book is a new lead (enforced by migration 034 UNIQUE constraint on programs.lead_id). | Keep button with warning (confusing); allow multiple programs per lead |
+| 2026-06-03 | Migration 034: UNIQUE constraint on programs.lead_id | Prevents multiple programs per lead at the DB level. Pre-checked 0 existing violations before applying. Re-books must start as a new lead. | Application-level check only (bypassable) |
+| 2026-06-03 | Slide Copy module: Dianthus/Canva template format extensions | Max Capacity line appended to Slide 1 Header. New "Pricing Callout" block: "Starting at $X (based on N)" + "Including:" bullet list + price per person. Route/Itinerary optional free-text textarea → copy block (only shown when filled). Cost Summary replaces Estimate Summary: UPPERCASE labels, no Production Fee row, productionFeeTax in Tax, Admin Fee row. Menu format: HEADER (CHOOSE N) uppercase, needs_selection courses show ALL options (sample mode), spirit/bar course names auto-format as "VODKA / Tito's, Sobieski". Bar Notes free-text textarea appended as BAR section. Copy All filters empty sections. | Keep old padEnd column alignment (hard to paste into Canva) |
+| 2026-06-03 | DbProgramSummary includes lead_id; ProgramsTable shows "← Lead" link | lead_id added to getPrograms() SELECT and map. Rows with lead_id show a small secondary "← Lead" link under the program name that navigates to the source lead. Doesn't add a new column — inline under the name. | New column (changes table layout); tooltip (less discoverable) |
 
 ## Gotchas Log
 
@@ -335,18 +342,23 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Venue force-address: required banner in EstimateBuilder, inline "Add new venue" form with duplicate check, auto-suggest tax location banner
 - [x] Venue profile: program history + attachments section on venue detail page
 - [x] Venues list: Programs and Files count columns added
+- [x] Migration 029 run in production — status + archived_at columns live
+- [x] Migration 034 run in production — UNIQUE constraint on programs.lead_id live
+- [x] Lead/program unification (Path B): getLinkedProgramsByLeadId, board threading, converted-lead banner, syncProgramStatusFromLead on drag, program page "← Lead" link, "Create another program" removed
+- [x] Slide Copy: Dianthus/Canva template format — pricing callout, max capacity, itinerary field, bar notes, cost summary uppercase, menu choice headers + sample mode, Copy All filters empties
+- [x] Reverse status sync (program → lead, terminal states only): updateProgramStatus back-propagates completed/did_not_book to lead.status; programStatusToLeadStatus() with 6 unit tests (330 total, 13 files)
+- [x] DragOverlay cosmetic fix: linkedProgram passed to LeadCardContent so ghost card shows program banner during drag
+- [x] Programs list lead_id: DbProgramSummary extended, getPrograms() selects lead_id, "← Lead" link on lead-sourced rows
 
 ### Remaining
-- [ ] **Run migration 029 in production** — `status TEXT DEFAULT 'active'` + `archived_at TIMESTAMPTZ` on programs
-- [ ] **Venue profile data** — need real estimates with `venue_id` set to verify history section populates. Trigger by opening an existing venue estimate, selecting a venue from the picker, then visiting the venue profile. If estimates.venue_id was null before the fix session (autoLinkOrCreateVenue wasn't being called reliably), existing estimates may still be unlinked.
-- [ ] **Tell Alex** — Bright Darling is not on Google Fonts; Cormorant Garamond is used in the preview instead; she should swap to Bright Darling in the actual Canva template
+- [ ] **Venue profile data** — need real estimates with `venue_id` set to verify history section populates. Trigger by opening an existing venue estimate, selecting a venue, then visiting the venue profile.
+- [ ] **Tell Alex** — Bright Darling is not on Google Fonts; Cormorant Garamond is used in the Slide Copy preview instead; she should swap to Bright Darling in the actual Canva template
 - [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs (note: EXPECTED_QC_MARGIN values changed significantly with bug #5 fix and again with production fee tax)
 - [ ] Venue profile: attachment download links (currently shows filename only — needs signed URL for clickable download)
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- Run migration 029 in production first (program status columns).
-- Tell Alex about the Bright Darling substitute (Cormorant Garamond in preview; she swaps in Canva).
+- Tell Alex about the Bright Darling substitute (Cormorant Garamond in Slide Copy preview; she swaps in Canva).
 - Venue profile attachment downloads: the history section shows filenames but no download link — needs signed URL generation server-side.
 - Scanner is live and working. Run `npm run dedup` if duplicate leads accumulate.
 - Proposal validation against Excel is the next quality check.
