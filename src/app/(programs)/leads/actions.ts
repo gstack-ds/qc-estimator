@@ -149,8 +149,8 @@ export async function createProgramFromLead(leadId: string): Promise<{ error: st
 
   if (progErr) return { error: progErr.message, programId: null };
 
-  // Move lead to proposal
-  await supabase.from('leads').update({ status: 'proposal' }).eq('id', leadId);
+  // Advance lead to Proposal in Progress (migration 020 renamed 'proposal' → 'proposal_in_progress')
+  await supabase.from('leads').update({ status: 'proposal_in_progress' }).eq('id', leadId);
 
   revalidatePath('/leads');
   revalidatePath(`/leads/${leadId}`);

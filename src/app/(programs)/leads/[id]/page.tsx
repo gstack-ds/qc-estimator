@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { getLead, getProgramForLead, getTeamMembers } from '@/lib/supabase/queries';
+import { getLead, getProgramsForLead, getTeamMembers } from '@/lib/supabase/queries';
 import LeadDetail from '@/components/leads/LeadDetail';
 
 export const dynamic = 'force-dynamic';
@@ -10,7 +10,11 @@ interface Props {
 
 export default async function LeadDetailPage({ params }: Props) {
   const { id } = await params;
-  const [lead, linkedProgram, teamMembers] = await Promise.all([getLead(id), getProgramForLead(id), getTeamMembers()]);
+  const [lead, linkedPrograms, teamMembers] = await Promise.all([
+    getLead(id),
+    getProgramsForLead(id),
+    getTeamMembers(),
+  ]);
   if (!lead) notFound();
-  return <LeadDetail lead={lead} linkedProgram={linkedProgram} teamMembers={teamMembers} />;
+  return <LeadDetail lead={lead} linkedPrograms={linkedPrograms} teamMembers={teamMembers} />;
 }

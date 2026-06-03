@@ -207,11 +207,12 @@ function SelectField({ label, value, field, options, onSave }: {
 
 interface Props {
   lead: DbLead;
-  linkedProgram: { id: string; name: string } | null;
+  /** All programs created from this lead — ordered most-recent first. May be empty. */
+  linkedPrograms: { id: string; name: string; event_date: string | null }[];
   teamMembers: DbTeamMember[];
 }
 
-export default function LeadDetail({ lead: initialLead, linkedProgram, teamMembers }: Props) {
+export default function LeadDetail({ lead: initialLead, linkedPrograms, teamMembers }: Props) {
   const router = useRouter();
   const [lead, setLead] = useState(initialLead);
   const [creatingProgram, setCreatingProgram] = useState(false);
@@ -335,34 +336,48 @@ export default function LeadDetail({ lead: initialLead, linkedProgram, teamMembe
         </div>
       </div>
 
-      {/* Create Program / Link to Program */}
-      <div className="bg-brand-offwhite border border-brand-cream rounded-lg p-4 flex items-center justify-between gap-4">
-        {linkedProgram ? (
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-brand-charcoal/70">Linked program:</span>
-            <a
-              href={`/programs/${linkedProgram.id}`}
-              className="text-sm font-medium text-brand-brown hover:text-brand-charcoal transition-colors"
-            >
-              {linkedProgram.name} →
-            </a>
+      {/* Linked programs */}
+      <div className="bg-brand-offwhite border border-brand-cream rounded-lg p-4 space-y-3">
+        {linkedPrograms.length > 0 ? (
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-brand-charcoal/60 uppercase tracking-wide">
+              Linked {linkedPrograms.length === 1 ? 'program' : `programs (${linkedPrograms.length})`}
+            </p>
+            {linkedPrograms.map(prog => (
+              <div key={prog.id} className="flex items-center gap-2">
+                <a
+                  href={`/programs/${prog.id}`}
+                  className="text-sm font-medium text-brand-brown hover:text-brand-charcoal transition-colors"
+                >
+                  {prog.name} →
+                </a>
+                {prog.event_date && (
+                  <span className="text-xs text-brand-silver">{prog.event_date.slice(0, 10)}</span>
+                )}
+              </div>
+            ))}
           </div>
         ) : (
           <div>
             <p className="text-sm text-brand-charcoal font-medium">Ready to build this estimate?</p>
-            <p className="text-xs text-brand-charcoal/60 mt-0.5">Creates a program pre-filled with lead data and marks this lead as Proposal.</p>
+            <p className="text-xs text-brand-charcoal/60 mt-0.5">Creates a program pre-filled with lead data and marks this lead as Proposal in Progress.</p>
           </div>
         )}
-        {!linkedProgram && (
+
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={handleCreateProgram}
             disabled={creatingProgram}
-            className="flex-shrink-0 px-4 py-2 text-sm font-medium bg-brand-brown text-white rounded hover:bg-brand-charcoal transition-colors disabled:opacity-50"
+            className="text-sm font-medium bg-brand-brown text-white rounded px-4 py-1.5 hover:bg-brand-charcoal transition-colors disabled:opacity-50"
           >
-            {creatingProgram ? 'Creating…' : 'Create Program →'}
+            {creatingProgram
+              ? 'Creating…'
+              : linkedPrograms.length === 0
+                ? 'Create Program →'
+                : 'Create another program →'}
           </button>
-        )}
-        {progError && <p className="text-xs text-red-500">{progError}</p>}
+          {progError && <p className="text-xs text-red-500">{progError}</p>}
+        </div>
       </div>
 
       {/* Client Info */}

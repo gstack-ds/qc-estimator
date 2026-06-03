@@ -101,6 +101,7 @@ export interface DbProgram {
   status: string;
   archived_at: string | null;
   include_travel_in_production_fee: boolean;
+  lead_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -153,7 +154,7 @@ export async function getProgram(id: string): Promise<DbProgramWithLocation | nu
       location_id, cc_processing_fee, client_commission,
       gdp_commission_enabled, gdp_commission_rate,
       service_charge_default, gratuity_default, admin_fee_default,
-      third_party_commissions, status, archived_at, include_travel_in_production_fee, created_at, updated_at,
+      third_party_commissions, status, archived_at, include_travel_in_production_fee, lead_id, created_at, updated_at,
       location:locations(id, name, food_tax_rate, alcohol_tax_rate, general_tax_rate, effective_date, updated_at)
     `)
     .eq('id', id)
@@ -1090,10 +1091,20 @@ export async function getLeadCounts(): Promise<Record<LeadStatusGroup, number>> 
   return counts;
 }
 
-export async function getProgramForLead(leadId: string): Promise<{ id: string; name: string } | null> {
+/**
+ * Returns ALL programs linked to a lead. A lead can spawn more than one
+ * program (e.g. a re-book or a split event), so we never assume exactly one.
+ * Ordered most-recent first so callers can use [0] for the primary link.
+ */
+export async function getProgramsForLead(leadId: string): Promise<{ id: string; name: string; event_date: string | null }[]> {
   const supabase = await createClient();
-  const { data } = await supabase.from('programs').select('id, name').eq('lead_id', leadId).maybeSingle();
-  return data ?? null;
+  const { data, error } = await supabase
+    .from('programs')
+    .select('id, name, event_date')
+    .eq('lead_id', leadId)
+    .order('created_at', { ascending: false });
+  if (error) return [];
+  return data ?? [];
 }
 
 export interface DbTeamMember {
