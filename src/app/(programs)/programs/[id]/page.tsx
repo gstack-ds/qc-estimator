@@ -9,6 +9,7 @@ import {
   getTiers,
   getLineItemsForEstimates,
   getTransportAggregatesForProgram,
+  getTravelItems,
   type DbEstimate,
   type DbLineItem,
   type DbMarkup,
@@ -16,6 +17,7 @@ import {
   type DbTier,
   type TransportAggregate,
 } from '@/lib/supabase/queries';
+import TravelSection from '@/components/programs/TravelSection';
 import ProgramForm from '@/components/estimates/ProgramForm';
 import EventsView, { type EventRow } from '@/components/estimates/EventsView';
 import { type EstimateCard } from '@/components/estimates/ComparisonView';
@@ -130,7 +132,7 @@ function buildEstimateData(
       productionFeeTax: 0, lineItemsSubtotalClient: agg.total_client, preTaxTotal: agg.total_client + transportSummary.productionFee,
       totalOur: agg.total_our, totalClient: transportSummary.totalClient,
       pricePerPerson: 0, fbMinimumMet: true, fbShortfall: 0,
-      vendorTaxesTotal: 0, revenueItemsClientTotal: 0, discountAmount: 0,
+      vendorTaxesTotal: 0, revenueItemsClientTotal: 0, discountAmount: 0, travelInProductionFee: 0,
     };
     const transportConfig: ProgramConfig = { ...config, clientCommission: transportCommission, gdpCommissionEnabled: false, thirdPartyCommissions: [] };
     const margin = calculateMarginAnalysis(fakeSummary, transportConfig, tiers);
@@ -185,13 +187,14 @@ function buildEstimateData(
 export default async function ProgramPage({ params }: Props) {
   const { id } = await params;
 
-  const [program, locations, estimates, dbEvents, markups, dbTiers] = await Promise.all([
+  const [program, locations, estimates, dbEvents, markups, dbTiers, travelItems] = await Promise.all([
     getProgram(id),
     getLocations(),
     getEstimatesForProgram(id),
     getEventsForProgram(id),
     getMarkups(),
     getTiers(),
+    getTravelItems(id),
   ]);
 
   const tiers: TeamHoursTier[] = dbTiers.map((t) => ({
@@ -266,6 +269,17 @@ export default async function ProgramPage({ params }: Props) {
       {/* Program form — constrained width */}
       <div className="max-w-3xl">
         <ProgramForm program={program} locations={locations} mode="edit" />
+      </div>
+
+      {/* Travel & Transportation */}
+      <div className="max-w-3xl">
+        <div className="bg-white border border-brand-cream rounded-lg p-5">
+          <TravelSection
+            programId={id}
+            initialItems={travelItems}
+            initialIncludeInFee={program.include_travel_in_production_fee ?? false}
+          />
+        </div>
       </div>
 
       {/* Events + Estimates section */}

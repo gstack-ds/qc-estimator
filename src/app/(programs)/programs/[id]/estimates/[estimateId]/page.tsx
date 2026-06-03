@@ -8,13 +8,12 @@ import {
   getLineItemsForEstimate,
   getMarkups,
   getTiers,
-  getTravelRefs,
-  getTripsForEstimate,
   getTransportVehicleRates,
   getTransportScheduleRows,
   getVenues,
   getAllVenueSpaces,
   getLocations,
+  getTravelItems,
 } from '@/lib/supabase/queries';
 import { ensureDefaultSections } from '@/app/(programs)/programs/[id]/estimates/actions';
 import EstimateBuilder from '@/components/estimates/EstimateBuilder';
@@ -32,29 +31,30 @@ interface Props {
 export default async function EstimatePage({ params }: Props) {
   const { id: programId, estimateId } = await params;
 
-  const [program, allEstimates, estimate, markups, tiers, travelRefs, venues, allLocations] = await Promise.all([
+  const [program, allEstimates, estimate, markups, tiers, venues, allLocations, travelItems] = await Promise.all([
     getProgram(programId),
     getEstimatesForProgram(programId),
     getEstimate(estimateId),
     getMarkups(),
     getTiers(),
-    getTravelRefs(),
     getVenues(),
     getLocations(),
+    getTravelItems(programId),
   ]);
 
   if (!program || !estimate) notFound();
 
   const event = estimate.event_id ? await getEvent(estimate.event_id) : null;
   const eventName = event?.name ?? null;
-  // Override program guest count with the event's guest count when set
   const effectiveProgram = event?.guest_count
     ? { ...program, guest_count: event.guest_count }
     : program;
 
+  // Compute program-level travel total from travel items
+  const programTravelTotal = travelItems.reduce((s, it) => s + it.qty * it.unit_price, 0);
+
   if (estimate.type === 'transportation') {
-    const [initialTrips, vehicleRates, scheduleRows] = await Promise.all([
-      getTripsForEstimate(estimateId),
+    const [vehicleRates, scheduleRows] = await Promise.all([
       getTransportVehicleRates(estimateId),
       getTransportScheduleRows(estimateId),
     ]);
@@ -67,23 +67,21 @@ export default async function EstimatePage({ params }: Props) {
           estimate={estimate}
           vehicleRates={vehicleRates}
           scheduleRows={scheduleRows}
-          travelRefs={travelRefs}
-          initialTrips={initialTrips}
           tiers={tiers}
           eventName={eventName}
+          programTravelTotal={programTravelTotal}
+          includeTravelInProductionFee={program.include_travel_in_production_fee ?? false}
         />
       </div>
     );
   }
 
-  const [lineItems, initialTrips, venueSpaces, rawSections] = await Promise.all([
+  const [lineItems, venueSpaces, rawSections] = await Promise.all([
     getLineItemsForEstimate(estimateId),
-    getTripsForEstimate(estimateId),
     estimate.type === 'venue' ? getAllVenueSpaces() : Promise.resolve([]),
     getEstimateSections(estimateId),
   ]);
 
-  // Lazy-seed default sections for estimates that predate migration 025
   let dbSections = rawSections;
   if (dbSections.length === 0 && estimate.type !== 'transportation') {
     const { sections } = await ensureDefaultSections(estimateId, estimate.type as import('@/types').EstimateType);
@@ -102,14 +100,14 @@ export default async function EstimatePage({ params }: Props) {
           dbSections={dbSections}
           markups={markups}
           tiers={tiers}
-          travelRefs={travelRefs}
-          initialTrips={initialTrips}
           eventName={eventName}
           event={event}
           initialSlideCopyData={estimate.slide_copy_data as SlideCopyData | null}
           venues={venues}
           venueSpaces={venueSpaces}
           allLocations={allLocations}
+          programTravelTotal={programTravelTotal}
+          includeTravelInProductionFee={program.include_travel_in_production_fee ?? false}
         />
       </div>
     );
@@ -130,9 +128,9 @@ export default async function EstimatePage({ params }: Props) {
         dbSections={dbSections}
         markups={markups}
         tiers={tiers}
-        travelRefs={travelRefs}
-        initialTrips={initialTrips}
         eventName={eventName}
+        programTravelTotal={programTravelTotal}
+        includeTravelInProductionFee={program.include_travel_in_production_fee ?? false}
       />
     </div>
   );

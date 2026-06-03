@@ -1101,3 +1101,96 @@ describe('calculateVenueEstimate — tax overrides', () => {
     expect(s.foodTax).not.toBeCloseTo(1550 * 0.0725);
   });
 });
+
+// ─── Travel in production fee ─────────────────────────────
+
+describe('calculateVenueEstimate — travel in production fee', () => {
+  const FOOD_ITEM: LineItem = {
+    id: 'f1', section: 'F&B', taxBucket: 'fb', name: 'Food',
+    qty: 1, unitPrice: 1000, categoryMarkupPct: 0.55, taxType: 'food',
+  };
+  // Config with real commission rates so productionFee > 0
+  const COMM_CONFIG: ProgramConfig = {
+    ...BASE_CONFIG,
+    ccProcessingFee: 0.035,
+    clientCommission: 0.05,
+    gdpCommissionEnabled: false,
+    serviceChargeDefault: 0, gratuityDefault: 0, adminFeeDefault: 0,
+  };
+  const BASE_INPUT: VenueEstimateInput = {
+    name: 'Travel Test', fbMinimum: 0, isVenueTaxable: false,
+    serviceCharge: 0, gratuity: 0, adminFee: 0, lineItems: [FOOD_ITEM],
+  };
+
+  it('travel excluded (default): travelInProductionFee = 0, production fee unchanged', () => {
+    const input: VenueEstimateInput = {
+      ...BASE_INPUT, travelTotal: 500, includeTravelInProductionFee: false,
+    };
+    const base = calculateVenueEstimate(BASE_INPUT, COMM_CONFIG);
+    const withTravel = calculateVenueEstimate(input, COMM_CONFIG);
+    expect(withTravel.travelInProductionFee).toBe(0);
+    expect(withTravel.productionFee).toBeCloseTo(base.productionFee);
+    expect(withTravel.totalClient).toBeCloseTo(base.totalClient);
+  });
+
+  it('travel included: travelInProductionFee equals travelTotal', () => {
+    const input: VenueEstimateInput = {
+      ...BASE_INPUT, travelTotal: 500, includeTravelInProductionFee: true,
+    };
+    const s = calculateVenueEstimate(input, COMM_CONFIG);
+    expect(s.travelInProductionFee).toBe(500);
+  });
+
+  it('travel included: production fee increases by travelTotal', () => {
+    const base = calculateVenueEstimate(BASE_INPUT, COMM_CONFIG);
+    const withTravel = calculateVenueEstimate(
+      { ...BASE_INPUT, travelTotal: 500, includeTravelInProductionFee: true },
+      COMM_CONFIG,
+    );
+    expect(withTravel.productionFee).toBeCloseTo(base.productionFee + 500);
+  });
+
+  it('travel included: totalClient increases by travelTotal', () => {
+    const base = calculateVenueEstimate(BASE_INPUT, COMM_CONFIG);
+    const withTravel = calculateVenueEstimate(
+      { ...BASE_INPUT, travelTotal: 500, includeTravelInProductionFee: true },
+      COMM_CONFIG,
+    );
+    // totalClient increases by travelTotal (plus any tax on travel if applicable)
+    expect(withTravel.totalClient).toBeGreaterThan(base.totalClient + 499);
+  });
+
+  it('no travelTotal: travelInProductionFee = 0', () => {
+    const s = calculateVenueEstimate(BASE_INPUT, COMM_CONFIG);
+    expect(s.travelInProductionFee).toBe(0);
+  });
+
+  it('travelTotal = 0 with includeTravelInProductionFee = true: no change', () => {
+    const base = calculateVenueEstimate(BASE_INPUT, COMM_CONFIG);
+    const withZero = calculateVenueEstimate(
+      { ...BASE_INPUT, travelTotal: 0, includeTravelInProductionFee: true },
+      COMM_CONFIG,
+    );
+    expect(withZero.productionFee).toBeCloseTo(base.productionFee);
+    expect(withZero.travelInProductionFee).toBe(0);
+  });
+
+  it('margin: when travel included, trueNetProfit higher than when excluded (client pays for it)', () => {
+    const travelAmt = 1000;
+    const included = calculateVenueEstimate(
+      { ...BASE_INPUT, travelTotal: travelAmt, includeTravelInProductionFee: true },
+      COMM_CONFIG,
+    );
+    const excluded = calculateVenueEstimate(
+      { ...BASE_INPUT, travelTotal: travelAmt, includeTravelInProductionFee: false },
+      COMM_CONFIG,
+    );
+    const marginIncluded = calculateMarginAnalysis(included, COMM_CONFIG, TEAM_HOURS_TIERS, travelAmt);
+    const marginExcluded = calculateMarginAnalysis(excluded, COMM_CONFIG, TEAM_HOURS_TIERS, travelAmt);
+    // When included: client pays travelAmt, QC recovers it → trueNetProfit = base (no travel impact).
+    // When excluded: QC absorbs travelAmt from its own margin → trueNetProfit reduced by travelAmt.
+    // Difference between the two ≈ travelAmt.
+    expect(marginIncluded.trueNetProfit).toBeGreaterThan(marginExcluded.trueNetProfit);
+    expect(marginIncluded.trueNetProfit - marginExcluded.trueNetProfit).toBeCloseTo(travelAmt, 0);
+  });
+});

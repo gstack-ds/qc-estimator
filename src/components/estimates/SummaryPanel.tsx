@@ -132,8 +132,11 @@ export default function SummaryPanel({ summary, guestCount, fbMinimum, sections,
         }
         value={summary.productionFee}
         showMath={showMath}
-        math={mathRates ? `$${fmtM(summary.subtotalClient)} × ${pctM(mathRates.ccProcessingFee)} CC + $${fmtM(markupRevenue)} × ${pctM(mathRates.clientCommissionRate)} commission` : undefined}
+        math={mathRates ? `$${fmtM(summary.subtotalClient)} × ${pctM(mathRates.ccProcessingFee)} CC + $${fmtM(markupRevenue)} × ${pctM(mathRates.clientCommissionRate)} commission${summary.travelInProductionFee > 0 ? ` + $${fmtM(summary.travelInProductionFee)} travel` : ''}` : undefined}
       />
+      {summary.travelInProductionFee > 0 && (
+        <Row label="↳ Travel & Transportation" value={summary.travelInProductionFee} indent dim showMath={showMath} />
+      )}
       <Row label="Pre-Tax Total" value={summary.preTaxTotal} showMath={showMath} />
       <Row label="Tax" value={summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax + summary.productionFeeTax} indent dim showMath={showMath}
         math={mathRates && summary.productionFeeTax > 0 ? `includes ${fmt(summary.productionFeeTax)} on production fee` : undefined}

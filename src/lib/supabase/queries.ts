@@ -100,6 +100,7 @@ export interface DbProgram {
   third_party_commissions: { name: string; rate: number }[];
   status: string;
   archived_at: string | null;
+  include_travel_in_production_fee: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -152,13 +153,37 @@ export async function getProgram(id: string): Promise<DbProgramWithLocation | nu
       location_id, cc_processing_fee, client_commission,
       gdp_commission_enabled, gdp_commission_rate,
       service_charge_default, gratuity_default, admin_fee_default,
-      third_party_commissions, status, archived_at, created_at, updated_at,
+      third_party_commissions, status, archived_at, include_travel_in_production_fee, created_at, updated_at,
       location:locations(id, name, food_tax_rate, alcohol_tax_rate, general_tax_rate, effective_date, updated_at)
     `)
     .eq('id', id)
     .single();
   if (error) return null;
   return data as unknown as DbProgramWithLocation;
+}
+
+// ─── Program travel items ─────────────────────────────────
+
+export interface DbTravelItem {
+  id: string;
+  program_id: string;
+  description: string;
+  qty: number;
+  unit_price: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getTravelItems(programId: string): Promise<DbTravelItem[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('program_travel_items')
+    .select('id, program_id, description, qty, unit_price, sort_order, created_at, updated_at')
+    .eq('program_id', programId)
+    .order('sort_order');
+  if (error) return [];
+  return data as DbTravelItem[];
 }
 
 // ─── Events ───────────────────────────────────────────────

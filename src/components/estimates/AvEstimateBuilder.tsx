@@ -22,9 +22,8 @@ import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection, reorderSections, reorderLineItems } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { DbTemplate, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { LocalLineItem } from './EstimateBuilder';
-import TravelPanel from './TravelPanel';
+// TravelPanel removed — team travel is now entered at the program level.
 import AttachmentsPanel from './AttachmentsPanel';
-import type { TravelRefData, DbTrip } from '@/lib/supabase/queries';
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -123,15 +122,15 @@ interface Props {
   dbSections: DbEstimateSection[];
   markups: DbMarkup[];
   tiers: DbTier[];
-  travelRefs: TravelRefData;
-  initialTrips: DbTrip[];
+  programTravelTotal?: number;
+  includeTravelInProductionFee?: boolean;
   eventName?: string | null;
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 export default function AvEstimateBuilder({
-  program, location, allEstimates, estimate, dbLineItems, dbSections, markups, tiers, travelRefs, initialTrips, eventName,
+  program, location, allEstimates, estimate, dbLineItems, dbSections, markups, tiers, programTravelTotal = 0, includeTravelInProductionFee = false, eventName,
 }: Props) {
   const programConfig = useMemo(() => toProgramConfig(program, location), [program, location]);
   const tiersList = useMemo(() => toTiers(tiers), [tiers]);
@@ -155,7 +154,8 @@ export default function AvEstimateBuilder({
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
   const savingRef = useRef(0);
-  const [travelExpenses, setTravelExpenses] = useState(0);
+  // Travel is now program-level — comes from props, not local state.
+  const travelExpenses = programTravelTotal;
   const [showMath, setShowMath] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [bulkMarkupInput, setBulkMarkupInput] = useState('');
@@ -731,13 +731,17 @@ export default function AvEstimateBuilder({
             </div>
           </div>
 
-          {/* Travel Expenses */}
-          <TravelPanel
-            estimateId={estimate.id}
-            initialTrips={initialTrips}
-            refs={travelRefs}
-            onTotalChange={setTravelExpenses}
-          />
+          {/* Travel is now managed at the program level (program page → Travel & Transportation section). */}
+          {travelExpenses > 0 && (
+            <div className="bg-brand-offwhite border border-brand-cream rounded-lg px-4 py-3 text-xs text-brand-silver">
+              Travel &amp; Transportation: <span className="font-medium text-brand-charcoal">
+                ${Math.round(travelExpenses).toLocaleString()}
+              </span>
+              {includeTravelInProductionFee
+                ? ' — included in production fee'
+                : ' — tracked, not billed (edit on program page)'}
+            </div>
+          )}
         </div>
 
         {/* Right sidebar */}

@@ -56,6 +56,7 @@ function makeSummary(overrides: Partial<EstimateSummary> = {}): EstimateSummary 
     vendorTaxesTotal: 0,
     revenueItemsClientTotal: 0,
     discountAmount: 0,
+    travelInProductionFee: 0,
     ...overrides,
   };
 }

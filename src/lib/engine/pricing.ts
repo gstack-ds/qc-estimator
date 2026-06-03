@@ -149,9 +149,15 @@ export function calculateVenueEstimate(
     fbSubtotalClient + equipmentSubtotalClient + qcStaffingSubtotalClient +
     venueSubtotalClient + serviceChargeClient + gratuityClient + adminFeeClient;
 
+  // Program-level travel: when includeTravelInProductionFee is true, travel is billed to the
+  // client as a separate sub-line of the production fee (pass-through cost recovery).
+  const travelInProductionFee = (input.includeTravelInProductionFee && (input.travelTotal ?? 0) > 0)
+    ? (input.travelTotal ?? 0) : 0;
+
   const productionFee =
     subtotalClient * config.ccProcessingFee +
-    markupRevenue * config.clientCommission;
+    markupRevenue * config.clientCommission +
+    travelInProductionFee;
 
   // Production fee is taxable at the general sales rate
   const productionFeeTax = tm * productionFee * effectiveConfig.location.generalTaxRate;
@@ -204,6 +210,7 @@ export function calculateVenueEstimate(
     pricePerPerson,
     fbMinimumMet, fbShortfall,
     discountAmount,
+    travelInProductionFee,
   };
 }
 

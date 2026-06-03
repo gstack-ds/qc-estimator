@@ -23,7 +23,7 @@ import type { LocalSectionDef } from './LineItemSection';
 import SortableSectionItem from './SortableSectionItem';
 import SummaryPanel from './SummaryPanel';
 import MarginPanel from './MarginPanel';
-import TravelPanel from './TravelPanel';
+// TravelPanel removed — team travel is now entered at the program level.
 import SlideCopySection from './SlideCopySection';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
@@ -31,7 +31,7 @@ import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, sav
 import { linkVenueToEstimate, syncVenueSpaceDefaults } from '@/app/(programs)/venues/actions';
 import { updateProgram } from '@/app/(programs)/programs/actions';
 import type { DbTemplate, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
-import type { TravelRefData, DbTrip } from '@/lib/supabase/queries';
+// TravelRefData, DbTrip no longer imported — travel is program-level.
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -170,8 +170,9 @@ interface Props {
   dbSections: DbEstimateSection[];
   markups: DbMarkup[];
   tiers: DbTier[];
-  travelRefs: TravelRefData;
-  initialTrips: DbTrip[];
+  /** Sum of program_travel_items (qty × unit_price). */
+  programTravelTotal?: number;
+  includeTravelInProductionFee?: boolean;
   eventName?: string | null;
   event?: DbEvent | null;
   initialSlideCopyData?: SlideCopyData | null;
@@ -183,8 +184,9 @@ interface Props {
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 export default function EstimateBuilder({
-  program, location, allEstimates, estimate, dbLineItems, dbSections, markups, tiers, travelRefs, initialTrips, eventName,
+  program, location, allEstimates, estimate, dbLineItems, dbSections, markups, tiers, eventName,
   event = null, initialSlideCopyData = null, venues = [], venueSpaces = [], allLocations = [],
+  programTravelTotal = 0, includeTravelInProductionFee = false,
 }: Props) {
   const router = useRouter();
   const programConfig = useMemo(() => toProgramConfig(program, location), [program, location]);
@@ -242,7 +244,8 @@ export default function EstimateBuilder({
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
   const savingRef = useRef(0);
-  const [travelExpenses, setTravelExpenses] = useState(0);
+  // Travel is now program-level — comes from props, not local state.
+  const travelExpenses = programTravelTotal;
   const [showMath, setShowMath] = useState(false);
 
   const [pendingSlideMenuData, setPendingSlideMenuData] = useState<import('@/types/slideCopy').MenuCourse[] | null>(null);
@@ -327,7 +330,9 @@ export default function EstimateBuilder({
     foodTaxOverride: est.foodTaxOverride,
     alcoholTaxOverride: est.alcoholTaxOverride,
     generalTaxOverride: est.generalTaxOverride,
-  }), [est, lineItems, program]);
+    travelTotal: programTravelTotal,
+    includeTravelInProductionFee,
+  }), [est, lineItems, program, programTravelTotal, includeTravelInProductionFee]);
 
   // Effective location: merges location rates with per-estimate overrides.
   // Passed to LineItemSection and ExportButtons so the tax column and PDF
@@ -1326,13 +1331,17 @@ export default function EstimateBuilder({
             />
           </div>
 
-          {/* Travel Expenses */}
-          <TravelPanel
-            estimateId={estimate.id}
-            initialTrips={initialTrips}
-            refs={travelRefs}
-            onTotalChange={setTravelExpenses}
-          />
+          {/* Travel is now managed at the program level (program page → Travel & Transportation section). */}
+          {travelExpenses > 0 && (
+            <div className="bg-brand-offwhite border border-brand-cream rounded-lg px-4 py-3 text-xs text-brand-silver">
+              Travel &amp; Transportation: <span className="font-medium text-brand-charcoal">
+                ${Math.round(travelExpenses).toLocaleString()}
+              </span>
+              {includeTravelInProductionFee
+                ? ' — included in production fee'
+                : ' — tracked, not billed (edit on program page)'}
+            </div>
+          )}
           </>
         </div>
 

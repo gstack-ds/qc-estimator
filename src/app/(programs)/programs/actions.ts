@@ -62,11 +62,53 @@ export async function updateProgram(id: string, data: Partial<{
   service_charge_default: number;
   gratuity_default: number;
   admin_fee_default: number;
+  include_travel_in_production_fee: boolean;
 }>) {
   const supabase = await createClient();
   const { error } = await supabase.from('programs').update(data).eq('id', id);
   if (error) return { error: error.message };
   revalidatePath(`/programs/${id}`);
+  return { error: null };
+}
+
+// ─── Program travel items ─────────────────────────────────
+
+export async function addTravelItem(programId: string): Promise<{ id: string | null; error: string | null }> {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from('program_travel_items')
+    .select('*', { count: 'exact', head: true })
+    .eq('program_id', programId);
+  const { data, error } = await supabase
+    .from('program_travel_items')
+    .insert({ program_id: programId, description: '', qty: 1, unit_price: 0, sort_order: count ?? 0 })
+    .select('id')
+    .single();
+  if (error) return { id: null, error: error.message };
+  revalidatePath(`/programs/${programId}`);
+  return { id: data.id as string, error: null };
+}
+
+export async function updateTravelItem(
+  id: string,
+  programId: string,
+  data: Partial<{ description: string; qty: number; unit_price: number; sort_order: number }>,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('program_travel_items')
+    .update({ ...data, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath(`/programs/${programId}`);
+  return { error: null };
+}
+
+export async function deleteTravelItem(id: string, programId: string): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from('program_travel_items').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath(`/programs/${programId}`);
   return { error: null };
 }
 

@@ -98,6 +98,10 @@ export interface VenueEstimateInput {
   foodTaxOverride?: number | null;
   alcoholTaxOverride?: number | null;
   generalTaxOverride?: number | null;
+  /** Program-level travel total (sum of travel_items). */
+  travelTotal?: number;
+  /** When true, travelTotal is added to the production fee and billed to the client. */
+  includeTravelInProductionFee?: boolean;
 }
 
 export interface EstimateSummary {
@@ -142,6 +146,8 @@ export interface EstimateSummary {
   fbShortfall: number;
   // Discount (0 when no discount applied)
   discountAmount: number;
+  // Travel in production fee (0 when not included or travelTotal = 0)
+  travelInProductionFee: number;
 }
 
 // ─── Margin Analysis ─────────────────────────────────────

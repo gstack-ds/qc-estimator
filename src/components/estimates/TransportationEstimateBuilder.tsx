@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import type { DbProgram, DbEstimate, DbLocation, DbTier, DbTransportVehicleRate, DbTransportScheduleRow, TravelRefData, DbTrip } from '@/lib/supabase/queries';
+import type { DbProgram, DbEstimate, DbLocation, DbTier, DbTransportVehicleRate, DbTransportScheduleRow } from '@/lib/supabase/queries';
 import { calculateMarginAnalysis, getMarginHealth, getNetHealth, lookupTeamHours } from '@/lib/engine/pricing';
 import type { ProgramConfig, TeamHoursTier, EstimateSummary, MarginAnalysis } from '@/types';
 import {
@@ -20,10 +20,10 @@ import {
   updateTransportCommission,
 } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { ExtractedData, ExtractedTransportVehicleRate, ExtractedTransportScheduleRow } from '@/app/(programs)/programs/[id]/estimates/actions';
+// TravelPanel removed — team travel is now entered at the program level.
 import EstimateNav from './EstimateNav';
 import AttachmentsPanel from './AttachmentsPanel';
 import MarginPanel from './MarginPanel';
-import TravelPanel from './TravelPanel';
 
 // ─── Local Types ──────────────────────────────────────────
 
@@ -57,8 +57,8 @@ interface Props {
   estimate: DbEstimate;
   vehicleRates: DbTransportVehicleRate[];
   scheduleRows: DbTransportScheduleRow[];
-  travelRefs: TravelRefData;
-  initialTrips: DbTrip[];
+  programTravelTotal?: number;
+  includeTravelInProductionFee?: boolean;
   tiers: DbTier[];
   eventName?: string | null;
 }
@@ -112,11 +112,12 @@ function dbScheduleRowToLocal(r: DbTransportScheduleRow): LocalScheduleRow {
 // ─── Component ────────────────────────────────────────────
 
 export default function TransportationEstimateBuilder({
-  program, location, allEstimates, estimate, vehicleRates: initRates, scheduleRows: initRows, travelRefs, initialTrips, tiers, eventName,
+  program, location, allEstimates, estimate, vehicleRates: initRates, scheduleRows: initRows, programTravelTotal = 0, includeTravelInProductionFee = false, tiers, eventName,
 }: Props) {
   const [estimateName, setEstimateName] = useState(estimate.name);
   const [commission, setCommission] = useState(estimate.transport_commission ?? 0);
-  const [travelTotal, setTravelTotal] = useState(0);
+  // Travel is now program-level — comes from props, not local state.
+  const travelTotal = programTravelTotal;
 
   const [vehicleRates, setVehicleRates] = useState<LocalVehicleRate[]>(
     initRates.map(dbVehicleRateToLocal)
@@ -170,7 +171,7 @@ export default function TransportationEstimateBuilder({
     productionFeeTax: 0, lineItemsSubtotalClient: summary.subtotalClient, preTaxTotal: summary.subtotalClient + summary.productionFee,
     totalOur: summary.subtotalOur, totalClient: summary.totalClient,
     pricePerPerson: 0, fbMinimumMet: true, fbShortfall: 0,
-    vendorTaxesTotal: 0, revenueItemsClientTotal: 0, discountAmount: 0,
+    vendorTaxesTotal: 0, revenueItemsClientTotal: 0, discountAmount: 0, travelInProductionFee: 0,
   }), [summary]);
 
   const margin = useMemo<MarginAnalysis>(() => {
@@ -607,13 +608,17 @@ export default function TransportationEstimateBuilder({
               </div>
             </div>
 
-            {/* Travel Panel */}
-            <TravelPanel
-              estimateId={estimate.id}
-              initialTrips={initialTrips}
-              refs={travelRefs}
-              onTotalChange={setTravelTotal}
-            />
+            {/* Travel is now managed at the program level (program page → Travel & Transportation section). */}
+            {travelTotal > 0 && (
+              <div className="bg-brand-offwhite border border-brand-cream rounded-lg px-4 py-3 text-xs text-brand-silver">
+                Travel &amp; Transportation: <span className="font-medium text-brand-charcoal">
+                  ${Math.round(travelTotal).toLocaleString()}
+                </span>
+                {includeTravelInProductionFee
+                  ? ' — included in production fee'
+                  : ' — tracked, not billed (edit on program page)'}
+              </div>
+            )}
           </div>
 
           {/* ─── Sidebar ─────────────────────────────── */}
