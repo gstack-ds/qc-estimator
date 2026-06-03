@@ -137,6 +137,7 @@ export async function deleteProgramDocument(
 
 export async function generateOnsiteBrief(
   programId: string,
+  withAi = true,
 ): Promise<{ error: string | null }> {
   const supabase = await createClient();
 
@@ -284,19 +285,60 @@ export async function generateOnsiteBrief(
     }
   }
 
-  // AI sections get placeholder text until Phase 2 synthesis
+  // ── 5. AI synthesis (when requested and API key is available) ────────────
   const docList = (documents.data ?? []).map((d: { file_name: string; category: string }) => `• ${d.file_name} (${d.category})`).join('\n');
   const aiPlaceholder = (hint: string) =>
-    `[AI DRAFT PENDING]\n${hint}\n\nDocuments available:\n${docList || '(none uploaded yet)'}\n\nTo generate AI content, use the Regenerate button.`;
+    `[AI DRAFT PENDING]\n${hint}\n\nDocuments available:\n${docList || '(none uploaded yet)'}\n\nClick Regenerate to run AI synthesis.`;
 
-  if (!brief.menuBar.content) brief.menuBar.content = aiPlaceholder('Menu & bar details — AI will read uploaded menu PDFs');
-  if (!brief.dietaryRestrictions.content) brief.dietaryRestrictions.content = aiPlaceholder('Dietary restrictions — AI will cross-reference menu PDFs and estimate notes');
-  if (!brief.dayOfLogistics.content) brief.dayOfLogistics.content = aiPlaceholder('Day-of timeline, load-in, contacts — AI will synthesize from emails and documents');
-  if (!brief.contractTerms.content) brief.contractTerms.content = aiPlaceholder('Key contract terms — AI will read uploaded contract PDF');
-  if (!brief.openItems.content) brief.openItems.content = aiPlaceholder('Open items and TBDs — AI will flag unconfirmed details across all sources');
-  if (!brief.summary.content) brief.summary.content = aiPlaceholder('Plain-language summary paragraph for the onsite lead');
+  if (withAi && process.env.ANTHROPIC_API_KEY) {
+    try {
+      const { synthesizeAiSections } = await import('@/lib/briefs/ai');
+      const structuredContext = [brief.eventBasics.content, brief.venueContact.content, brief.financialDetails.content].join('\n\n---\n\n');
+      const aiResult = await synthesizeAiSections({
+        programName: program.name,
+        clientName: program.client_name,
+        venueName: venue?.name ?? null,
+        eventDate: (events.data ?? [])[0]?.event_date ?? program.event_date ?? null,
+        guestCount: program.guest_count,
+        structuredContext,
+        documents: (documents.data ?? []).map((d: { storage_path: string; file_name: string; category: string; mime_type: string }) => ({
+          storagePath: d.storage_path,
+          fileName: d.file_name,
+          category: d.category,
+          mimeType: d.mime_type,
+        })),
+      });
 
-  // ── 5. Save to DB ─────────────────────────────────────────
+      brief.menuBar.content = aiResult.menuBar;
+      brief.menuBar.sourceHint = aiResult.sourcesUsed.join(', ') || undefined;
+      brief.dietaryRestrictions.content = aiResult.dietaryRestrictions;
+      brief.dietaryRestrictions.sourceHint = aiResult.sourcesUsed.join(', ') || undefined;
+      brief.dayOfLogistics.content = aiResult.dayOfLogistics;
+      brief.contractTerms.content = aiResult.contractTerms;
+      brief.openItems.content = aiResult.openItems;
+      brief.summary.content = aiResult.summary;
+    } catch (aiErr) {
+      // AI failed — fall through to placeholders
+      const msg = aiErr instanceof Error ? aiErr.message : 'unknown error';
+      const errHint = `[AI synthesis error: ${msg}. Retry or fill in manually.]`;
+      brief.menuBar.content = errHint;
+      brief.dietaryRestrictions.content = errHint;
+      brief.dayOfLogistics.content = errHint;
+      brief.contractTerms.content = errHint;
+      brief.openItems.content = errHint;
+      brief.summary.content = errHint;
+    }
+  } else {
+    // No AI — set informative placeholders
+    brief.menuBar.content = aiPlaceholder('Menu & bar details — AI will read uploaded menu PDFs');
+    brief.dietaryRestrictions.content = aiPlaceholder('Dietary restrictions — AI will cross-reference menu PDFs and estimate notes');
+    brief.dayOfLogistics.content = aiPlaceholder('Day-of timeline, load-in, contacts — AI will synthesize from emails and documents');
+    brief.contractTerms.content = aiPlaceholder('Key contract terms — AI will read uploaded contract PDF');
+    brief.openItems.content = aiPlaceholder('Open items and TBDs — AI will flag unconfirmed details');
+    brief.summary.content = aiPlaceholder('Plain-language summary for the onsite lead');
+  }
+
+  // ── 6. Save to DB ─────────────────────────────────────────
   const { upsertProgramBrief } = await import('@/lib/supabase/queries');
   const { error: saveErr } = await upsertProgramBrief(programId, brief);
   if (saveErr) return { error: saveErr };
