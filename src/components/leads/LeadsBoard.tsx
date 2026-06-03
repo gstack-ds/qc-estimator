@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useTransition, useEffect, useCallback } from 'react';
+import { useState, useMemo, useTransition, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   DndContext,
@@ -10,7 +10,7 @@ import {
   useSensor,
   useSensors,
   useDroppable,
-  closestCenter,
+  pointerWithin,
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
@@ -48,9 +48,11 @@ function saveCollapsed(collapsed: Set<string>) {
 }
 
 // ─── Droppable lane ───────────────────────────────────────
+// The entire column (header + cards area) is the droppable target so that
+// dropping anywhere in a lane — including the header — registers correctly.
 
 function KanbanLane({
-  lane, leads, teamMembers, collapsed, onToggleCollapse, onCardUpdate,
+  lane, leads, teamMembers, collapsed, onToggleCollapse, onCardUpdate, justMovedId,
 }: {
   lane: PipelineLane;
   leads: DbLead[];
@@ -58,7 +60,9 @@ function KanbanLane({
   collapsed: boolean;
   onToggleCollapse: () => void;
   onCardUpdate: (leadId: string, patch: Partial<LeadInput>) => void;
+  justMovedId: string | null;
 }) {
+  // Apply setNodeRef to the OUTER column div so the full column is droppable
   const { setNodeRef, isOver } = useDroppable({ id: lane.id });
   const styles = laneStyles(lane.id);
 
@@ -67,9 +71,12 @@ function KanbanLane({
       <div
         ref={setNodeRef}
         onClick={onToggleCollapse}
-        className={`flex flex-col items-center w-10 flex-shrink-0 rounded-lg border border-t-2 cursor-pointer select-none transition-colors ${
+        className={`flex flex-col items-center w-10 flex-shrink-0 rounded-lg border border-t-2 cursor-pointer select-none transition-all duration-150 ${
           styles.headerBorder
-        } ${isOver ? 'bg-brand-copper/10 border-brand-copper/30' : 'bg-brand-offwhite/60 border-brand-cream hover:bg-brand-offwhite'}`}
+        } ${isOver
+          ? 'bg-brand-copper/15 border-brand-copper/50 scale-[1.02]'
+          : 'bg-brand-offwhite/60 border-brand-cream hover:bg-brand-offwhite'
+        }`}
       >
         <div className="flex flex-col items-center py-2.5 gap-2 w-full">
           <ChevronRight size={12} className="text-brand-silver flex-shrink-0" />
@@ -89,7 +96,13 @@ function KanbanLane({
   }
 
   return (
-    <div className="flex flex-col min-w-[220px] w-[220px] flex-shrink-0">
+    // Full column is the droppable — gives accurate targeting anywhere in the lane
+    <div
+      ref={setNodeRef}
+      className={`flex flex-col min-w-[220px] w-[220px] flex-shrink-0 rounded-lg transition-all duration-150 ${
+        isOver ? 'ring-2 ring-brand-copper/50 ring-offset-1 scale-[1.01]' : ''
+      }`}
+    >
       {/* Lane header */}
       <div className={`bg-white border border-brand-cream border-t-2 rounded-t-lg px-3 py-2.5 ${styles.headerBorder}`}>
         <div className="flex items-center gap-2">
@@ -99,7 +112,7 @@ function KanbanLane({
             {leads.length}
           </span>
           <button
-            onClick={onToggleCollapse}
+            onClick={(e) => { e.stopPropagation(); onToggleCollapse(); }}
             className="text-brand-silver hover:text-brand-charcoal transition-colors flex-shrink-0 p-0.5 rounded"
             title="Collapse lane"
           >
@@ -108,11 +121,12 @@ function KanbanLane({
         </div>
       </div>
 
-      {/* Cards container */}
+      {/* Cards area */}
       <div
-        ref={setNodeRef}
-        className={`flex-1 min-h-[200px] p-2 space-y-2 rounded-b-lg border border-t-0 border-brand-cream transition-colors ${
-          isOver ? 'bg-brand-copper/5 border-brand-copper/30' : 'bg-brand-offwhite/50'
+        className={`flex-1 min-h-[200px] p-2 space-y-2 rounded-b-lg border border-t-0 transition-colors duration-150 ${
+          isOver
+            ? 'bg-brand-copper/5 border-brand-copper/30'
+            : 'bg-brand-offwhite/50 border-brand-cream'
         }`}
       >
         {leads.map(lead => (
@@ -122,11 +136,14 @@ function KanbanLane({
             teamMembers={teamMembers}
             laneStatuses={lane.statuses as LeadStatus[]}
             onUpdate={onCardUpdate}
+            isJustMoved={lead.id === justMovedId}
           />
         ))}
         {leads.length === 0 && (
-          <div className="flex items-center justify-center h-16 text-xs text-brand-silver/50 italic">
-            Drop here
+          <div className={`flex items-center justify-center h-16 text-xs transition-colors duration-150 ${
+            isOver ? 'text-brand-copper/60 font-medium' : 'text-brand-silver/50 italic'
+          }`}>
+            {isOver ? 'Drop here' : 'Empty'}
           </div>
         )}
       </div>
@@ -141,6 +158,8 @@ interface Props {
   teamMembers: DbTeamMember[];
 }
 
+const JUST_MOVED_TTL_MS = 3000;
+
 export default function LeadsBoard({ leads, teamMembers }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -149,9 +168,19 @@ export default function LeadsBoard({ leads, teamMembers }: Props) {
   const [localLeads, setLocalLeads] = useState<DbLead[]>(leads);
   useMemo(() => { setLocalLeads(leads); }, [leads]);
 
-  // Collapse state — loaded from localStorage after hydration
+  // Collapse state
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set(DEFAULT_COLLAPSED));
   useEffect(() => { setCollapsed(loadCollapsed()); }, []);
+
+  // Just-moved tracking — briefly pins the moved card to the top of its destination lane
+  const [justMovedId, setJustMovedId] = useState<string | null>(null);
+  const justMovedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function markJustMoved(leadId: string) {
+    if (justMovedTimer.current) clearTimeout(justMovedTimer.current);
+    setJustMovedId(leadId);
+    justMovedTimer.current = setTimeout(() => setJustMovedId(null), JUST_MOVED_TTL_MS);
+  }
 
   function toggleCollapse(laneId: string) {
     setCollapsed(prev => {
@@ -168,7 +197,7 @@ export default function LeadsBoard({ leads, teamMembers }: Props) {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
-  // Active drag
+  // Active drag (for overlay)
   const [activeLead, setActiveLead] = useState<DbLead | null>(null);
 
   const sensors = useSensors(
@@ -197,8 +226,13 @@ export default function LeadsBoard({ leads, teamMembers }: Props) {
       const laneId = statusToLaneId(lead.status);
       map.get(laneId)?.push(lead);
     }
+    // Sort each lane: just-moved card floats to the top, rest by start_date asc
     for (const [, arr] of map) {
       arr.sort((a, b) => {
+        // Just-moved card always first
+        if (a.id === justMovedId) return -1;
+        if (b.id === justMovedId) return 1;
+        // Then sort by start_date ascending, nulls last
         if (!a.start_date && !b.start_date) return 0;
         if (!a.start_date) return 1;
         if (!b.start_date) return -1;
@@ -206,9 +240,9 @@ export default function LeadsBoard({ leads, teamMembers }: Props) {
       });
     }
     return map;
-  }, [filtered]);
+  }, [filtered, justMovedId]);
 
-  // Shared update handler (optimistic + server persist) used by both drag and inline edit
+  // Shared update handler
   const handleUpdate = useCallback((leadId: string, patch: Partial<LeadInput>) => {
     setLocalLeads(prev => prev.map(l => l.id === leadId ? { ...l, ...patch } : l));
     startTransition(async () => {
@@ -228,18 +262,19 @@ export default function LeadsBoard({ leads, teamMembers }: Props) {
     const leadId = active.id as string;
     const overId = over.id as string;
 
-    let targetLane = getLane(overId);
-    if (!targetLane) {
-      const overLead = localLeads.find(l => l.id === overId);
-      if (overLead) targetLane = getLane(statusToLaneId(overLead.status));
-    }
+    // over.id is always a lane ID when using pointerWithin + full-column droppables
+    const targetLane = getLane(overId);
     if (!targetLane) return;
 
     const draggedLead = localLeads.find(l => l.id === leadId);
     if (!draggedLead) return;
+
+    // No-op: dropped back into the same lane
     if (statusToLaneId(draggedLead.status) === targetLane.id) return;
 
-    handleUpdate(leadId, { status: targetLane.canonicalStatus });
+    const newStatus = targetLane.canonicalStatus;
+    handleUpdate(leadId, { status: newStatus });
+    markJustMoved(leadId);
   }
 
   const activeMembers = teamMembers.filter(m => m.is_active);
@@ -285,7 +320,12 @@ export default function LeadsBoard({ leads, teamMembers }: Props) {
 
       {/* Board */}
       <div className="overflow-x-auto pb-4">
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={pointerWithin}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
           <div className="flex gap-2 min-w-max items-start">
             {PIPELINE_LANES.map(lane => (
               <KanbanLane
@@ -296,13 +336,19 @@ export default function LeadsBoard({ leads, teamMembers }: Props) {
                 collapsed={collapsed.has(lane.id)}
                 onToggleCollapse={() => toggleCollapse(lane.id)}
                 onCardUpdate={handleUpdate}
+                justMovedId={justMovedId}
               />
             ))}
           </div>
 
-          <DragOverlay dropAnimation={null}>
+          <DragOverlay
+            dropAnimation={{
+              duration: 180,
+              easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.1)',
+            }}
+          >
             {activeLead && (
-              <div className="w-[210px]">
+              <div className="w-[210px] rotate-1 opacity-90 drop-shadow-lg">
                 <LeadCardContent lead={activeLead} teamMembers={teamMembers} isOverlay />
               </div>
             )}

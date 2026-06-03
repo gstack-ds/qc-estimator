@@ -67,9 +67,10 @@ interface CardProps {
   teamMembers: DbTeamMember[];
   laneStatuses: LeadStatus[];
   onUpdate: (leadId: string, patch: Partial<LeadInput>) => void;
+  isJustMoved?: boolean;
 }
 
-export default function LeadCard({ lead, teamMembers, laneStatuses, onUpdate }: CardProps) {
+export default function LeadCard({ lead, teamMembers, laneStatuses, onUpdate, isJustMoved = false }: CardProps) {
   const [, startTransition] = useTransition();
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: lead.id,
@@ -93,8 +94,14 @@ export default function LeadCard({ lead, teamMembers, laneStatuses, onUpdate }: 
       style={style}
       className={`group relative ${isDragging ? 'opacity-40' : ''}`}
     >
-      {/* Card shell: colored bg wash + left border stripe + outer border */}
-      <div className={`border border-brand-cream rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow ${styles.cardBg}`}>
+      {/* Card shell: colored bg wash + left border stripe + outer border.
+           isJustMoved adds a brief copper ring that disappears when the
+           parent clears justMovedId (after JUST_MOVED_TTL_MS). */}
+      <div className={`border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 ${styles.cardBg} ${
+        isJustMoved
+          ? 'border-brand-copper ring-2 ring-brand-copper/40 ring-offset-1'
+          : 'border-brand-cream'
+      }`}>
         <div className={`border-l-4 ${styles.cardBorder}`}>
 
           {/* Drag handle — grip icon top-right, visible on hover.
