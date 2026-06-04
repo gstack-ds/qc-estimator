@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { calculateGuideCount } from '@/lib/tours/guideScaling';
 import type { TaxType, TaxBucket } from '@/types';
 import type { SectionTotal } from '@/lib/utils/sectionLabels';
 import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation, DbEstimateSection } from '@/lib/supabase/queries';
@@ -248,6 +249,104 @@ function TourDetailsPanel({
           className={fieldClass + ' resize-none'}
         />
       </div>
+
+      <div className="border-t border-brand-cream pt-4 space-y-3">
+        <h4 className="text-xs font-semibold text-brand-charcoal/60 uppercase tracking-wide">Guide Staffing</h4>
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={details.self_guided ?? false}
+            onChange={(e) => onChange({ self_guided: e.target.checked })}
+            className="w-4 h-4 rounded border-brand-cream accent-brand-brown cursor-pointer"
+          />
+          <span className="text-sm text-brand-charcoal">Self-guided (no guides needed)</span>
+        </label>
+
+        {!details.self_guided && (
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className={labelClass}>Guests per Guide</label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={details.guests_per_guide ?? ''}
+                onChange={(e) => onChange({ guests_per_guide: e.target.value ? parseInt(e.target.value, 10) : null })}
+                placeholder="e.g., 15"
+                className={fieldClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Venue Guide Cap</label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={details.venue_guide_cap ?? ''}
+                onChange={(e) => onChange({ venue_guide_cap: e.target.value ? parseInt(e.target.value, 10) : null })}
+                placeholder="None"
+                className={fieldClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Wave Size</label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={details.wave_size ?? ''}
+                onChange={(e) => onChange({ wave_size: e.target.value ? parseInt(e.target.value, 10) : null })}
+                placeholder="None"
+                className={fieldClass}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Guide Suggestion Banner ─────────────────────────────
+
+function GuideSuggestionBanner({
+  guestCount,
+  tourDetails,
+  onAddLineItem,
+}: {
+  guestCount: number;
+  tourDetails: TourDetails;
+  onAddLineItem: (totalGuideSlots: number) => void;
+}) {
+  if (tourDetails.self_guided || guestCount <= 0 || !(tourDetails.guests_per_guide ?? 0)) {
+    return null;
+  }
+
+  const result = calculateGuideCount({
+    guestCount,
+    guestsPerGuide: tourDetails.guests_per_guide!,
+    selfGuided: false,
+    venueGuideCap: tourDetails.venue_guide_cap ?? null,
+    waveSize: tourDetails.wave_size ?? null,
+  });
+
+  const guideText = result.guideCount === 1 ? '1 guide' : `${result.guideCount} guides`;
+  const waveText = result.waveCount > 1 ? ` × ${result.waveCount} waves = ${result.totalGuideSlots} slots` : '';
+  const capNote = result.cappedByVenue ? ' (venue cap applied)' : '';
+
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 flex items-center justify-between gap-4">
+      <span className="text-sm text-blue-800">
+        <span className="font-medium">Guide suggestion:</span>{' '}
+        {guideText}{waveText}{capNote}
+      </span>
+      <button
+        type="button"
+        onClick={() => onAddLineItem(result.totalGuideSlots)}
+        className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex-shrink-0"
+      >
+        + Add as line item
+      </button>
     </div>
   );
 }
@@ -582,6 +681,33 @@ export default function TourEstimateBuilder({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItems, sections, handleItemSave]);
 
+  const handleAddGuideLineItem = useCallback((totalGuideSlots: number) => {
+    const targetSection = sections.find((s) => s.taxBucket === 'equipment') ?? sections[0];
+    if (!targetSection) return;
+    const tempId = `new-${Date.now()}-${Math.random()}`;
+    const maxOrder = lineItemsRef.current
+      .filter((li) => li.sectionId === targetSection.id)
+      .reduce((max, li) => Math.max(max, li.sortOrder), -1);
+    const newItem: LocalLineItem = {
+      id: tempId,
+      sectionId: targetSection.id,
+      section: targetSection.name,
+      taxBucket: targetSection.taxBucket,
+      name: 'Tour Guide',
+      qty: totalGuideSlots,
+      unitPrice: 0,
+      categoryId: null,
+      defaultMarkupPct: 0.65,
+      categoryMarkupPct: 0.65,
+      taxType: 'general',
+      sortOrder: maxOrder + 1,
+      isNew: true,
+    };
+    setLineItems((prev) => [...prev, newItem]);
+    setTimeout(() => handleItemSave(tempId), 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sections, handleItemSave]);
+
   // ─── Section management ───────────────────────────────────
 
   const handleRenameSection = useCallback(async (sectionId: string, newName: string) => {
@@ -702,6 +828,13 @@ export default function TourEstimateBuilder({
 
           {/* Tour details */}
           <TourDetailsPanel details={tourDetails} onChange={handleTourDetailChange} />
+
+          {/* Guide suggestion */}
+          <GuideSuggestionBanner
+            guestCount={program.guest_count}
+            tourDetails={tourDetails}
+            onAddLineItem={handleAddGuideLineItem}
+          />
 
           {/* Discount */}
           {(discountType || discountValue > 0) ? (

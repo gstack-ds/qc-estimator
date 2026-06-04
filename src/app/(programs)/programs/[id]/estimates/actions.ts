@@ -1009,6 +1009,11 @@ export interface TourDetails {
   pricing_mode?: 'per_person' | 'flat' | null;
   guide_notes?: string | null;
   internal_notes?: string | null;
+  // Guide scaling fields
+  self_guided?: boolean | null;
+  guests_per_guide?: number | null;
+  venue_guide_cap?: number | null;
+  wave_size?: number | null;
 }
 
 export async function updateTourDetails(estimateId: string, programId: string, patch: TourDetails): Promise<{ error: string | null }> {
