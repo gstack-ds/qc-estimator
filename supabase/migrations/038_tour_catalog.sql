@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS tour_catalog (
 
 CREATE TRIGGER tour_catalog_updated_at
   BEFORE UPDATE ON tour_catalog
-  FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 ALTER TABLE tour_catalog ENABLE ROW LEVEL SECURITY;
 
