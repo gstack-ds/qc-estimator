@@ -94,7 +94,7 @@ export interface ProposalDocumentProps {
   summary: EstimateSummary;
   lineItems: LineItemForExport[];
   orderedSections?: string[];
-  estimateType: 'venue' | 'av' | 'decor';
+  estimateType: 'venue' | 'av' | 'decor' | 'tour';
   proposalDate: string;
   taxExempt?: boolean;
   logoSrc?: string;

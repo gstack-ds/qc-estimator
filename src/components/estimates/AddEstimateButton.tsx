@@ -9,13 +9,14 @@ interface Props {
   eventId?: string | null;
 }
 
-type EstimateType = 'venue' | 'av' | 'decor' | 'transportation';
+type EstimateType = 'venue' | 'av' | 'decor' | 'transportation' | 'tour';
 
 const TYPE_LABELS: Record<EstimateType, string> = {
   venue: 'Venue',
   av: 'AV',
   decor: 'Decor',
   transportation: 'Transportation',
+  tour: 'Tour',
 };
 
 export default function AddEstimateButton({ programId, eventId }: Props) {

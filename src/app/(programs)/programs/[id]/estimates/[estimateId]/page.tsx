@@ -21,6 +21,7 @@ import type { SlideCopyData } from '@/types/slideCopy';
 import AvEstimateBuilder from '@/components/estimates/AvEstimateBuilder';
 import DecorEstimateBuilder from '@/components/estimates/DecorEstimateBuilder';
 import TransportationEstimateBuilder from '@/components/estimates/TransportationEstimateBuilder';
+import TourEstimateBuilder from '@/components/estimates/TourEstimateBuilder';
 
 export const dynamic = 'force-dynamic';
 
@@ -106,6 +107,26 @@ export default async function EstimatePage({ params }: Props) {
           venues={venues}
           venueSpaces={venueSpaces}
           allLocations={allLocations}
+          programTravelTotal={programTravelTotal}
+          includeTravelInProductionFee={program.include_travel_in_production_fee ?? false}
+        />
+      </div>
+    );
+  }
+
+  if (estimate.type === 'tour') {
+    return (
+      <div className="h-[calc(100vh-49px)] flex flex-col">
+        <TourEstimateBuilder
+          program={effectiveProgram}
+          location={program.location}
+          allEstimates={allEstimates}
+          estimate={estimate}
+          dbLineItems={lineItems}
+          dbSections={dbSections}
+          markups={markups}
+          tiers={tiers}
+          eventName={eventName}
           programTravelTotal={programTravelTotal}
           includeTravelInProductionFee={program.include_travel_in_production_fee ?? false}
         />

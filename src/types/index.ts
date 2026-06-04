@@ -16,7 +16,7 @@ export interface PackageOptions {
 
 export type TaxType = 'food' | 'alcohol' | 'general' | 'none';
 export type TaxBucket = 'fb' | 'equipment' | 'venue' | 'staffing';
-export type EstimateType = 'venue' | 'av' | 'decor' | 'transportation';
+export type EstimateType = 'venue' | 'av' | 'decor' | 'transportation' | 'tour';
 export type FeeOption = number; // stored as decimal (e.g. 0.20 = 20%)
 export type MarginHealth = '✓ STRONG' | '→ ON TARGET' | '⚠ REVIEW' | '✗ BELOW FLOOR';
 export type NetHealth = '✓ STRONG' | '→ ON TARGET' | '⚠ THIN' | '✗ LOSING MONEY';

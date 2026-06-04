@@ -53,7 +53,7 @@ export function splitStaffingEquipment(
 
 export function buildSummaryRows(
   summary: EstimateSummary,
-  type: 'venue' | 'av' | 'decor',
+  type: 'venue' | 'av' | 'decor' | 'tour',
   lineItems: LineItemForExport[],
   markups: MarkupForExport[]
 ): { label: string; amount: number }[] {

@@ -17,7 +17,7 @@ import { createClient } from '@/lib/supabase/client';
 
 interface Props {
   estimateId: string;
-  estimateType?: 'venue' | 'av' | 'decor' | 'transportation';
+  estimateType?: 'venue' | 'av' | 'decor' | 'transportation' | 'tour';
   onPopulateLineItems?: (data: ExtractedData) => void;
   onPopulateEstimateDetails?: (data: ExtractedData) => void;
   onLoadMenuToSlide?: (data: ExtractedData) => void;
@@ -445,7 +445,7 @@ export default function AttachmentsPanel({ estimateId, estimateType = 'venue', o
 interface ExtractionResultPanelProps {
   attachmentId: string;
   data: ExtractedData;
-  estimateType: 'venue' | 'av' | 'decor' | 'transportation';
+  estimateType: 'venue' | 'av' | 'decor' | 'transportation' | 'tour';
   onCopyToCanva: () => void;
   onPopulateLineItems?: () => void;
   onPopulateEstimateDetails?: () => void;

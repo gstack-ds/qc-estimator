@@ -167,6 +167,11 @@ const DEFAULT_SECTIONS: Record<EstimateType, Array<{ name: string; tax_bucket: T
     { name: 'Non-Taxable Staffing', tax_bucket: 'staffing', markup_pct: 0.90, sort_order: 7 },
   ],
   transportation: [],
+  tour: [
+    { name: 'Tour & Guide Services', tax_bucket: 'equipment', markup_pct: 0.65, sort_order: 0 },
+    { name: 'Transportation', tax_bucket: 'equipment', markup_pct: 0.75, sort_order: 1 },
+    { name: 'Non-Taxable Staffing', tax_bucket: 'staffing', markup_pct: 0.90, sort_order: 2 },
+  ],
 };
 
 export interface DbEstimateSectionAction {
@@ -545,7 +550,7 @@ export async function deleteAttachment(id: string, storagePath: string): Promise
   return { error: null };
 }
 
-function getExtractionPrompt(type: 'venue' | 'av' | 'decor' | 'transportation'): string {
+function getExtractionPrompt(type: 'venue' | 'av' | 'decor' | 'transportation' | 'tour'): string {
   if (type === 'av') {
     return (
       'Extract all audio/visual equipment, labor, and production line items from this AV proposal or BEO. ' +
@@ -667,7 +672,7 @@ export async function detectPdfMode(
 export async function extractFromText(
   attachmentId: string,
   pdfText: string,
-  estimateType: 'venue' | 'av' | 'decor' | 'transportation' = 'venue',
+  estimateType: 'venue' | 'av' | 'decor' | 'transportation' | 'tour' = 'venue',
 ): Promise<{ error: string | null; data: ExtractedData | null }> {
   const supabase = await createClient();
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -726,7 +731,7 @@ export async function extractFromText(
 
 export async function extractAttachmentData(
   attachmentId: string,
-  estimateType: 'venue' | 'av' | 'decor' | 'transportation' = 'venue',
+  estimateType: 'venue' | 'av' | 'decor' | 'transportation' | 'tour' = 'venue',
 ): Promise<{ error: string | null; data: ExtractedData | null }> {
   const supabase = await createClient();
 
@@ -989,6 +994,38 @@ export async function getExportDataForProgram(programId: string) {
 export async function saveSlideCopyData(estimateId: string, data: SlideCopyData): Promise<void> {
   const supabase = await createClient();
   await supabase.from('estimates').update({ slide_copy_data: data }).eq('id', estimateId);
+}
+
+// ─── Tour Details ──────────────────────────────────────────
+
+export interface TourDetails {
+  pickup_type?: 'hotel' | 'meeting_point' | 'airport' | null;
+  pickup_address?: string | null;
+  dropoff_address?: string | null;
+  meeting_point_notes?: string | null;
+  departure_time?: string | null;
+  return_time?: string | null;
+  duration_hours?: number | null;
+  pricing_mode?: 'per_person' | 'flat' | null;
+  guide_notes?: string | null;
+  internal_notes?: string | null;
+}
+
+export async function updateTourDetails(estimateId: string, programId: string, patch: TourDetails): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from('estimates')
+    .select('tour_details')
+    .eq('id', estimateId)
+    .single();
+  const merged = { ...(existing?.tour_details ?? {}), ...patch };
+  const { error } = await supabase
+    .from('estimates')
+    .update({ tour_details: merged })
+    .eq('id', estimateId);
+  if (error) return { error: error.message };
+  revalidatePath(`/programs/${programId}`);
+  return { error: null };
 }
 
 interface MapsDistanceResponse {

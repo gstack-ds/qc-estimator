@@ -22,7 +22,7 @@ interface Props {
   clientCompany?: string | null;
   summary: EstimateSummary;
   guestCount: number;
-  estimateType?: 'venue' | 'av' | 'decor';
+  estimateType?: 'venue' | 'av' | 'decor' | 'tour';
   lineItems: LineItemForExport[];
   orderedSections?: string[];
   markups: MarkupForExport[];

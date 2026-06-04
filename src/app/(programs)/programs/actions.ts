@@ -443,7 +443,7 @@ export async function deleteTravelItem(id: string, programId: string): Promise<{
 
 // ─── Estimates ────────────────────────────────────────────
 
-export async function createEstimate(programId: string, type: 'venue' | 'av' | 'decor' | 'transportation' = 'venue', eventId?: string | null) {
+export async function createEstimate(programId: string, type: 'venue' | 'av' | 'decor' | 'transportation' | 'tour' = 'venue', eventId?: string | null) {
   const supabase = await createClient();
 
   // Count existing estimates to set sort_order
@@ -455,6 +455,7 @@ export async function createEstimate(programId: string, type: 'venue' | 'av' | '
   const defaultName = type === 'av' ? 'New AV Estimate'
     : type === 'decor' ? 'New Decor Estimate'
     : type === 'transportation' ? 'New Transportation Estimate'
+    : type === 'tour' ? 'New Tour Estimate'
     : 'New Estimate';
 
   const { data: estimate, error } = await supabase
@@ -466,7 +467,7 @@ export async function createEstimate(programId: string, type: 'venue' | 'av' | '
       name: defaultName,
       fb_minimum: 0,
       is_venue_taxable: type === 'venue',
-      ...(type === 'av' || type === 'decor' ? {
+      ...(type === 'av' || type === 'decor' || type === 'tour' ? {
         service_charge_override: 0,
         gratuity_override: 0,
         admin_fee_override: 0,
