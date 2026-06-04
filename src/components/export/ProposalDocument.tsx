@@ -4,6 +4,7 @@ import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/render
 import type { EstimateSummary, Location } from '@/types';
 import type { LineItemForExport } from '@/lib/utils/export';
 import { itemClientCost } from '@/lib/utils/export';
+import type { TourDetails } from '@/lib/tours/types';
 
 function shortLocationName(name: string): string {
   return name.replace(/\s*\([^)]*\)/, '').replace(/\s+(NC|SC|GA|VA|PA|MD|NY|NJ|DC)$/, '').trim();
@@ -99,6 +100,7 @@ export interface ProposalDocumentProps {
   taxExempt?: boolean;
   logoSrc?: string;
   location?: Location | null;
+  tourDetails?: TourDetails | null;
 }
 
 export default function ProposalDocument({
@@ -111,10 +113,12 @@ export default function ProposalDocument({
   summary,
   lineItems,
   orderedSections,
+  estimateType,
   proposalDate,
   taxExempt = false,
   logoSrc,
   location,
+  tourDetails,
 }: ProposalDocumentProps) {
   const proposalNumber = estimateId.slice(0, 8).toUpperCase();
 
@@ -159,6 +163,53 @@ export default function ProposalDocument({
             <Text style={styles.metaValue}>{fmtRound(summary.totalClient)}</Text>
           </View>
         </View>
+
+        {/* Tour logistics block */}
+        {estimateType === 'tour' && tourDetails && (
+          (() => {
+            const hasContent = tourDetails.pickup_address || tourDetails.departure_time ||
+              tourDetails.return_time || tourDetails.duration_hours || tourDetails.dropoff_address;
+            if (!hasContent) return null;
+            const PICKUP_LABELS: Record<string, string> = {
+              hotel: 'Hotel pickup', meeting_point: 'Meeting point', airport: 'Airport',
+            };
+            const pickupLabel = tourDetails.pickup_type ? (PICKUP_LABELS[tourDetails.pickup_type] ?? tourDetails.pickup_type) : null;
+            return (
+              <View style={{ marginBottom: 16, padding: 10, backgroundColor: '#FDFAF7', borderWidth: 0.75, borderColor: BRAND_CREAM, borderRadius: 4 }}>
+                <Text style={{ fontSize: 7.5, color: BRAND_BROWN, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>Tour Details</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+                  {tourDetails.pickup_address ? (
+                    <View>
+                      <Text style={{ fontSize: 7.5, color: BRAND_SILVER, textTransform: 'uppercase', letterSpacing: 0.4 }}>{pickupLabel ?? 'Pickup'}</Text>
+                      <Text style={{ fontSize: 9, color: BRAND_CHARCOAL }}>{tourDetails.pickup_address}</Text>
+                    </View>
+                  ) : null}
+                  {(tourDetails.departure_time || tourDetails.return_time) ? (
+                    <View>
+                      <Text style={{ fontSize: 7.5, color: BRAND_SILVER, textTransform: 'uppercase', letterSpacing: 0.4 }}>Times</Text>
+                      <Text style={{ fontSize: 9, color: BRAND_CHARCOAL }}>
+                        {[tourDetails.departure_time, tourDetails.return_time].filter(Boolean).join(' → ')}
+                        {tourDetails.duration_hours ? ` (${tourDetails.duration_hours} hr)` : ''}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {tourDetails.dropoff_address && tourDetails.dropoff_address !== tourDetails.pickup_address ? (
+                    <View>
+                      <Text style={{ fontSize: 7.5, color: BRAND_SILVER, textTransform: 'uppercase', letterSpacing: 0.4 }}>Drop-off</Text>
+                      <Text style={{ fontSize: 9, color: BRAND_CHARCOAL }}>{tourDetails.dropoff_address}</Text>
+                    </View>
+                  ) : null}
+                  {tourDetails.meeting_point_notes ? (
+                    <View>
+                      <Text style={{ fontSize: 7.5, color: BRAND_SILVER, textTransform: 'uppercase', letterSpacing: 0.4 }}>Meeting Point</Text>
+                      <Text style={{ fontSize: 9, color: BRAND_CHARCOAL }}>{tourDetails.meeting_point_notes}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+            );
+          })()
+        )}
 
         {/* Line items by section */}
         {sections.map((section) => {

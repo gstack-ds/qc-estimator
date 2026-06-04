@@ -10,6 +10,7 @@ import {
   type LineItemForExport,
   type MarkupForExport,
 } from '@/lib/utils/export';
+import type { TourDetails } from '@/lib/tours/types';
 
 export type { LineItemForExport, MarkupForExport };
 
@@ -28,6 +29,7 @@ interface Props {
   markups: MarkupForExport[];
   taxExempt?: boolean;
   location?: Location | null;
+  tourDetails?: TourDetails | null;
 }
 
 // ─── Component ────────────────────────────────────────────
@@ -47,6 +49,7 @@ export default function ExportButtons({
   markups,
   taxExempt = false,
   location,
+  tourDetails,
 }: Props) {
   const [copyLabel, setCopyLabel] = useState<'Copy Numbers' | 'Copied!'>('Copy Numbers');
   const [copyItemsLabel, setCopyItemsLabel] = useState<'Copy Line Items' | 'Copied!'>('Copy Line Items');
@@ -91,6 +94,7 @@ export default function ExportButtons({
         taxExempt,
         logoSrc,
         location,
+        tourDetails,
       });
       const blob = await pdf(element).toBlob();
       const url = URL.createObjectURL(blob);

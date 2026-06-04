@@ -17,8 +17,9 @@ import type { LocalSectionDef } from './LineItemSection';
 import SortableSectionItem from './SortableSectionItem';
 import DecorSummaryPanel from './DecorSummaryPanel';
 import MarginPanel from './MarginPanel';
-import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection, reorderSections, reorderLineItems, updateTourDetails } from '@/app/(programs)/programs/[id]/estimates/actions';
-import type { DbTemplate, TourDetails } from '@/app/(programs)/programs/[id]/estimates/actions';
+import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection, reorderSections, reorderLineItems, updateTourDetails, getTourCatalog, saveTourTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
+import type { DbTemplate } from '@/app/(programs)/programs/[id]/estimates/actions';
+import type { TourDetails, TourCatalogEntry } from '@/lib/tours/types';
 import type { LocalLineItem } from './EstimateBuilder';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
@@ -121,16 +122,39 @@ function itemClientCost(li: LocalLineItem): number {
 function TourDetailsPanel({
   details,
   onChange,
+  onOpenPicker,
+  onOpenSaveForm,
 }: {
   details: TourDetails;
   onChange: (patch: TourDetails) => void;
+  onOpenPicker: () => void;
+  onOpenSaveForm: () => void;
 }) {
   const fieldClass = 'border border-brand-cream rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper focus:border-brand-brown bg-white text-brand-charcoal w-full';
   const labelClass = 'block text-xs font-medium text-brand-charcoal/60 tracking-wide mb-1';
 
   return (
     <div className="bg-white border border-brand-cream rounded-lg p-5 space-y-4">
-      <h3 className="text-sm font-semibold text-brand-charcoal">Tour Details</h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-brand-charcoal">Tour Details</h3>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onOpenPicker}
+            className="text-xs text-brand-copper hover:text-brand-brown underline underline-offset-2"
+          >
+            Load saved tour
+          </button>
+          <span className="text-brand-cream text-xs">·</span>
+          <button
+            type="button"
+            onClick={onOpenSaveForm}
+            className="text-xs text-brand-silver hover:text-brand-charcoal underline underline-offset-2"
+          >
+            Save as template
+          </button>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -389,6 +413,13 @@ export default function TourEstimateBuilder({
   );
   const tourDetailsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [catalogEntries, setCatalogEntries] = useState<TourCatalogEntry[] | null>(null);
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [showCatalogPicker, setShowCatalogPicker] = useState(false);
+  const [showSaveForm, setShowSaveForm] = useState(false);
+  const [saveTemplateName, setSaveTemplateName] = useState('');
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
   const initSections = dbSections.map((s) => ({ id: s.id, name: s.name, taxBucket: s.tax_bucket, markupPct: s.markup_pct, isBuiltIn: s.is_built_in, sortOrder: s.sort_order }));
   const [lineItems, setLineItems] = useState<LocalLineItem[]>(
     dbLineItems.map((item) => dbItemToLocal(item, markups, initSections))
@@ -478,6 +509,37 @@ export default function TourEstimateBuilder({
     tourDetailsTimer.current = setTimeout(() => {
       updateTourDetails(estimate.id, program.id, next);
     }, 1500);
+  }
+
+  async function handleOpenCatalogPicker() {
+    setShowCatalogPicker(true);
+    if (!catalogEntries) {
+      setLoadingCatalog(true);
+      const entries = await getTourCatalog();
+      setCatalogEntries(entries);
+      setLoadingCatalog(false);
+    }
+  }
+
+  function handleLoadTemplate(entry: TourCatalogEntry) {
+    const next = { ...tourDetails, ...entry.tour_details };
+    setTourDetails(next);
+    if (tourDetailsTimer.current) clearTimeout(tourDetailsTimer.current);
+    tourDetailsTimer.current = setTimeout(() => {
+      updateTourDetails(estimate.id, program.id, next);
+    }, 1500);
+    setShowCatalogPicker(false);
+  }
+
+  async function handleSaveTemplate() {
+    const name = saveTemplateName.trim();
+    if (!name) return;
+    setSavingTemplate(true);
+    await saveTourTemplate(name, tourDetails);
+    setSavingTemplate(false);
+    setShowSaveForm(false);
+    setSaveTemplateName('');
+    setCatalogEntries(null); // force reload on next open
   }
 
   // ─── Save helpers ────────────────────────────────────────
@@ -792,7 +854,7 @@ export default function TourEstimateBuilder({
             markups={markups}
             onImport={handleImportItems}
           />
-          <ExportButtons programId={program.id} programName={program.name} estimateId={estimate.id} estimateName={name} clientName={program.client_name} clientCompany={program.company_name} summary={summary} guestCount={program.guest_count} estimateType="tour" lineItems={lineItems} orderedSections={[...sections].sort((a, b) => a.sortOrder - b.sortOrder).map((s) => s.name)} markups={markups} taxExempt={taxExempt} location={programConfig.location} />
+          <ExportButtons programId={program.id} programName={program.name} estimateId={estimate.id} estimateName={name} clientName={program.client_name} clientCompany={program.company_name} summary={summary} guestCount={program.guest_count} estimateType="tour" lineItems={lineItems} orderedSections={[...sections].sort((a, b) => a.sortOrder - b.sortOrder).map((s) => s.name)} markups={markups} taxExempt={taxExempt} location={programConfig.location} tourDetails={tourDetails} />
           <button
             onClick={() => setShowMath(v => !v)}
             className={`text-xs px-2.5 py-1 rounded border transition-colors ${showMath ? 'border-brand-copper/60 bg-brand-offwhite text-brand-brown' : 'border-brand-cream bg-white text-brand-charcoal/70 hover:text-brand-charcoal hover:bg-brand-offwhite'}`}
@@ -827,7 +889,74 @@ export default function TourEstimateBuilder({
           </div>
 
           {/* Tour details */}
-          <TourDetailsPanel details={tourDetails} onChange={handleTourDetailChange} />
+          <TourDetailsPanel
+            details={tourDetails}
+            onChange={handleTourDetailChange}
+            onOpenPicker={handleOpenCatalogPicker}
+            onOpenSaveForm={() => setShowSaveForm(true)}
+          />
+
+          {/* Catalog picker */}
+          {showCatalogPicker && (
+            <div className="bg-white border border-brand-copper/30 rounded-lg p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-brand-charcoal">Saved Tours</span>
+                <button
+                  type="button"
+                  onClick={() => setShowCatalogPicker(false)}
+                  className="text-brand-silver hover:text-brand-charcoal text-lg leading-none"
+                >×</button>
+              </div>
+              {loadingCatalog ? (
+                <p className="text-xs text-brand-silver py-2">Loading…</p>
+              ) : !catalogEntries || catalogEntries.length === 0 ? (
+                <p className="text-xs text-brand-silver py-2">No saved tours yet. Fill in tour details and click "Save as template" to create one.</p>
+              ) : (
+                <div className="divide-y divide-brand-cream">
+                  {catalogEntries.map((entry) => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      onClick={() => handleLoadTemplate(entry)}
+                      className="w-full text-left px-2 py-2 text-sm text-brand-charcoal hover:bg-brand-offwhite rounded transition-colors"
+                    >
+                      {entry.name}
+                      {entry.notes && <span className="ml-2 text-xs text-brand-silver">{entry.notes}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Save template form */}
+          {showSaveForm && (
+            <div className="bg-white border border-brand-cream rounded-lg p-4 flex items-center gap-3 flex-wrap">
+              <span className="text-xs font-medium text-brand-charcoal/70">Template name:</span>
+              <input
+                type="text"
+                autoFocus
+                value={saveTemplateName}
+                onChange={(e) => setSaveTemplateName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSaveTemplate(); if (e.key === 'Escape') { setShowSaveForm(false); setSaveTemplateName(''); } }}
+                placeholder="e.g., Charleston City Tour 4hr"
+                className="border border-brand-cream rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper bg-white text-brand-charcoal flex-1 min-w-48"
+              />
+              <button
+                type="button"
+                onClick={handleSaveTemplate}
+                disabled={savingTemplate || !saveTemplateName.trim()}
+                className="text-xs px-3 py-1.5 bg-brand-brown text-white rounded hover:bg-brand-charcoal transition-colors disabled:opacity-50"
+              >
+                {savingTemplate ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowSaveForm(false); setSaveTemplateName(''); }}
+                className="text-xs text-brand-silver hover:text-brand-charcoal"
+              >Cancel</button>
+            </div>
+          )}
 
           {/* Guide suggestion */}
           <GuideSuggestionBanner

@@ -998,23 +998,8 @@ export async function saveSlideCopyData(estimateId: string, data: SlideCopyData)
 
 // ─── Tour Details ──────────────────────────────────────────
 
-export interface TourDetails {
-  pickup_type?: 'hotel' | 'meeting_point' | 'airport' | null;
-  pickup_address?: string | null;
-  dropoff_address?: string | null;
-  meeting_point_notes?: string | null;
-  departure_time?: string | null;
-  return_time?: string | null;
-  duration_hours?: number | null;
-  pricing_mode?: 'per_person' | 'flat' | null;
-  guide_notes?: string | null;
-  internal_notes?: string | null;
-  // Guide scaling fields
-  self_guided?: boolean | null;
-  guests_per_guide?: number | null;
-  venue_guide_cap?: number | null;
-  wave_size?: number | null;
-}
+export type { TourDetails, TourCatalogEntry } from '@/lib/tours/types';
+import type { TourDetails, TourCatalogEntry } from '@/lib/tours/types';
 
 export async function updateTourDetails(estimateId: string, programId: string, patch: TourDetails): Promise<{ error: string | null }> {
   const supabase = await createClient();
@@ -1030,6 +1015,45 @@ export async function updateTourDetails(estimateId: string, programId: string, p
     .eq('id', estimateId);
   if (error) return { error: error.message };
   revalidatePath(`/programs/${programId}`);
+  return { error: null };
+}
+
+// ─── Tour Catalog ─────────────────────────────────────────
+
+export async function getTourCatalog(): Promise<TourCatalogEntry[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('tour_catalog')
+    .select('id, name, tour_details, notes, created_at')
+    .order('name');
+  if (error) return [];
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    tour_details: (row.tour_details as TourDetails) ?? {},
+    notes: row.notes ?? null,
+    created_at: row.created_at,
+  }));
+}
+
+export async function saveTourTemplate(
+  name: string,
+  tourDetails: TourDetails
+): Promise<{ id: string | null; error: string | null }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('tour_catalog')
+    .insert({ name, tour_details: tourDetails })
+    .select('id')
+    .single();
+  if (error) return { id: null, error: error.message };
+  return { id: data.id as string, error: null };
+}
+
+export async function deleteTourTemplate(id: string): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from('tour_catalog').delete().eq('id', id);
+  if (error) return { error: error.message };
   return { error: null };
 }
 

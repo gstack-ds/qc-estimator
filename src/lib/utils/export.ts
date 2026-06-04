@@ -70,6 +70,11 @@ export function buildSummaryRows(
     if (summary.qcStaffingSubtotalClient > 0) rows.push({ label: 'Non-Taxable Fees', amount: summary.qcStaffingSubtotalClient });
     if (tax > 0) rows.push({ label: 'Tax', amount: tax });
     if (summary.productionFee > 0) rows.push({ label: 'Production Fee', amount: summary.productionFee });
+  } else if (type === 'tour') {
+    if (summary.equipmentSubtotalClient > 0) rows.push({ label: 'Tour & Experiences', amount: summary.equipmentSubtotalClient });
+    if (summary.qcStaffingSubtotalClient > 0) rows.push({ label: 'Non-Taxable Fees', amount: summary.qcStaffingSubtotalClient });
+    if (tax > 0) rows.push({ label: 'Tax', amount: tax });
+    if (summary.productionFee > 0) rows.push({ label: 'Production Fee', amount: summary.productionFee });
   } else {
     // Venue: Menu / Bar Package / Staffing / Equipment / Venue Rental / Service Charge / Gratuity / Admin Fee / Production Fee / Tax
     const { staffing, equipment } = splitStaffingEquipment(lineItems, markups, summary);

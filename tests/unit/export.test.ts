@@ -234,6 +234,50 @@ describe('buildSummaryRows (av)', () => {
   });
 });
 
+// ─── buildSummaryRows (tour) ─────────────────────────────
+
+describe('buildSummaryRows (tour)', () => {
+  it('returns Tour & Experiences from equipmentSubtotalClient', () => {
+    const summary = makeSummary({ equipmentSubtotalClient: 4000, totalClient: 4000 });
+    const rows = buildSummaryRows(summary, 'tour', [], MARKUPS);
+    expect(rows.find((r) => r.label === 'Tour & Experiences')?.amount).toBe(4000);
+  });
+
+  it('returns Non-Taxable Fees from qcStaffingSubtotalClient', () => {
+    const summary = makeSummary({ qcStaffingSubtotalClient: 1200, totalClient: 1200 });
+    const rows = buildSummaryRows(summary, 'tour', [], MARKUPS);
+    expect(rows.find((r) => r.label === 'Non-Taxable Fees')?.amount).toBe(1200);
+  });
+
+  it('includes Tax and Production Fee when present', () => {
+    const summary = makeSummary({
+      equipmentSubtotalClient: 3000,
+      equipmentTax: 180,
+      productionFee: 250,
+      totalClient: 3430,
+    });
+    const rows = buildSummaryRows(summary, 'tour', [], MARKUPS);
+    const labels = rows.map((r) => r.label);
+    expect(labels).toEqual(['Tour & Experiences', 'Tax', 'Production Fee']);
+  });
+
+  it('omits zero-amount rows', () => {
+    const summary = makeSummary({ equipmentSubtotalClient: 4000, qcStaffingSubtotalClient: 0, totalClient: 4000 });
+    const rows = buildSummaryRows(summary, 'tour', [], MARKUPS);
+    expect(rows.find((r) => r.label === 'Non-Taxable Fees')).toBeUndefined();
+  });
+
+  it('does not include venue-style rows (Menu, Bar Package, Venue Rental, Service Charge)', () => {
+    const summary = makeSummary({ equipmentSubtotalClient: 5000, totalClient: 5000 });
+    const rows = buildSummaryRows(summary, 'tour', [], MARKUPS);
+    const labels = rows.map((r) => r.label);
+    expect(labels).not.toContain('Menu');
+    expect(labels).not.toContain('Bar Package');
+    expect(labels).not.toContain('Venue Rental');
+    expect(labels).not.toContain('Service Charge');
+  });
+});
+
 // ─── buildDetailedCopyText ───────────────────────────────
 
 describe('buildDetailedCopyText', () => {
