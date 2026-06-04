@@ -358,7 +358,7 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Onsite staffing tracker (migration 036): program_staffing table, staffing_status enum; getStaffingForProgram(); addStaffingRole/updateStaffingRole/deleteStaffingRole actions; StaffingSection client component; program detail page wires staffing + team members; staffing_needs_count on DbProgramSummary + LinkedProgramSummary (bulk query); staffing badge on programs list + Kanban cards; 339 tests passing
 
 ### Remaining
-- [ ] **Run migrations 035 and 036 in production** — migration 035 adds enum values + remaps data; migration 036 creates program_staffing table. Run in order.
+- [x] Migrations 035 and 036 run in production — enum values live, data remapped, program_staffing table created
 - [ ] **Venue profile data** — need real estimates with `venue_id` set to verify history section populates. Trigger by opening an existing venue estimate, selecting a venue, then visiting the venue profile.
 - [ ] **Tell Alex** — Bright Darling is not on Google Fonts; Cormorant Garamond is used in the Slide Copy preview instead; she should swap to Bright Darling in the actual Canva template
 - [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs (note: EXPECTED_QC_MARGIN values changed significantly with bug #5 fix and again with production fee tax)
