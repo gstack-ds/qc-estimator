@@ -10,14 +10,17 @@ import { updateLead, deleteLead, createProgramFromLead, type LeadInput } from '@
 // ─── Config ───────────────────────────────────────────────
 
 const STATUSES: LeadStatus[] = [
-  'new_lead', 'proposal_in_progress', 'pending_client_review', 'pending_contract_payment',
-  'under_contract', 'planning', 'unresponsive', 'post_event_close_out',
-  'halted', 'planning_not_started', 'did_not_book', 'completed',
+  'tracking_on_hold', 'new_lead', 'proposal_in_progress', 'pending_client_review',
+  'negotiations', 'pending_contract_payment', 'under_contract', 'planning',
+  'unresponsive', 'post_event_close_out', 'halted', 'planning_not_started',
+  'did_not_book', 'completed',
 ];
 const STATUS_LABELS: Record<LeadStatus, string> = {
+  tracking_on_hold:         'Tracking / On Hold',
   new_lead:                 'New Lead',
   proposal_in_progress:     'Proposal in Progress',
   pending_client_review:    'Pending Client Review',
+  negotiations:             'Negotiations',
   pending_contract_payment: 'Pending Contract/Payment',
   under_contract:           'Under Contract',
   planning:                 'Planning',

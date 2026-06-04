@@ -13,6 +13,8 @@ import {
   getTravelItems,
   getProgramDocuments,
   getProgramBrief,
+  getStaffingForProgram,
+  getTeamMembers,
   type DbEstimate,
   type DbLineItem,
   type DbMarkup,
@@ -31,6 +33,7 @@ import { type EstimateCard } from '@/components/estimates/ComparisonView';
 import DeleteProgramButton from '@/components/estimates/DeleteProgramButton';
 import ProgramPnLPanel, { type PnLRow } from '@/components/estimates/ProgramPnLPanel';
 import ProgramStatusDropdown from '@/components/programs/ProgramStatusDropdown';
+import StaffingSection from '@/components/programs/StaffingSection';
 import type { ProgramStatus } from '@/lib/programs/constants';
 import { calculateVenueEstimate, calculateMarginAnalysis } from '@/lib/engine/pricing';
 import { calcTransportSummary } from '@/lib/engine/transportation';
@@ -287,7 +290,7 @@ function buildBudgetEstimate(
 export default async function ProgramPage({ params }: Props) {
   const { id } = await params;
 
-  const [program, locations, estimates, dbEvents, markups, dbTiers, travelItems, programDocs, existingBrief] = await Promise.all([
+  const [program, locations, estimates, dbEvents, markups, dbTiers, travelItems, programDocs, existingBrief, staffingRoles, teamMembers] = await Promise.all([
     getProgram(id),
     getLocations(),
     getEstimatesForProgram(id),
@@ -297,6 +300,8 @@ export default async function ProgramPage({ params }: Props) {
     getTravelItems(id),
     getProgramDocuments(id),
     getProgramBrief(id),
+    getStaffingForProgram(id),
+    getTeamMembers(),
   ]);
 
   const tiers: TeamHoursTier[] = dbTiers.map((t) => ({
@@ -411,8 +416,13 @@ export default async function ProgramPage({ params }: Props) {
             ← Programs
           </Link>
           <h1 className="font-serif text-2xl font-medium text-brand-charcoal mt-1">{program.name}</h1>
-          <div className="mt-2 flex items-center gap-3">
+          <div className="mt-2 flex items-center gap-3 flex-wrap">
             <ProgramStatusDropdown programId={id} status={(program.status ?? 'active') as ProgramStatus} />
+            {program.program_type && (
+              <span className="text-xs font-medium bg-brand-charcoal/10 text-brand-charcoal/70 rounded px-2 py-0.5">
+                {program.program_type}
+              </span>
+            )}
             {sourceLead && program.lead_id && (
               <Link href={`/leads/${program.lead_id}`} className="text-xs text-brand-silver hover:text-brand-brown transition-colors">
                 ← Lead: {sourceLead.client_name ?? '—'}
@@ -449,6 +459,17 @@ export default async function ProgramPage({ params }: Props) {
             programId={id}
             initialDocs={programDocs}
             estimateAttachmentCount={estimateAttachmentCount}
+          />
+        </div>
+      </div>
+
+      {/* Staffing */}
+      <div className="max-w-3xl">
+        <div className="bg-white border border-brand-cream rounded-lg p-5">
+          <StaffingSection
+            programId={id}
+            initialRoles={staffingRoles}
+            teamMembers={teamMembers}
           />
         </div>
       </div>

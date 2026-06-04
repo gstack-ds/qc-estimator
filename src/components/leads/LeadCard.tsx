@@ -10,6 +10,13 @@ import { statusToLane, laneStyles } from '@/lib/leads/pipeline';
 import { STATUS_LABELS, type LeadStatus } from '@/lib/leads/constants';
 import type { LeadInput } from '@/app/(programs)/leads/actions';
 
+// Ordered statuses for the inline dropdown — active pipeline first, then closed
+const ACTIVE_STATUSES: LeadStatus[] = [
+  'tracking_on_hold', 'new_lead', 'proposal_in_progress', 'pending_client_review',
+  'negotiations', 'pending_contract_payment', 'under_contract', 'post_event_close_out',
+  'completed', 'did_not_book', 'unresponsive',
+];
+
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function fmtDate(d: string | null) {
   if (!d) return null;
@@ -59,6 +66,16 @@ export function LeadCardContent({ lead, teamMembers, isOverlay = false, linkedPr
         {linkedProgram && (
           <div className="text-[9px] font-semibold text-brand-copper truncate">→ {linkedProgram.name}</div>
         )}
+        {linkedProgram?.program_type && (
+          <span className="inline-block text-[9px] font-medium bg-brand-charcoal/10 text-brand-charcoal/70 rounded px-1.5 py-0.5">
+            {linkedProgram.program_type}
+          </span>
+        )}
+        {linkedProgram?.staffing_needs_count != null && linkedProgram.staffing_needs_count > 0 && (
+          <span className="inline-block text-[9px] font-medium bg-red-100 text-red-700 rounded px-1.5 py-0.5">
+            Staffing: {linkedProgram.staffing_needs_count} open
+          </span>
+        )}
       </div>
     </div>
   );
@@ -77,6 +94,7 @@ interface CardProps {
 
 export default function LeadCard({ lead, teamMembers, laneStatuses, onUpdate, isJustMoved = false, linkedProgram }: CardProps) {
   const [, startTransition] = useTransition();
+  void startTransition; // suppress unused warning — kept for parity with server actions pattern
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: lead.id,
     data: { status: lead.status },
@@ -99,9 +117,6 @@ export default function LeadCard({ lead, teamMembers, laneStatuses, onUpdate, is
       style={style}
       className={`group relative ${isDragging ? 'opacity-40' : ''}`}
     >
-      {/* Card shell: colored bg wash + left border stripe + outer border.
-           isJustMoved adds a brief copper ring that disappears when the
-           parent clears justMovedId (after JUST_MOVED_TTL_MS). */}
       <div className={`border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 ${styles.cardBg} ${
         isJustMoved
           ? 'border-brand-copper ring-2 ring-brand-copper/40 ring-offset-1'
@@ -109,10 +124,7 @@ export default function LeadCard({ lead, teamMembers, laneStatuses, onUpdate, is
       }`}>
         <div className={`border-l-4 ${styles.cardBorder}`}>
 
-          {/* Drag handle — grip icon top-right, visible on hover.
-               listeners MUST be spread without a separate onPointerDown override:
-               adding onPointerDown after {...listeners} in JSX would overwrite
-               dnd-kit's own pointer-down handler and prevent drag from starting. */}
+          {/* Drag handle */}
           <div
             {...listeners}
             {...attributes}
@@ -122,7 +134,7 @@ export default function LeadCard({ lead, teamMembers, laneStatuses, onUpdate, is
             <GripVertical size={12} className="text-brand-charcoal" />
           </div>
 
-          {/* Card body — plain click navigates to detail */}
+          {/* Card body */}
           <Link
             href={`/leads/${lead.id}`}
             onClick={(e) => { if (isDragging) e.preventDefault(); }}
@@ -151,9 +163,21 @@ export default function LeadCard({ lead, teamMembers, laneStatuses, onUpdate, is
                 )}
               </div>
             </div>
+            {/* Program type badge */}
+            {linkedProgram?.program_type && (
+              <span className="inline-block text-[9px] font-medium bg-brand-charcoal/10 text-brand-charcoal/60 rounded px-1.5 py-0.5">
+                {linkedProgram.program_type}
+              </span>
+            )}
+            {/* Staffing needs badge */}
+            {linkedProgram?.staffing_needs_count != null && linkedProgram.staffing_needs_count > 0 && (
+              <span className="inline-block text-[9px] font-medium bg-red-100 text-red-700 rounded px-1.5 py-0.5">
+                Staffing: {linkedProgram.staffing_needs_count} open
+              </span>
+            )}
           </Link>
 
-          {/* Converted-lead banner — navigates to the linked program, suppresses drag */}
+          {/* Converted-lead banner */}
           {linkedProgram && (
             <Link
               href={`/programs/${linkedProgram.id}`}
@@ -165,24 +189,22 @@ export default function LeadCard({ lead, teamMembers, laneStatuses, onUpdate, is
             </Link>
           )}
 
-          {/* Inline edit controls — hover-revealed, don't trigger navigation */}
+          {/* Inline edit controls — always show status dropdown, hover-revealed */}
           <div
             className="hidden group-hover:block border-t border-brand-cream/60 bg-white/60 px-2 py-1.5 space-y-1"
             onPointerDown={noPropagate}
             onClick={noPropagate}
           >
-            {laneStatuses.length > 1 && (
-              <select
-                value={lead.status}
-                onChange={e => handleField('status', e.target.value)}
-                className="w-full text-[10px] border border-brand-cream rounded px-1.5 py-0.5 bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
-                title="Status"
-              >
-                {laneStatuses.map(s => (
-                  <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-                ))}
-              </select>
-            )}
+            <select
+              value={lead.status}
+              onChange={e => handleField('status', e.target.value)}
+              className="w-full text-[10px] border border-brand-cream rounded px-1.5 py-0.5 bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
+              title="Status"
+            >
+              {ACTIVE_STATUSES.map(s => (
+                <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+              ))}
+            </select>
             <select
               value={lead.assigned_to != null ? String(lead.assigned_to) : ''}
               onChange={e => handleField('assigned_to', e.target.value ? Number(e.target.value) : null)}

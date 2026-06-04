@@ -238,6 +238,9 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-06-03 | Migration 034: UNIQUE constraint on programs.lead_id | Prevents multiple programs per lead at the DB level. Pre-checked 0 existing violations before applying. Re-books must start as a new lead. | Application-level check only (bypassable) |
 | 2026-06-03 | Slide Copy module: Dianthus/Canva template format extensions | Max Capacity line appended to Slide 1 Header. New "Pricing Callout" block: "Starting at $X (based on N)" + "Including:" bullet list + price per person. Route/Itinerary optional free-text textarea → copy block (only shown when filled). Cost Summary replaces Estimate Summary: UPPERCASE labels, no Production Fee row, productionFeeTax in Tax, Admin Fee row. Menu format: HEADER (CHOOSE N) uppercase, needs_selection courses show ALL options (sample mode), spirit/bar course names auto-format as "VODKA / Tito's, Sobieski". Bar Notes free-text textarea appended as BAR section. Copy All filters empty sections. | Keep old padEnd column alignment (hard to paste into Canva) |
 | 2026-06-03 | DbProgramSummary includes lead_id; ProgramsTable shows "← Lead" link | lead_id added to getPrograms() SELECT and map. Rows with lead_id show a small secondary "← Lead" link under the program name that navigates to the source lead. Doesn't add a new column — inline under the name. | New column (changes table layout); tooltip (less discoverable) |
+| 2026-06-04 | program_type: nullable TEXT on programs, user-set dropdown, badge on card/list/detail | 7 values (Transportation, Staffing, Entertainment/Activations, Restaurants, Venues, Multi Category, Activations). updateProgramType() server action auto-saves in edit mode. ProgramsTable: type filter dropdown + inline badge. Kanban: badge on converted-program card (via LinkedProgramSummary). getProgram() now selects program_type. | PG enum (hard to extend); separate type table (overkill for 7 values) |
+| 2026-06-04 | Onsite staffing tracker: program_staffing table (migration 036), StaffingSection component | per-role row with assigned_to (team_members dropdown), status enum (needs_staffing/assigned/confirmed), notes. Add/delete roles inline. Summary line "N of M confirmed · X need staffing." Staffing badge on programs list and Kanban. getStaffingForProgram() bulk query, staffing_needs_count on DbProgramSummary/LinkedProgramSummary. | Per-card N+1 queries (rejected — bulk map pattern); separate staffing page (too far from program context) |
+| 2026-06-04 | 10-lane pipeline + tracking_on_hold/negotiations enum values + data remaps | Migration 035: ALTER TYPE adds tracking_on_hold + negotiations; UPDATE remaps halted→tracking_on_hold, planning/planning_not_started→under_contract. LeadStatusGroup loses 'paused' (now open/closed only). PIPELINE_LANES has 10 lanes with correct colors. Legacy values kept in type for DB compat but mapped to safe lanes. | Recreate enum (risky with existing data); split into separate migration per value (unnecessary) |
 
 ## Gotchas Log
 
@@ -349,8 +352,13 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Reverse status sync (program → lead, terminal states only): updateProgramStatus back-propagates completed/did_not_book to lead.status; programStatusToLeadStatus() with 6 unit tests (330 total, 13 files)
 - [x] DragOverlay cosmetic fix: linkedProgram passed to LeadCardContent so ghost card shows program banner during drag
 - [x] Programs list lead_id: DbProgramSummary extended, getPrograms() selects lead_id, "← Lead" link on lead-sourced rows
+- [x] 10-lane pipeline overhaul (migration 035): tracking_on_hold + negotiations added to enum; halted→tracking_on_hold, planning/planning_not_started→under_contract remapped; Paused tab removed; LeadStatusGroup = open|closed; PIPELINE_LANES updated; LeadDetail/LeadStatusBadge updated; 41 pipeline tests passing
+- [x] Status dropdown always visible on every Kanban card (removed laneStatuses.length > 1 guard)
+- [x] program_type: TEXT NULL on programs (migration 035); PROGRAM_TYPES constant; dropdown in ProgramForm (create + auto-save edit); updateProgramType() action; badge on program detail header, programs list rows, Kanban converted-program cards; type filter dropdown on programs list
+- [x] Onsite staffing tracker (migration 036): program_staffing table, staffing_status enum; getStaffingForProgram(); addStaffingRole/updateStaffingRole/deleteStaffingRole actions; StaffingSection client component; program detail page wires staffing + team members; staffing_needs_count on DbProgramSummary + LinkedProgramSummary (bulk query); staffing badge on programs list + Kanban cards; 339 tests passing
 
 ### Remaining
+- [ ] **Run migrations 035 and 036 in production** — migration 035 adds enum values + remaps data; migration 036 creates program_staffing table. Run in order.
 - [ ] **Venue profile data** — need real estimates with `venue_id` set to verify history section populates. Trigger by opening an existing venue estimate, selecting a venue, then visiting the venue profile.
 - [ ] **Tell Alex** — Bright Darling is not on Google Fonts; Cormorant Garamond is used in the Slide Copy preview instead; she should swap to Bright Darling in the actual Canva template
 - [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs (note: EXPECTED_QC_MARGIN values changed significantly with bug #5 fix and again with production fee tax)
@@ -358,6 +366,7 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
+- **Run migrations 035 + 036 in production** before testing any of the new features on the live site.
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in Slide Copy preview; she swaps in Canva).
 - Venue profile attachment downloads: the history section shows filenames but no download link — needs signed URL generation server-side.
 - Scanner is live and working. Run `npm run dedup` if duplicate leads accumulate.

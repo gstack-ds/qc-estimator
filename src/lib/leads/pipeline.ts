@@ -11,23 +11,29 @@ export interface PipelineLane {
   color: string;
 }
 
-// ─── 8-lane pipeline ──────────────────────────────────────
+// ─── 10-lane pipeline ──────────────────────────────────────
 //
-// No migration required — all 12 LeadStatus enum values already exist.
-// Enum values: new_lead, proposal_in_progress, pending_client_review,
-//   pending_contract_payment, under_contract, planning, unresponsive,
-//   post_event_close_out, halted, planning_not_started, did_not_book, completed.
+// No migration required for post_event_close_out or unresponsive — they
+// already exist in the enum.  New values added in migration 035:
+//   tracking_on_hold, negotiations
 //
-// Status → lane reconciliation:
-//   pending_contract_payment → Pending Signature/Payment (own lane — client signing/paying stage)
-//   planning_not_started     → Planning (same stage, not yet begun)
-//   post_event_close_out     → Planning (final active-work phase)
-//   unresponsive             → Did Not Book (stalled; client unreachable)
-//   halted                   → Did Not Book (stopped before close)
+// Migration 035 data remaps:
+//   halted             → tracking_on_hold
+//   planning           → under_contract
+//   planning_not_started → under_contract
 //
-// Cards can move between any lanes in either direction.
+// Legacy status fallbacks (for any rows that slipped through the migration):
+//   halted / planning / planning_not_started still mapped below.
+//   unresponsive → did_not_book (unchanged).
 
 export const PIPELINE_LANES: PipelineLane[] = [
+  {
+    id: 'tracking_on_hold',
+    label: 'Tracking / On Hold',
+    canonicalStatus: 'tracking_on_hold',
+    statuses: ['tracking_on_hold', 'halted'],
+    color: 'indigo',
+  },
   {
     id: 'new_lead',
     label: 'New Lead',
@@ -37,7 +43,7 @@ export const PIPELINE_LANES: PipelineLane[] = [
   },
   {
     id: 'proposal',
-    label: 'Proposal',
+    label: 'Proposal in Progress',
     canonicalStatus: 'proposal_in_progress',
     statuses: ['proposal_in_progress'],
     color: 'amber',
@@ -50,6 +56,13 @@ export const PIPELINE_LANES: PipelineLane[] = [
     color: 'purple',
   },
   {
+    id: 'negotiations',
+    label: 'Negotiations',
+    canonicalStatus: 'negotiations',
+    statuses: ['negotiations'],
+    color: 'rose',
+  },
+  {
     id: 'pending_signature_payment',
     label: 'Pending Signature/Payment',
     canonicalStatus: 'pending_contract_payment',
@@ -60,14 +73,14 @@ export const PIPELINE_LANES: PipelineLane[] = [
     id: 'under_contract',
     label: 'Under Contract',
     canonicalStatus: 'under_contract',
-    statuses: ['under_contract'],
+    statuses: ['under_contract', 'planning', 'planning_not_started'],
     color: 'green',
   },
   {
-    id: 'planning',
-    label: 'Planning',
-    canonicalStatus: 'planning',
-    statuses: ['planning', 'planning_not_started', 'post_event_close_out'],
+    id: 'post_event_close_out',
+    label: 'Post Event Close Out',
+    canonicalStatus: 'post_event_close_out',
+    statuses: ['post_event_close_out'],
     color: 'teal',
   },
   {
@@ -81,8 +94,7 @@ export const PIPELINE_LANES: PipelineLane[] = [
     id: 'did_not_book',
     label: 'Did Not Book',
     canonicalStatus: 'did_not_book',
-    // unresponsive + halted: dead/stalled deals that didn't convert
-    statuses: ['did_not_book', 'unresponsive', 'halted'],
+    statuses: ['did_not_book', 'unresponsive'],
     color: 'slate',
   },
 ];
@@ -119,23 +131,22 @@ export function getLane(laneId: string): PipelineLane | undefined {
 //
 // ALL class strings are explicit literals so Tailwind's JIT scanner
 // includes every class in the production build regardless of which
-// lane is active at runtime. Never construct classes dynamically
-// (e.g. `bg-${color}-500`) — those get purged at build time.
-//
-// Keys are lane IDs (as returned by PIPELINE_LANES[n].id).
+// lane is active at runtime. Never construct classes dynamically.
 
 export interface LaneStyles {
-  /** Bold dot — lane header and card */
   dot: string;
-  /** Top border on the lane header (3px) */
   headerBorder: string;
-  /** Very light background wash on cards (the -50 shade) */
   cardBg: string;
-  /** Left border stripe on cards (4px, the -400/-500 shade) */
   cardBorder: string;
 }
 
 export const LANE_STYLES: Record<string, LaneStyles> = {
+  tracking_on_hold: {
+    dot:          'bg-indigo-500',
+    headerBorder: 'border-t-indigo-400',
+    cardBg:       'bg-indigo-50',
+    cardBorder:   'border-l-indigo-400',
+  },
   new_lead: {
     dot:          'bg-blue-500',
     headerBorder: 'border-t-blue-400',
@@ -154,6 +165,12 @@ export const LANE_STYLES: Record<string, LaneStyles> = {
     cardBg:       'bg-purple-50',
     cardBorder:   'border-l-purple-400',
   },
+  negotiations: {
+    dot:          'bg-rose-500',
+    headerBorder: 'border-t-rose-400',
+    cardBg:       'bg-rose-50',
+    cardBorder:   'border-l-rose-400',
+  },
   pending_signature_payment: {
     dot:          'bg-orange-500',
     headerBorder: 'border-t-orange-400',
@@ -166,7 +183,7 @@ export const LANE_STYLES: Record<string, LaneStyles> = {
     cardBg:       'bg-green-50',
     cardBorder:   'border-l-green-500',
   },
-  planning: {
+  post_event_close_out: {
     dot:          'bg-teal-500',
     headerBorder: 'border-t-teal-500',
     cardBg:       'bg-teal-50',
@@ -186,7 +203,6 @@ export const LANE_STYLES: Record<string, LaneStyles> = {
   },
 };
 
-// Fallback for any lane ID not found in the lookup
 const FALLBACK_STYLES: LaneStyles = {
   dot:          'bg-slate-400',
   headerBorder: 'border-t-slate-400',

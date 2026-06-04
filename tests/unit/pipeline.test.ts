@@ -7,36 +7,40 @@ import {
 } from '@/lib/leads/pipeline';
 import type { LeadStatus } from '@/lib/leads/constants';
 
-// All 12 lead statuses that exist in the database enum
+// All lead statuses — active + legacy (legacy values still exist in enum after migration 035)
 const ALL_STATUSES: LeadStatus[] = [
+  'tracking_on_hold',
   'new_lead',
   'proposal_in_progress',
   'pending_client_review',
+  'negotiations',
   'pending_contract_payment',
   'under_contract',
-  'planning',
-  'unresponsive',
   'post_event_close_out',
+  'unresponsive',
   'halted',
+  'planning',
   'planning_not_started',
   'did_not_book',
   'completed',
 ];
 
 describe('PIPELINE_LANES — structure', () => {
-  it('has exactly 8 lanes', () => {
-    expect(PIPELINE_LANES).toHaveLength(8);
+  it('has exactly 10 lanes', () => {
+    expect(PIPELINE_LANES).toHaveLength(10);
   });
 
   it('lanes are in the correct left-to-right order', () => {
     const ids = PIPELINE_LANES.map(l => l.id);
     expect(ids).toEqual([
+      'tracking_on_hold',
       'new_lead',
       'proposal',
       'pending_client_review',
+      'negotiations',
       'pending_signature_payment',
       'under_contract',
-      'planning',
+      'post_event_close_out',
       'completed',
       'did_not_book',
     ]);
@@ -76,7 +80,7 @@ describe('PIPELINE_LANES — completeness', () => {
     }
   });
 
-  it('all 12 statuses are covered (no gaps)', () => {
+  it('all statuses are covered (no gaps)', () => {
     const coveredStatuses = new Set(
       PIPELINE_LANES.flatMap(l => l.statuses)
     );
@@ -87,6 +91,10 @@ describe('PIPELINE_LANES — completeness', () => {
 });
 
 describe('statusToLaneId — per-status spot checks', () => {
+  it('tracking_on_hold → tracking_on_hold (own lane)', () => {
+    expect(statusToLaneId('tracking_on_hold')).toBe('tracking_on_hold');
+  });
+
   it('new_lead → new_lead', () => {
     expect(statusToLaneId('new_lead')).toBe('new_lead');
   });
@@ -99,7 +107,11 @@ describe('statusToLaneId — per-status spot checks', () => {
     expect(statusToLaneId('pending_client_review')).toBe('pending_client_review');
   });
 
-  it('pending_contract_payment → pending_signature_payment (own lane)', () => {
+  it('negotiations → negotiations (own lane)', () => {
+    expect(statusToLaneId('negotiations')).toBe('negotiations');
+  });
+
+  it('pending_contract_payment → pending_signature_payment', () => {
     expect(statusToLaneId('pending_contract_payment')).toBe('pending_signature_payment');
   });
 
@@ -107,16 +119,8 @@ describe('statusToLaneId — per-status spot checks', () => {
     expect(statusToLaneId('under_contract')).toBe('under_contract');
   });
 
-  it('planning → planning', () => {
-    expect(statusToLaneId('planning')).toBe('planning');
-  });
-
-  it('planning_not_started → planning', () => {
-    expect(statusToLaneId('planning_not_started')).toBe('planning');
-  });
-
-  it('post_event_close_out → planning', () => {
-    expect(statusToLaneId('post_event_close_out')).toBe('planning');
+  it('post_event_close_out → post_event_close_out (own lane)', () => {
+    expect(statusToLaneId('post_event_close_out')).toBe('post_event_close_out');
   });
 
   it('completed → completed (own lane)', () => {
@@ -127,16 +131,29 @@ describe('statusToLaneId — per-status spot checks', () => {
     expect(statusToLaneId('did_not_book')).toBe('did_not_book');
   });
 
-  it('unresponsive → did_not_book (stalled / unreachable)', () => {
-    expect(statusToLaneId('unresponsive')).toBe('did_not_book');
+  // Legacy statuses — kept in enum after migration 035, mapped to safe lanes
+  it('halted → tracking_on_hold (legacy mapping, migrated by migration 035)', () => {
+    expect(statusToLaneId('halted')).toBe('tracking_on_hold');
   });
 
-  it('halted → did_not_book (deal stopped)', () => {
-    expect(statusToLaneId('halted')).toBe('did_not_book');
+  it('planning → under_contract (legacy mapping, migrated by migration 035)', () => {
+    expect(statusToLaneId('planning')).toBe('under_contract');
+  });
+
+  it('planning_not_started → under_contract (legacy mapping, migrated by migration 035)', () => {
+    expect(statusToLaneId('planning_not_started')).toBe('under_contract');
+  });
+
+  it('unresponsive → did_not_book (stalled / unreachable)', () => {
+    expect(statusToLaneId('unresponsive')).toBe('did_not_book');
   });
 });
 
 describe('canonical status per lane (what gets written on drag-and-drop)', () => {
+  it('Tracking/On Hold → tracking_on_hold', () => {
+    expect(getLane('tracking_on_hold')!.canonicalStatus).toBe('tracking_on_hold');
+  });
+
   it('New Lead → new_lead', () => {
     expect(getLane('new_lead')!.canonicalStatus).toBe('new_lead');
   });
@@ -149,6 +166,10 @@ describe('canonical status per lane (what gets written on drag-and-drop)', () =>
     expect(getLane('pending_client_review')!.canonicalStatus).toBe('pending_client_review');
   });
 
+  it('Negotiations → negotiations', () => {
+    expect(getLane('negotiations')!.canonicalStatus).toBe('negotiations');
+  });
+
   it('Pending Signature/Payment → pending_contract_payment', () => {
     expect(getLane('pending_signature_payment')!.canonicalStatus).toBe('pending_contract_payment');
   });
@@ -157,8 +178,8 @@ describe('canonical status per lane (what gets written on drag-and-drop)', () =>
     expect(getLane('under_contract')!.canonicalStatus).toBe('under_contract');
   });
 
-  it('Planning → planning', () => {
-    expect(getLane('planning')!.canonicalStatus).toBe('planning');
+  it('Post Event Close Out → post_event_close_out', () => {
+    expect(getLane('post_event_close_out')!.canonicalStatus).toBe('post_event_close_out');
   });
 
   it('Completed → completed', () => {
@@ -170,47 +191,52 @@ describe('canonical status per lane (what gets written on drag-and-drop)', () =>
   });
 });
 
-describe('statusToLane — returns full lane object', () => {
-  it('completed returns Completed lane with correct label', () => {
-    const lane = statusToLane('completed');
-    expect(lane).toBeDefined();
-    expect(lane!.label).toBe('Completed');
-    expect(lane!.canonicalStatus).toBe('completed');
-    expect(lane!.color).toBe('emerald');
+describe('lane colors', () => {
+  it('tracking_on_hold is indigo', () => {
+    expect(getLane('tracking_on_hold')!.color).toBe('indigo');
   });
 
-  it('did_not_book returns Did Not Book lane', () => {
-    const lane = statusToLane('did_not_book');
-    expect(lane!.label).toBe('Did Not Book');
-    expect(lane!.color).toBe('slate');
+  it('negotiations is rose', () => {
+    expect(getLane('negotiations')!.color).toBe('rose');
+  });
+
+  it('pending_signature_payment is orange', () => {
+    expect(getLane('pending_signature_payment')!.color).toBe('orange');
+  });
+
+  it('post_event_close_out is teal', () => {
+    expect(getLane('post_event_close_out')!.color).toBe('teal');
+  });
+});
+
+describe('statusToLane — returns full lane object', () => {
+  it('tracking_on_hold returns correct lane', () => {
+    const lane = statusToLane('tracking_on_hold');
+    expect(lane!.label).toBe('Tracking / On Hold');
+    expect(lane!.canonicalStatus).toBe('tracking_on_hold');
+  });
+
+  it('negotiations returns correct lane', () => {
+    const lane = statusToLane('negotiations');
+    expect(lane!.label).toBe('Negotiations');
+    expect(lane!.color).toBe('rose');
   });
 
   it('completed and did_not_book are in separate lanes (not merged)', () => {
     expect(statusToLaneId('completed')).not.toBe(statusToLaneId('did_not_book'));
   });
 
-  it('pending_signature_payment lane has orange color', () => {
-    const lane = getLane('pending_signature_payment');
-    expect(lane!.color).toBe('orange');
-  });
-
-  it('pending_signature_payment and pending_client_review are separate lanes', () => {
-    expect(statusToLaneId('pending_contract_payment')).not.toBe(statusToLaneId('pending_client_review'));
-  });
-
-  it('proposal_in_progress is labeled Proposal (short label)', () => {
-    const lane = statusToLane('proposal_in_progress');
-    expect(lane!.label).toBe('Proposal');
+  it('tracking_on_hold and did_not_book are separate lanes', () => {
+    expect(statusToLaneId('tracking_on_hold')).not.toBe(statusToLaneId('did_not_book'));
   });
 });
 
-describe('no migration needed — enum values confirmed', () => {
-  it('completed status already exists in the enum (no migration required)', () => {
-    // If this compiles and the status maps correctly, the enum value exists
-    expect(statusToLaneId('completed')).toBe('completed');
+describe('no migration needed for new enum values', () => {
+  it('tracking_on_hold is a valid status that maps correctly', () => {
+    expect(statusToLaneId('tracking_on_hold')).toBe('tracking_on_hold');
   });
 
-  it('did_not_book status already exists in the enum (no migration required)', () => {
-    expect(statusToLaneId('did_not_book')).toBe('did_not_book');
+  it('negotiations is a valid status that maps correctly', () => {
+    expect(statusToLaneId('negotiations')).toBe('negotiations');
   });
 });

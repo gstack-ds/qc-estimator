@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { DbLead, DbTeamMember, LeadStatus, LeadStatusGroup } from '@/lib/supabase/queries';
-import { OPEN_STATUSES, PAUSED_STATUSES, CLOSED_STATUSES } from '@/lib/leads/constants';
+import { OPEN_STATUSES, CLOSED_STATUSES } from '@/lib/leads/constants';
 import LeadStatusBadge from './LeadStatusBadge';
 import { createLead, updateLead, bulkArchiveLeads, deleteLead, type LeadInput } from '@/app/(programs)/leads/actions';
 import MergeLeadsDialog from './MergeLeadsDialog';
@@ -12,28 +12,30 @@ import MergeLeadsDialog from './MergeLeadsDialog';
 // ─── Constants ─────────────────────────────────────────────
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
+  tracking_on_hold:         'Tracking / On Hold',
   new_lead:                 'New Lead',
   proposal_in_progress:     'Proposal in Progress',
   pending_client_review:    'Pending Client Review',
-  pending_contract_payment: 'Pending Contract/Payment',
+  negotiations:             'Negotiations',
+  pending_contract_payment: 'Pending Signature/Payment',
   under_contract:           'Under Contract',
-  planning:                 'Planning',
-  unresponsive:             'Unresponsive',
   post_event_close_out:     'Post Event Close Out',
+  unresponsive:             'Unresponsive',
   halted:                   'Halted',
+  planning:                 'Planning',
   planning_not_started:     'Planning Not Started',
   did_not_book:             'Did Not Book',
   completed:                'Completed',
 };
 
+// Active pipeline statuses shown in the inline dropdown (legacy statuses excluded)
 const ALL_STATUSES: LeadStatus[] = [
-  'new_lead', 'proposal_in_progress', 'pending_client_review', 'pending_contract_payment',
-  'under_contract', 'planning', 'unresponsive', 'post_event_close_out',
-  'halted', 'planning_not_started', 'did_not_book', 'completed',
+  'tracking_on_hold', 'new_lead', 'proposal_in_progress', 'pending_client_review',
+  'negotiations', 'pending_contract_payment', 'under_contract', 'post_event_close_out',
+  'did_not_book', 'completed', 'unresponsive',
 ];
 
 const OPEN_SET = new Set<LeadStatus>(OPEN_STATUSES);
-const PAUSED_SET = new Set<LeadStatus>(PAUSED_STATUSES);
 const CLOSED_SET = new Set<LeadStatus>(CLOSED_STATUSES);
 
 const GDP_ADVISORS = ['', 'Shelley', 'Riley', 'Chris', 'Benoit', 'Dawn', 'Maxine'];
@@ -542,7 +544,6 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
   const displayLeads = useMemo(() => {
     let base = effectiveLeads;
     if (groupFilter === 'open')        base = base.filter((l) => OPEN_SET.has(l.status));
-    else if (groupFilter === 'paused') base = base.filter((l) => PAUSED_SET.has(l.status));
     else if (groupFilter === 'closed') base = base.filter((l) => CLOSED_SET.has(l.status));
     if (ownerFilter !== '') base = base.filter((l) => l.assigned_to != null && String(l.assigned_to) === ownerFilter);
     if (dateFrom) base = base.filter((l) => l.created_at.slice(0, 10) >= dateFrom);
@@ -569,8 +570,8 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
     return <span className="text-brand-copper ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>;
   }
 
-  const GROUP_TABS: LeadStatusGroup[] = ['all', 'open', 'paused', 'closed'];
-  const GROUP_LABELS: Record<LeadStatusGroup, string> = { all: 'All', open: 'Open', paused: 'Paused', closed: 'Closed' };
+  const GROUP_TABS: LeadStatusGroup[] = ['all', 'open', 'closed'];
+  const GROUP_LABELS: Record<LeadStatusGroup, string> = { all: 'All', open: 'Open', closed: 'Closed' };
 
   const thCls = 'px-3 py-2 text-left text-[10px] font-medium text-brand-charcoal/50 uppercase tracking-wide whitespace-nowrap select-none';
   const thSortCls = thCls + ' cursor-pointer hover:text-brand-charcoal';

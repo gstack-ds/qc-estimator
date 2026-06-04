@@ -6,6 +6,7 @@ import type { DbProgramWithLocation, DbLocation } from '@/lib/supabase/queries';
 import {
   createProgram,
   updateProgram,
+  updateProgramType,
   extractProgramBriefFromPath,
   registerProgramAttachment,
   getProgramAttachments,
@@ -34,6 +35,7 @@ interface PendingFile {
 
 const SERVICE_STYLES = ['Family Style', 'Plated', 'Buffet', 'Stations', 'Cocktail Reception'];
 const ALCOHOL_TYPES = ['Full Bar', 'Beer & Wine', 'None'];
+const PROGRAM_TYPES = ['Transportation', 'Staffing', 'Entertainment/Activations', 'Restaurants', 'Venues', 'Multi Category', 'Activations'];
 
 function countExtractedFields(data: ExtractedProgramBrief | null): number {
   if (!data) return 0;
@@ -91,6 +93,7 @@ export default function ProgramForm({ program, locations, mode }: Props) {
   const [serviceCharge, setServiceCharge] = useState(String(parseFloat(((program?.service_charge_default ?? 0.20) * 100).toFixed(4))));
   const [gratuity, setGratuity] = useState(String(parseFloat(((program?.gratuity_default ?? 0.20) * 100).toFixed(4))));
   const [adminFee, setAdminFee] = useState(String(parseFloat(((program?.admin_fee_default ?? 0.05) * 100).toFixed(4))));
+  const [programType, setProgramType] = useState<string>(program?.program_type ?? '');
 
   // PDF attachments — create mode uses pending array, edit mode uses DB records
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
@@ -256,6 +259,7 @@ export default function ProgramForm({ program, locations, mode }: Props) {
       service_charge_default: parseFloat(serviceCharge) / 100 || 0.20,
       gratuity_default: parseFloat(gratuity) / 100 || 0.20,
       admin_fee_default: parseFloat(adminFee) / 100 || 0.05,
+      program_type: programType || null,
     });
     if (result.error || !result.id) {
       setSaveState('error');
@@ -522,27 +526,45 @@ export default function ProgramForm({ program, locations, mode }: Props) {
               </select>
             </div>
           </div>
-          <div>
-            <label className={labelClass}>Location</label>
-            <select
-              value={locationId}
-              onChange={(e) => { setLocationId(e.target.value); save({ location_id: e.target.value || null }); }}
-              className={fieldClass}
-            >
-              <option value="">— Select location —</option>
-              {locations.map((loc) => (
-                <option key={loc.id} value={loc.id}>{loc.name}</option>
-              ))}
-            </select>
-            {locationId && (() => {
-              const loc = locations.find((l) => l.id === locationId);
-              if (!loc) return null;
-              return (
-                <p className="text-xs text-brand-silver mt-1">
-                  Food: {(loc.food_tax_rate * 100).toFixed(3)}% · Alcohol: {(loc.alcohol_tax_rate * 100).toFixed(3)}% · General: {(loc.general_tax_rate * 100).toFixed(3)}%
-                </p>
-              );
-            })()}
+          <div className={sectionClass}>
+            <div>
+              <label className={labelClass}>Location</label>
+              <select
+                value={locationId}
+                onChange={(e) => { setLocationId(e.target.value); save({ location_id: e.target.value || null }); }}
+                className={fieldClass}
+              >
+                <option value="">— Select location —</option>
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                ))}
+              </select>
+              {locationId && (() => {
+                const loc = locations.find((l) => l.id === locationId);
+                if (!loc) return null;
+                return (
+                  <p className="text-xs text-brand-silver mt-1">
+                    Food: {(loc.food_tax_rate * 100).toFixed(3)}% · Alcohol: {(loc.alcohol_tax_rate * 100).toFixed(3)}% · General: {(loc.general_tax_rate * 100).toFixed(3)}%
+                  </p>
+                );
+              })()}
+            </div>
+            <div>
+              <label className={labelClass}>Program Type</label>
+              <select
+                value={programType}
+                onChange={(e) => {
+                  setProgramType(e.target.value);
+                  if (mode === 'edit' && program?.id) {
+                    updateProgramType(program.id, e.target.value || null);
+                  }
+                }}
+                className={fieldClass}
+              >
+                <option value="">— Select type —</option>
+                {PROGRAM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
           </div>
         </div>
       </div>

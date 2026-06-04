@@ -102,6 +102,7 @@ export interface DbProgram {
   archived_at: string | null;
   include_travel_in_production_fee: boolean;
   lead_id: string | null;
+  program_type: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -122,16 +123,28 @@ export interface DbProgramSummary {
   estimate_count: number;
   latest_total: number | null;
   lead_id: string | null;
+  program_type: string | null;
+  staffing_needs_count: number;
 }
 
 export async function getPrograms(): Promise<DbProgramSummary[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from('programs')
-    .select('id, name, client_name, event_date, status, archived_at, created_at, updated_at, latest_total, lead_id, estimates(count)')
-    .order('updated_at', { ascending: false });
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((p) => ({
+  const [programsResult, staffingResult] = await Promise.all([
+    supabase
+      .from('programs')
+      .select('id, name, client_name, event_date, status, archived_at, created_at, updated_at, latest_total, lead_id, program_type, estimates(count)')
+      .order('updated_at', { ascending: false }),
+    supabase
+      .from('program_staffing')
+      .select('program_id')
+      .eq('status', 'needs_staffing'),
+  ]);
+  if (programsResult.error) throw new Error(programsResult.error.message);
+  const openCounts: Record<string, number> = {};
+  for (const row of staffingResult.data ?? []) {
+    openCounts[row.program_id] = (openCounts[row.program_id] ?? 0) + 1;
+  }
+  return (programsResult.data ?? []).map((p) => ({
     id: p.id,
     name: p.name,
     client_name: p.client_name,
@@ -142,7 +155,9 @@ export async function getPrograms(): Promise<DbProgramSummary[]> {
     updated_at: p.updated_at,
     latest_total: (p as unknown as { latest_total: number | null }).latest_total,
     lead_id: (p as unknown as { lead_id: string | null }).lead_id ?? null,
+    program_type: (p as unknown as { program_type: string | null }).program_type ?? null,
     estimate_count: (p.estimates as unknown as [{ count: number }])[0]?.count ?? 0,
+    staffing_needs_count: openCounts[p.id] ?? 0,
   }));
 }
 
@@ -156,7 +171,7 @@ export async function getProgram(id: string): Promise<DbProgramWithLocation | nu
       location_id, cc_processing_fee, client_commission,
       gdp_commission_enabled, gdp_commission_rate,
       service_charge_default, gratuity_default, admin_fee_default,
-      third_party_commissions, status, archived_at, include_travel_in_production_fee, lead_id, created_at, updated_at,
+      third_party_commissions, status, archived_at, include_travel_in_production_fee, lead_id, program_type, created_at, updated_at,
       location:locations(id, name, food_tax_rate, alcohol_tax_rate, general_tax_rate, effective_date, updated_at)
     `)
     .eq('id', id)
@@ -980,10 +995,10 @@ export async function getVenueStats(): Promise<DbVenueStat[]> {
 // ─── Leads ────────────────────────────────────────────────
 
 export type { LeadStatus, LeadStatusGroup } from '@/lib/leads/constants';
-export { OPEN_STATUSES, PAUSED_STATUSES, CLOSED_STATUSES } from '@/lib/leads/constants';
+export { OPEN_STATUSES, CLOSED_STATUSES } from '@/lib/leads/constants';
 
 import type { LeadStatus, LeadStatusGroup } from '@/lib/leads/constants';
-import { OPEN_STATUSES, PAUSED_STATUSES, CLOSED_STATUSES } from '@/lib/leads/constants';
+import { OPEN_STATUSES, CLOSED_STATUSES } from '@/lib/leads/constants';
 
 export interface DbLead {
   id: string;
@@ -1078,16 +1093,14 @@ export async function getLead(id: string): Promise<DbLead | null> {
 export async function getLeadCounts(): Promise<Record<LeadStatusGroup, number>> {
   const supabase = await createClient();
   const { data, error } = await supabase.from('leads').select('status');
-  if (error || !data) return { all: 0, open: 0, paused: 0, closed: 0 };
+  if (error || !data) return { all: 0, open: 0, closed: 0 };
   const openSet = new Set<string>(OPEN_STATUSES);
-  const pausedSet = new Set<string>(PAUSED_STATUSES);
   const closedSet = new Set<string>(CLOSED_STATUSES);
-  const counts = { all: 0, open: 0, paused: 0, closed: 0 };
+  const counts = { all: 0, open: 0, closed: 0 };
   for (const row of data) {
     const s = row.status as string;
     counts.all++;
     if (openSet.has(s)) counts.open++;
-    else if (pausedSet.has(s)) counts.paused++;
     else if (closedSet.has(s)) counts.closed++;
   }
   return counts;
@@ -1118,16 +1131,28 @@ export interface LinkedProgramSummary {
   event_date: string | null;
   guest_count: number;
   program_status: string;
+  program_type: string | null;
+  staffing_needs_count: number;
 }
 
 export async function getLinkedProgramsByLeadId(): Promise<Record<string, LinkedProgramSummary>> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from('programs')
-    .select('id, name, event_date, guest_count, status, lead_id')
-    .not('lead_id', 'is', null);
+  const [programsResult, staffingResult] = await Promise.all([
+    supabase
+      .from('programs')
+      .select('id, name, event_date, guest_count, status, lead_id, program_type')
+      .not('lead_id', 'is', null),
+    supabase
+      .from('program_staffing')
+      .select('program_id')
+      .eq('status', 'needs_staffing'),
+  ]);
+  const openCounts: Record<string, number> = {};
+  for (const row of staffingResult.data ?? []) {
+    openCounts[row.program_id] = (openCounts[row.program_id] ?? 0) + 1;
+  }
   const result: Record<string, LinkedProgramSummary> = {};
-  for (const p of data ?? []) {
+  for (const p of programsResult.data ?? []) {
     if (p.lead_id) {
       result[p.lead_id] = {
         id: p.id,
@@ -1135,10 +1160,39 @@ export async function getLinkedProgramsByLeadId(): Promise<Record<string, Linked
         event_date: p.event_date,
         guest_count: p.guest_count,
         program_status: p.status,
+        program_type: (p as unknown as { program_type: string | null }).program_type ?? null,
+        staffing_needs_count: openCounts[p.id] ?? 0,
       };
     }
   }
   return result;
+}
+
+// ─── Staffing ─────────────────────────────────────────────
+
+export type StaffingStatus = 'needs_staffing' | 'assigned' | 'confirmed';
+
+export interface DbStaffingRole {
+  id: string;
+  program_id: string;
+  role: string;
+  assigned_to: number | null;
+  status: StaffingStatus;
+  notes: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getStaffingForProgram(programId: string): Promise<DbStaffingRole[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('program_staffing')
+    .select('*')
+    .eq('program_id', programId)
+    .order('sort_order');
+  if (error) return [];
+  return (data ?? []) as unknown as DbStaffingRole[];
 }
 
 export interface DbTeamMember {

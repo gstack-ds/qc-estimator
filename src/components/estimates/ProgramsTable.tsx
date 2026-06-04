@@ -30,6 +30,7 @@ export default function ProgramsTable({ programs }: Props) {
   const [, startTransition] = useTransition();
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<ProgramStatus>('active');
+  const [typeFilter, setTypeFilter] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('event_date');
@@ -41,6 +42,11 @@ export default function ProgramsTable({ programs }: Props) {
     did_not_book: programs.filter((p) => p.status === 'did_not_book').length,
   }), [programs]);
 
+  const allTypes = useMemo(() => {
+    const types = programs.map((p) => p.program_type).filter((t): t is string => !!t);
+    return [...new Set(types)].sort();
+  }, [programs]);
+
   const filtered = useMemo(() => {
     let base = programs.filter((p) => p.status === activeTab);
     if (query.trim()) {
@@ -48,6 +54,9 @@ export default function ProgramsTable({ programs }: Props) {
       base = base.filter((p) =>
         p.name.toLowerCase().includes(q) || (p.client_name ?? '').toLowerCase().includes(q)
       );
+    }
+    if (typeFilter) {
+      base = base.filter((p) => p.program_type === typeFilter);
     }
     return [...base].sort((a, b) => {
       let av = a[sortKey] ?? '';
@@ -105,7 +114,7 @@ export default function ProgramsTable({ programs }: Props) {
         </div>
       </div>
 
-      {/* Search + merge */}
+      {/* Search + type filter + merge */}
       <div className="flex items-center gap-3">
         <input
           type="search"
@@ -114,6 +123,16 @@ export default function ProgramsTable({ programs }: Props) {
           placeholder="Search programs or clients…"
           className="w-full max-w-sm border border-brand-cream rounded px-3 py-2 text-sm bg-white text-brand-charcoal placeholder:text-brand-silver focus:outline-none focus:ring-2 focus:ring-brand-copper focus:border-brand-brown transition-colors"
         />
+        {allTypes.length > 0 && (
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="border border-brand-cream rounded px-3 py-2 text-sm bg-white text-brand-charcoal focus:outline-none focus:ring-2 focus:ring-brand-copper focus:border-brand-brown transition-colors"
+          >
+            <option value="">All types</option>
+            {allTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        )}
         {selectedIds.size >= 2 && (
           <button
             onClick={() => setShowMergeDialog(true)}
@@ -201,15 +220,27 @@ export default function ProgramsTable({ programs }: Props) {
                     >
                       {program.name}
                     </Link>
-                    {program.lead_id && (
-                      <Link
-                        href={`/leads/${program.lead_id}`}
-                        onClick={stopProp}
-                        className="block text-[10px] text-brand-silver hover:text-brand-brown transition-colors mt-0.5"
-                      >
-                        ← Lead
-                      </Link>
-                    )}
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      {program.lead_id && (
+                        <Link
+                          href={`/leads/${program.lead_id}`}
+                          onClick={stopProp}
+                          className="text-[10px] text-brand-silver hover:text-brand-brown transition-colors"
+                        >
+                          ← Lead
+                        </Link>
+                      )}
+                      {program.program_type && (
+                        <span className="text-[10px] font-medium bg-brand-charcoal/10 text-brand-charcoal/70 rounded px-1.5 py-0.5">
+                          {program.program_type}
+                        </span>
+                      )}
+                      {program.staffing_needs_count > 0 && (
+                        <span className="text-[10px] font-medium bg-red-100 text-red-700 rounded px-1.5 py-0.5">
+                          Staffing: {program.staffing_needs_count} open
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     {program.client_name ? (

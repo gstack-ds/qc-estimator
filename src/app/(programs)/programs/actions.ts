@@ -27,6 +27,7 @@ export async function createProgram(data: {
   service_charge_default?: number;
   gratuity_default?: number;
   admin_fee_default?: number;
+  program_type?: string | null;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -72,12 +73,14 @@ export async function updateProgram(id: string, data: Partial<{
 }
 
 // ─── Program status sync (from board drag) ───────────────
-// Maps the 12-value lead pipeline status to the 3-value program lifecycle status.
+// Maps lead pipeline statuses to the 3-value program lifecycle status.
 const LEAD_STATUS_TO_PROGRAM_STATUS: Record<string, 'active' | 'completed' | 'did_not_book'> = {
-  did_not_book: 'did_not_book',
-  completed: 'completed',
-  unresponsive: 'did_not_book',
-  halted: 'did_not_book',
+  did_not_book:    'did_not_book',
+  completed:       'completed',
+  unresponsive:    'did_not_book',
+  halted:          'did_not_book',   // legacy — migrated to tracking_on_hold by migration 035
+  tracking_on_hold: 'active',
+  negotiations:    'active',
 };
 
 export async function syncProgramStatusFromLead(
@@ -843,5 +846,63 @@ export async function reorderEvents(programId: string, updates: { id: string; so
     )
   );
   revalidatePath(`/programs/${programId}`);
+}
+
+// ─── Program type ──────────────────────────────────────────
+
+export async function updateProgramType(
+  programId: string,
+  program_type: string | null,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from('programs').update({ program_type }).eq('id', programId);
+  if (error) return { error: error.message };
+  revalidatePath('/programs');
+  revalidatePath(`/programs/${programId}`);
+  return { error: null };
+}
+
+// ─── Staffing ─────────────────────────────────────────────
+
+export async function addStaffingRole(
+  programId: string,
+  role: string,
+): Promise<{ id: string | null; error: string | null }> {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from('program_staffing')
+    .select('*', { count: 'exact', head: true })
+    .eq('program_id', programId);
+  const { data, error } = await supabase
+    .from('program_staffing')
+    .insert({ program_id: programId, role, sort_order: count ?? 0 })
+    .select('id')
+    .single();
+  if (error) return { id: null, error: error.message };
+  revalidatePath(`/programs/${programId}`);
+  return { id: data.id as string, error: null };
+}
+
+export async function updateStaffingRole(
+  id: string,
+  programId: string,
+  data: Partial<{ role: string; assigned_to: number | null; status: string; notes: string | null; sort_order: number }>,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('program_staffing')
+    .update({ ...data, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath(`/programs/${programId}`);
+  return { error: null };
+}
+
+export async function deleteStaffingRole(id: string, programId: string): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from('program_staffing').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath(`/programs/${programId}`);
+  return { error: null };
 }
 

@@ -1,9 +1,11 @@
 import type { LeadStatus } from '@/lib/supabase/queries';
 
 const CONFIG: Record<LeadStatus, { label: string; classes: string }> = {
+  tracking_on_hold:          { label: 'Tracking / On Hold',         classes: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
   new_lead:                  { label: 'New Lead',                   classes: 'bg-blue-50 text-blue-700 border-blue-100' },
   proposal_in_progress:      { label: 'Proposal in Progress',       classes: 'bg-amber-50 text-amber-700 border-amber-100' },
   pending_client_review:     { label: 'Pending Client Review',      classes: 'bg-orange-50 text-orange-700 border-orange-100' },
+  negotiations:              { label: 'Negotiations',               classes: 'bg-rose-50 text-rose-700 border-rose-100' },
   pending_contract_payment:  { label: 'Pending Contract/Payment',   classes: 'bg-yellow-50 text-yellow-700 border-yellow-100' },
   under_contract:            { label: 'Under Contract',             classes: 'bg-green-50 text-green-700 border-green-100' },
   planning:                  { label: 'Planning',                   classes: 'bg-teal-50 text-teal-700 border-teal-100' },
