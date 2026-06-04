@@ -241,6 +241,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-06-04 | program_type: nullable TEXT on programs, user-set dropdown, badge on card/list/detail | 7 values (Transportation, Staffing, Entertainment/Activations, Restaurants, Venues, Multi Category, Activations). updateProgramType() server action auto-saves in edit mode. ProgramsTable: type filter dropdown + inline badge. Kanban: badge on converted-program card (via LinkedProgramSummary). getProgram() now selects program_type. | PG enum (hard to extend); separate type table (overkill for 7 values) |
 | 2026-06-04 | Onsite staffing tracker: program_staffing table (migration 036), StaffingSection component | per-role row with assigned_to (team_members dropdown), status enum (needs_staffing/assigned/confirmed), notes. Add/delete roles inline. Summary line "N of M confirmed · X need staffing." Staffing badge on programs list and Kanban. getStaffingForProgram() bulk query, staffing_needs_count on DbProgramSummary/LinkedProgramSummary. | Per-card N+1 queries (rejected — bulk map pattern); separate staffing page (too far from program context) |
 | 2026-06-04 | 10-lane pipeline + tracking_on_hold/negotiations enum values + data remaps | Migration 035: ALTER TYPE adds tracking_on_hold + negotiations; UPDATE remaps halted→tracking_on_hold, planning/planning_not_started→under_contract. LeadStatusGroup loses 'paused' (now open/closed only). PIPELINE_LANES has 10 lanes with correct colors. Legacy values kept in type for DB compat but mapped to safe lanes. | Recreate enum (risky with existing data); split into separate migration per value (unnecessary) |
+| 2026-06-04 | Tour estimate type — 4 phases, pure TS engine modules, JSONB detail storage | Phase 1: migration 037 (tour_details JSONB, estimate_type='tour'), TourEstimateBuilder shell. Phase 2: vehicleSizing.ts (suggestFleet, 4 candidate fleets, greeter logic). Phase 3: guideScaling.ts (waves, venue cap, self-guided), GuideSuggestionBanner + "Add as line item". Phase 4: tour_catalog table (migration 038), getTourCatalog/saveTourTemplate actions, Load/Save template UI, buildSummaryRows tour branch, ProposalDocument tourDetails logistics block. | Inline engine logic in component (untestable); separate tour DB tables (overkill for JSONB details) |
+| 2026-06-04 | TourDetails extracted to src/lib/tours/types.ts (server-free) | ProposalDocument is dynamically imported client-side — can't safely use `import type` from a 'use server' file in all bundling contexts. Moving TourDetails + TourCatalogEntry to a plain TS file avoids this entirely. Pattern mirrors leads/constants.ts and programs/documentTypes.ts. | Keep in actions.ts (risky for dynamic imports); duplicate interface (drift) |
 
 ## Gotchas Log
 
@@ -267,6 +269,7 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-05-05 | Migration 017 + 020 created parallel column sets for the same data | Migration 017 created source_advisor/source_coordinator/third_party_company/lead_source. Migration 020 added gdp_advisor/gdp_coordinator/third_party/lead_source_type as new columns. Both exist in DB. Scanner was writing to old, UI reading from new → data invisible in dropdowns. Fix: writer.ts explicitly maps new cols. Historical rows may need a one-time UPDATE backfill. |
 | 2026-05-13 | Proposal validation EXPECTED_* values: manually computed via algebra, not by running engine | Engine subtotalClient INCLUDES vendor-side taxes (foodTaxOur etc.) per engine code. vendorCostsBase = subtotalOur - vendorTaxesTotal. ccProcessingAmount uses tax-inclusive subtotalClient. Algebraic verify: qcRevenue = markup + markupRevenue*clientComm - gdpComm - thirdParty. Get this wrong and test values look right but aren't. |
 | 2026-05-28 | Synchronous export in 'use server' file causes Vercel build failure | Next.js enforces that all exports in a 'use server' module are async functions (server actions). A plain `export function` (non-async) triggers a build error. Any pure utility accidentally placed in actions.ts must be moved to a separate non-server file. |
+| 2026-06-04 | Migration 038 failed with `function handle_updated_at() does not exist` | The trigger function in this DB is `update_updated_at()` (defined in migration 001), not `handle_updated_at()`. Used wrong name from memory. Always check existing migrations for the exact trigger function name before writing a new one. |
 | 2026-06-02 | uploadLineItemThumbnail pointed at wrong bucket ('estimates' instead of 'line-item-thumbnails') | 'estimates' is the DB table name, not a storage bucket. The upload silently failed — Supabase returned an error but the server action swallowed it. Always verify bucket names in Storage dashboard before writing upload code. |
 | 2026-06-02 | PDF section order was arbitrary — items sorted by item-level sort_order, not section-level | Array.from(new Set(lineItems.map(li => li.section))) gives section order from the first item of each section encountered. When multiple sections have items at sort_order 0, the output is unpredictable. Fix: pass orderedSections[] from each builder. |
 | 2026-06-02 | PDF extraction silently capped at 5-10 items — prompt said "aim for 5-10 total" | Claude honored the instruction and deliberately skipped items on larger menus. The cap was a leftover from early development. Removed from prompt; max_tokens raised from 4096 to 16000. Always check extraction prompts for unintended quantity limits. |
@@ -359,6 +362,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 
 ### Remaining
 - [x] Migrations 035 and 036 run in production — enum values live, data remapped, program_staffing table created
+- [x] Tour estimate type — all 4 phases complete (migrations 037 + 038, vehicleSizing, guideScaling, catalog, PDF; 403 tests passing)
+- [ ] **Run migration 038 in production** — `tour_catalog` table (fixed trigger name: `update_updated_at()`)
 - [ ] **Venue profile data** — need real estimates with `venue_id` set to verify history section populates. Trigger by opening an existing venue estimate, selecting a venue, then visiting the venue profile.
 - [ ] **Tell Alex** — Bright Darling is not on Google Fonts; Cormorant Garamond is used in the Slide Copy preview instead; she should swap to Bright Darling in the actual Canva template
 - [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs (note: EXPECTED_QC_MARGIN values changed significantly with bug #5 fix and again with production fee tax)
@@ -366,9 +371,11 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- **Run migrations 035 + 036 in production** before testing any of the new features on the live site.
+- **Run migration 038 in production** (tour_catalog table) before testing Load/Save template on the live site.
+- Verify Tour estimate end-to-end: create a tour estimate, fill TourDetailsPanel fields (including guide scaling), use "Add as line item", save a template, load it back.
+- Run the Phase 4 verification checklist (items 4.2–4.13) against the live site.
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in Slide Copy preview; she swaps in Canva).
-- Venue profile attachment downloads: the history section shows filenames but no download link — needs signed URL generation server-side.
+- Venue profile attachment downloads: signed URL generation is the next small task.
 - Scanner is live and working. Run `npm run dedup` if duplicate leads accumulate.
 - Proposal validation against Excel is the next quality check.
 - Role-based access (admin vs user UI enforcement) is the remaining backlog item after Excel validation.
