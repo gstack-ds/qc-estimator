@@ -11,7 +11,7 @@ export interface PipelineLane {
   color: string;
 }
 
-// ─── 7-lane pipeline ──────────────────────────────────────
+// ─── 8-lane pipeline ──────────────────────────────────────
 //
 // No migration required — all 12 LeadStatus enum values already exist.
 // Enum values: new_lead, proposal_in_progress, pending_client_review,
@@ -19,7 +19,7 @@ export interface PipelineLane {
 //   post_event_close_out, halted, planning_not_started, did_not_book, completed.
 //
 // Status → lane reconciliation:
-//   pending_contract_payment → Pending Client Review (waiting for client action before contract)
+//   pending_contract_payment → Pending Signature/Payment (own lane — client signing/paying stage)
 //   planning_not_started     → Planning (same stage, not yet begun)
 //   post_event_close_out     → Planning (final active-work phase)
 //   unresponsive             → Did Not Book (stalled; client unreachable)
@@ -46,9 +46,15 @@ export const PIPELINE_LANES: PipelineLane[] = [
     id: 'pending_client_review',
     label: 'Pending Client Review',
     canonicalStatus: 'pending_client_review',
-    // pending_contract_payment: client reviewing before signing/paying
-    statuses: ['pending_client_review', 'pending_contract_payment'],
+    statuses: ['pending_client_review'],
     color: 'purple',
+  },
+  {
+    id: 'pending_signature_payment',
+    label: 'Pending Signature/Payment',
+    canonicalStatus: 'pending_contract_payment',
+    statuses: ['pending_contract_payment'],
+    color: 'orange',
   },
   {
     id: 'under_contract',
@@ -147,6 +153,12 @@ export const LANE_STYLES: Record<string, LaneStyles> = {
     headerBorder: 'border-t-purple-400',
     cardBg:       'bg-purple-50',
     cardBorder:   'border-l-purple-400',
+  },
+  pending_signature_payment: {
+    dot:          'bg-orange-500',
+    headerBorder: 'border-t-orange-400',
+    cardBg:       'bg-orange-50',
+    cardBorder:   'border-l-orange-400',
   },
   under_contract: {
     dot:          'bg-green-500',

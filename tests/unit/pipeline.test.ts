@@ -24,8 +24,8 @@ const ALL_STATUSES: LeadStatus[] = [
 ];
 
 describe('PIPELINE_LANES — structure', () => {
-  it('has exactly 7 lanes', () => {
-    expect(PIPELINE_LANES).toHaveLength(7);
+  it('has exactly 8 lanes', () => {
+    expect(PIPELINE_LANES).toHaveLength(8);
   });
 
   it('lanes are in the correct left-to-right order', () => {
@@ -34,6 +34,7 @@ describe('PIPELINE_LANES — structure', () => {
       'new_lead',
       'proposal',
       'pending_client_review',
+      'pending_signature_payment',
       'under_contract',
       'planning',
       'completed',
@@ -98,8 +99,8 @@ describe('statusToLaneId — per-status spot checks', () => {
     expect(statusToLaneId('pending_client_review')).toBe('pending_client_review');
   });
 
-  it('pending_contract_payment → pending_client_review (pre-contract client action)', () => {
-    expect(statusToLaneId('pending_contract_payment')).toBe('pending_client_review');
+  it('pending_contract_payment → pending_signature_payment (own lane)', () => {
+    expect(statusToLaneId('pending_contract_payment')).toBe('pending_signature_payment');
   });
 
   it('under_contract → under_contract', () => {
@@ -148,6 +149,10 @@ describe('canonical status per lane (what gets written on drag-and-drop)', () =>
     expect(getLane('pending_client_review')!.canonicalStatus).toBe('pending_client_review');
   });
 
+  it('Pending Signature/Payment → pending_contract_payment', () => {
+    expect(getLane('pending_signature_payment')!.canonicalStatus).toBe('pending_contract_payment');
+  });
+
   it('Under Contract → under_contract', () => {
     expect(getLane('under_contract')!.canonicalStatus).toBe('under_contract');
   });
@@ -182,6 +187,15 @@ describe('statusToLane — returns full lane object', () => {
 
   it('completed and did_not_book are in separate lanes (not merged)', () => {
     expect(statusToLaneId('completed')).not.toBe(statusToLaneId('did_not_book'));
+  });
+
+  it('pending_signature_payment lane has orange color', () => {
+    const lane = getLane('pending_signature_payment');
+    expect(lane!.color).toBe('orange');
+  });
+
+  it('pending_signature_payment and pending_client_review are separate lanes', () => {
+    expect(statusToLaneId('pending_contract_payment')).not.toBe(statusToLaneId('pending_client_review'));
   });
 
   it('proposal_in_progress is labeled Proposal (short label)', () => {

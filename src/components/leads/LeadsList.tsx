@@ -47,7 +47,7 @@ const THIRD_PARTY_OPTIONS = [
 ];
 const LEAD_SOURCE_OPTIONS = ['', 'GDP', 'Direct', 'Rubra', 'Conference', 'Sales Coordinator'];
 
-type SortKey = 'client_name' | 'program_name' | 'city' | 'guest_count' | 'start_date' | 'end_date' | 'status' | 'created_at';
+type SortKey = 'client_name' | 'program_name' | 'city' | 'guest_count' | 'start_date' | 'end_date' | 'status' | 'created_at' | 'current_due_date';
 
 const NEW_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
@@ -590,7 +590,7 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
     { label: 'Third Party' },
     { label: 'Lead Source' },
     { label: 'Last F/U' },
-    { label: 'Due Date' },
+    { label: 'Due Date', key: 'current_due_date' },
     { label: 'Received', key: 'created_at' },
     { label: '' },
   ];

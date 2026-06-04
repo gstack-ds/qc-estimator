@@ -111,9 +111,13 @@ function BriefSection({
               className="group relative"
               onClick={stopProp}
             >
-              <pre className="text-sm text-brand-charcoal whitespace-pre-wrap font-sans leading-relaxed min-h-[2rem]">
-                {section?.content || <span className="text-brand-silver italic">No content yet</span>}
-              </pre>
+              {sectionKey === 'financialDetails' && section?.content ? (
+                <FinancialDetailsTable content={section.content} />
+              ) : (
+                <pre className="text-sm text-brand-charcoal whitespace-pre-wrap font-sans leading-relaxed min-h-[2rem]">
+                  {section?.content || <span className="text-brand-silver italic">No content yet</span>}
+                </pre>
+              )}
               <button
                 onClick={() => { setDraft(section?.content ?? ''); setEditing(true); }}
                 className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[10px] text-brand-silver hover:text-brand-brown px-2 py-1 bg-white border border-brand-cream rounded"
@@ -149,7 +153,65 @@ function BriefSection({
   );
 }
 
+// ─── Financial Details table ──────────────────────────────
+
+interface FinancialRow { label: string; value: string }
+interface FinancialSection { header: string; rows: FinancialRow[] }
+
+function parseFinancialContent(content: string): FinancialSection[] {
+  const sections: FinancialSection[] = [];
+  let current: FinancialSection | null = null;
+  for (const raw of content.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith('===')) {
+      current = { header: line.replace(/===/g, '').trim(), rows: [] };
+      sections.push(current);
+    } else if (current) {
+      const colonIdx = line.lastIndexOf(': ');
+      if (colonIdx > 0) current.rows.push({ label: line.slice(0, colonIdx), value: line.slice(colonIdx + 2) });
+    }
+  }
+  return sections.filter(s => s.rows.length > 0);
+}
+
+function FinancialDetailsTable({ content }: { content: string }) {
+  const sections = parseFinancialContent(content);
+  if (!sections.length) {
+    return <pre className="text-sm text-brand-charcoal whitespace-pre-wrap font-sans leading-relaxed min-h-[2rem]">{content}</pre>;
+  }
+  return (
+    <div className="space-y-4">
+      {sections.map((sec, si) => (
+        <div key={si}>
+          <p className="text-[10px] font-semibold text-brand-charcoal/50 uppercase tracking-wide mb-1.5">{sec.header}</p>
+          <table className="w-full text-sm border-collapse">
+            <tbody>
+              {sec.rows.map((row, ri) => {
+                const isTotal = row.label === 'TOTAL' || row.label === 'Per Person';
+                return (
+                  <tr key={ri} className={`border-b border-brand-cream/60 ${isTotal ? 'font-semibold' : ''}`}>
+                    <td className="py-1.5 pr-4 text-brand-charcoal/80">{row.label}</td>
+                    <td className="py-1.5 text-right tabular-nums text-brand-charcoal">{row.value}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Copy brief helper ────────────────────────────────────
+
+function buildMarkdownFinancial(sections: FinancialSection[]): string {
+  return sections.map(sec => {
+    const rows = sec.rows.map(r => `| ${r.label} | ${r.value} |`).join('\n');
+    return `**${sec.header}**\n\n| Item | Amount |\n|------|--------|\n${rows}`;
+  }).join('\n\n');
+}
 
 function buildPlainTextBrief(brief: ProgramBrief, programName: string): string {
   const lines = [`ONSITE BRIEF — ${programName.toUpperCase()}`, ''];
@@ -158,7 +220,12 @@ function buildPlainTextBrief(brief: ProgramBrief, programName: string): string {
     if (!section?.content) continue;
     lines.push(`== ${BRIEF_SECTION_LABELS[key].toUpperCase()} ==`);
     if (section.isAiDraft) lines.push('[AI DRAFT — REVIEW BEFORE SHARING]');
-    lines.push(section.content);
+    if (key === 'financialDetails') {
+      const sections = parseFinancialContent(section.content);
+      lines.push(sections.length ? buildMarkdownFinancial(sections) : section.content);
+    } else {
+      lines.push(section.content);
+    }
     lines.push('');
   }
   lines.push(`Generated: ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`);
