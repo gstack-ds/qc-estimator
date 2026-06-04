@@ -1,6 +1,9 @@
 -- Migration 036: Onsite staffing tracker table.
 
-CREATE TYPE IF NOT EXISTS staffing_status AS ENUM ('needs_staffing', 'assigned', 'confirmed');
+DO $$ BEGIN
+  CREATE TYPE staffing_status AS ENUM ('needs_staffing', 'assigned', 'confirmed');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS program_staffing (
   id          UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
