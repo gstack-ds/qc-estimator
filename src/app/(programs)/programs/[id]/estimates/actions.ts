@@ -1011,7 +1011,10 @@ async function fetchMapsDistance(origin: string, destination: string, mode: 'dri
     console.error(`[Maps] Element status for ${mode}:`, el?.status ?? 'missing', JSON.stringify(data?.status));
     return null;
   }
-  return { distanceMeters: el.distance.value, durationSeconds: el.duration.value };
+  const distanceMeters = el.distance.value;
+  const durationSeconds = el.duration.value;
+  console.log(`[Maps ${mode}] "${origin}" → "${destination}" | ${distanceMeters}m | ${(distanceMeters / 1609.344).toFixed(2)}mi | ${Math.round(durationSeconds / 60)}min`);
+  return { distanceMeters, durationSeconds };
 }
 
 export async function getTravelTime(

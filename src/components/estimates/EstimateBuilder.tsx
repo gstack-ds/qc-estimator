@@ -196,7 +196,10 @@ export default function EstimateBuilder({
   const venueAddress = useMemo(() => {
     const v = venues.find((vn) => vn.id === estimate.venue_id);
     if (!v) return undefined;
-    return [v.address, v.city, v.state].filter(Boolean).join(', ') || undefined;
+    // Always lead with venue name so the Maps API geocodes to the place, not just
+    // the city centroid (which would be ~1 mile off for short urban routes).
+    const parts = [v.name, v.address, v.city, v.state].filter(Boolean);
+    return parts.join(', ') || undefined;
   }, [venues, estimate.venue_id]);
 
   // Sections state
