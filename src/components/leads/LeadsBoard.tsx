@@ -73,7 +73,7 @@ function KanbanLane({
       <div
         ref={setNodeRef}
         onClick={onToggleCollapse}
-        className={`flex flex-col items-center w-10 flex-shrink-0 rounded-lg border border-t-2 cursor-pointer select-none transition-all duration-150 ${
+        className={`flex flex-col items-center w-10 h-full flex-shrink-0 rounded-lg border border-t-2 cursor-pointer select-none transition-all duration-150 ${
           styles.headerBorder
         } ${isOver
           ? 'bg-brand-copper/15 border-brand-copper/50 scale-[1.02]'
@@ -101,12 +101,12 @@ function KanbanLane({
     // Full column is the droppable — gives accurate targeting anywhere in the lane
     <div
       ref={setNodeRef}
-      className={`flex flex-col min-w-[220px] w-[220px] flex-shrink-0 rounded-lg transition-all duration-150 ${
+      className={`flex flex-col min-w-[220px] w-[220px] h-full flex-shrink-0 rounded-lg transition-all duration-150 ${
         isOver ? 'ring-2 ring-brand-copper/50 ring-offset-1 scale-[1.01]' : ''
       }`}
     >
-      {/* Lane header */}
-      <div className={`bg-white border border-brand-cream border-t-2 rounded-t-lg px-3 py-2.5 ${styles.headerBorder}`}>
+      {/* Lane header — stays pinned at top */}
+      <div className={`bg-white border border-brand-cream border-t-2 rounded-t-lg px-3 py-2.5 flex-shrink-0 ${styles.headerBorder}`}>
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${styles.dot}`} />
           <span className="text-xs font-semibold text-brand-charcoal leading-tight flex-1">{lane.label}</span>
@@ -123,9 +123,9 @@ function KanbanLane({
         </div>
       </div>
 
-      {/* Cards area */}
+      {/* Cards area — scrolls vertically within the lane */}
       <div
-        className={`flex-1 min-h-[200px] p-2 space-y-2 rounded-b-lg border border-t-0 transition-colors duration-150 ${
+        className={`flex-1 min-h-0 overflow-y-auto p-2 space-y-2 rounded-b-lg border border-t-0 transition-colors duration-150 ${
           isOver
             ? 'bg-brand-copper/5 border-brand-copper/30'
             : 'bg-brand-offwhite/50 border-brand-cream'
@@ -292,9 +292,9 @@ export default function LeadsBoard({ leads, teamMembers, linkedPrograms }: Props
   const hasFilters = ownerFilter || search || dateFrom || dateTo;
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col h-[calc(100vh-220px)] min-h-[420px]">
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 flex-shrink-0 mb-2">
         <input
           type="search"
           placeholder="Search client or program…"
@@ -329,48 +329,56 @@ export default function LeadsBoard({ leads, teamMembers, linkedPrograms }: Props
         <span className="ml-auto text-xs text-brand-silver">{filtered.length} leads</span>
       </div>
 
-      {/* Board */}
-      <div className="overflow-x-auto pb-4">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={pointerWithin}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <div className="flex gap-2 min-w-max items-start">
-            {PIPELINE_LANES.map(lane => (
-              <KanbanLane
-                key={lane.id}
-                lane={lane}
-                leads={leadsByLane.get(lane.id) ?? []}
-                teamMembers={teamMembers}
-                linkedPrograms={linkedPrograms}
-                collapsed={collapsed.has(lane.id)}
-                onToggleCollapse={() => toggleCollapse(lane.id)}
-                onCardUpdate={handleUpdate}
-                justMovedId={justMovedId}
-              />
-            ))}
-          </div>
-
-          <DragOverlay
-            dropAnimation={{
-              duration: 180,
-              easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.1)',
-            }}
+      {/* Board — flex-1 so it fills remaining height; relative for edge fades */}
+      <div className="relative flex-1 min-h-0">
+        {/* Horizontal scroll container — scrollbar always at bottom of this box */}
+        <div className="h-full overflow-x-auto">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={pointerWithin}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
           >
-            {activeLead && (
-              <div className="w-[210px] rotate-1 opacity-90 drop-shadow-lg">
-                <LeadCardContent
-                  lead={activeLead}
+            <div className="flex gap-2 min-w-max h-full">
+              {PIPELINE_LANES.map(lane => (
+                <KanbanLane
+                  key={lane.id}
+                  lane={lane}
+                  leads={leadsByLane.get(lane.id) ?? []}
                   teamMembers={teamMembers}
-                  isOverlay
-                  linkedProgram={linkedPrograms[activeLead.id]}
+                  linkedPrograms={linkedPrograms}
+                  collapsed={collapsed.has(lane.id)}
+                  onToggleCollapse={() => toggleCollapse(lane.id)}
+                  onCardUpdate={handleUpdate}
+                  justMovedId={justMovedId}
                 />
-              </div>
-            )}
-          </DragOverlay>
-        </DndContext>
+              ))}
+            </div>
+
+            <DragOverlay
+              dropAnimation={{
+                duration: 180,
+                easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.1)',
+              }}
+            >
+              {activeLead && (
+                <div className="w-[210px] rotate-1 opacity-90 drop-shadow-lg">
+                  <LeadCardContent
+                    lead={activeLead}
+                    teamMembers={teamMembers}
+                    isOverlay
+                    linkedProgram={linkedPrograms[activeLead.id]}
+                  />
+                </div>
+              )}
+            </DragOverlay>
+          </DndContext>
+        </div>
+
+        {/* Edge fade — left */}
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-brand-offwhite to-transparent z-10" />
+        {/* Edge fade — right */}
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-brand-offwhite to-transparent z-10" />
       </div>
     </div>
   );
