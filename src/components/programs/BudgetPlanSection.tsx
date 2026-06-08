@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import type { DbBudgetPlanEntry } from '@/lib/supabase/queries';
 import {
@@ -8,6 +8,7 @@ import {
   updateBudgetEntry,
   deleteBudgetEntry,
 } from '@/app/(programs)/programs/actions';
+import { calculateBudgetRollup } from '@/lib/engine/budgetPlan';
 
 interface EstimateOption { id: string; name: string; type: string }
 interface EventOption   { id: string; name: string }
@@ -18,6 +19,8 @@ interface Props {
   estimates: EstimateOption[];
   events: EventOption[];
   programGuestCount: number;
+  /** Map of estimate_id → total client cost (engine-computed). Used for rollup. */
+  estimateTotals?: Record<string, number>;
 }
 
 // ─── Blank form state ──────────────────────────────────────
@@ -245,7 +248,7 @@ function EntryForm({ form, onChange, estimates, events, onSave, onCancel, saving
 
 // ─── Main component ────────────────────────────────────────
 
-export default function BudgetPlanSection({ programId, initialEntries, estimates, events, programGuestCount }: Props) {
+export default function BudgetPlanSection({ programId, initialEntries, estimates, events, programGuestCount, estimateTotals = {} }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [entries, setEntries] = useState<DbBudgetPlanEntry[]>(initialEntries);
@@ -255,6 +258,11 @@ export default function BudgetPlanSection({ programId, initialEntries, estimates
   const [editForm, setEditForm] = useState<Partial<DbBudgetPlanEntry>>({});
   const [saving, setSaving] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+
+  const rollup = useMemo(
+    () => calculateBudgetRollup(entries, estimateTotals, programGuestCount),
+    [entries, estimateTotals, programGuestCount]
+  );
 
   function startAdd(type: 'per_event' | 'pooled') {
     setAddingType(type);
@@ -463,6 +471,73 @@ export default function BudgetPlanSection({ programId, initialEntries, estimates
               >
                 + Pooled Budget
               </button>
+            </div>
+          )}
+
+          {/* Rollup table */}
+          {entries.length > 0 && (
+            <div className="mt-4 border-t border-brand-cream pt-4">
+              <p className="text-xs font-semibold text-brand-charcoal mb-2 uppercase tracking-wide">Budget Rollup</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-brand-silver border-b border-brand-cream">
+                      <th className="text-left pb-1.5 font-medium pr-3">Entry</th>
+                      <th className="text-right pb-1.5 font-medium pr-3">Low</th>
+                      <th className="text-right pb-1.5 font-medium pr-3">High</th>
+                      <th className="text-right pb-1.5 font-medium pr-3">Target</th>
+                      <th className="text-right pb-1.5 font-medium pr-3">Actual</th>
+                      <th className="text-right pb-1.5 font-medium">Variance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rollup.rows.map((row) => (
+                      <tr key={row.entryId} className="border-b border-brand-cream/50 hover:bg-brand-offwhite/40">
+                        <td className="py-1.5 pr-3 text-brand-charcoal font-medium max-w-[140px] truncate">
+                          {row.label || <span className="italic text-brand-silver">Untitled</span>}
+                        </td>
+                        <td className="py-1.5 pr-3 text-right text-brand-charcoal/70 tabular-nums">{fmt(row.targetLow)}</td>
+                        <td className="py-1.5 pr-3 text-right text-brand-charcoal/70 tabular-nums">{fmt(row.targetHigh)}</td>
+                        <td className="py-1.5 pr-3 text-right font-medium text-brand-charcoal tabular-nums">{fmt(row.pinnedTarget)}</td>
+                        <td className="py-1.5 pr-3 text-right tabular-nums">
+                          {row.actualTotal != null ? (
+                            <span className="text-brand-charcoal">{fmt(row.actualTotal)}</span>
+                          ) : (
+                            <span className="text-brand-silver">—</span>
+                          )}
+                        </td>
+                        <td className="py-1.5 text-right tabular-nums">
+                          {row.variance != null ? (
+                            <span className={row.variance > 0 ? 'text-amber-600 font-medium' : row.variance < 0 ? 'text-emerald-600 font-medium' : 'text-brand-silver'}>
+                              {row.variance > 0 ? '+' : ''}{fmt(row.variance)}
+                            </span>
+                          ) : (
+                            <span className="text-brand-silver">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-brand-cream font-semibold text-brand-charcoal">
+                      <td className="pt-2 pr-3">Total</td>
+                      <td className="pt-2 pr-3 text-right tabular-nums">{fmt(rollup.totalLow)}</td>
+                      <td className="pt-2 pr-3 text-right tabular-nums">{fmt(rollup.totalHigh)}</td>
+                      <td className="pt-2 pr-3 text-right tabular-nums">{fmt(rollup.totalPinnedTarget)}</td>
+                      <td className="pt-2 pr-3 text-right tabular-nums">
+                        {rollup.totalActual != null ? fmt(rollup.totalActual) : <span className="font-normal text-brand-silver">—</span>}
+                      </td>
+                      <td className="pt-2 text-right tabular-nums">
+                        {rollup.totalActual != null ? (
+                          <span className={rollup.totalActual - rollup.totalPinnedTarget > 0 ? 'text-amber-600' : rollup.totalActual - rollup.totalPinnedTarget < 0 ? 'text-emerald-600' : ''}>
+                            {rollup.totalActual - rollup.totalPinnedTarget > 0 ? '+' : ''}{fmt(rollup.totalActual - rollup.totalPinnedTarget)}
+                          </span>
+                        ) : <span className="font-normal text-brand-silver">—</span>}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           )}
         </div>

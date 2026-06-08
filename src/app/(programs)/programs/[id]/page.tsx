@@ -486,6 +486,7 @@ export default async function ProgramPage({ params }: Props) {
             estimates={estimates.map((e) => ({ id: e.id, name: e.name, type: e.type }))}
             events={dbEvents.map((ev) => ({ id: ev.id, name: ev.name }))}
             programGuestCount={program.guest_count}
+            estimateTotals={Object.fromEntries([...cardMap.entries()].map(([eid, card]) => [eid, card.total]))}
           />
         </div>
       </div>
