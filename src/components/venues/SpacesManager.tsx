@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { DbVenueSpace } from '@/lib/supabase/queries';
 import { createVenueSpace, updateVenueSpace, deleteVenueSpace } from '@/app/(programs)/venues/actions';
+import { PRIVACY_TAG_OPTIONS, type SpacePrivacyTag } from '@/lib/vendors/constants';
 
 interface Props {
   venueId: string;
@@ -19,6 +20,7 @@ interface SpaceForm {
   service_charge_default: string;
   gratuity_default: string;
   admin_fee_default: string;
+  privacy_tag: SpacePrivacyTag | '';
   notes: string;
 }
 
@@ -26,6 +28,7 @@ const emptyForm: SpaceForm = {
   name: '', capacity_seated: '', capacity_standing: '',
   fb_minimum: '', room_fee: '',
   service_charge_default: '', gratuity_default: '', admin_fee_default: '',
+  privacy_tag: '',
   notes: '',
 };
 
@@ -39,6 +42,7 @@ function spaceToForm(s: DbVenueSpace): SpaceForm {
     service_charge_default: s.service_charge_default !== null ? (s.service_charge_default * 100).toFixed(1) : '',
     gratuity_default: s.gratuity_default !== null ? (s.gratuity_default * 100).toFixed(1) : '',
     admin_fee_default: s.admin_fee_default !== null ? (s.admin_fee_default * 100).toFixed(1) : '',
+    privacy_tag: (s.privacy_tag as SpacePrivacyTag) ?? '',
     notes: s.notes ?? '',
   };
 }
@@ -53,12 +57,13 @@ function formToPayload(f: SpaceForm) {
     service_charge_default: f.service_charge_default ? parseFloat(f.service_charge_default) / 100 : null,
     gratuity_default: f.gratuity_default ? parseFloat(f.gratuity_default) / 100 : null,
     admin_fee_default: f.admin_fee_default ? parseFloat(f.admin_fee_default) / 100 : null,
+    privacy_tag: f.privacy_tag || null,
     notes: f.notes.trim() || null,
   };
 }
 
 function SpaceFormFields({ form, onChange }: { form: SpaceForm; onChange: (f: SpaceForm) => void }) {
-  const set = (k: keyof SpaceForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+  const set = (k: keyof SpaceForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     onChange({ ...form, [k]: e.target.value });
 
   return (
@@ -79,7 +84,14 @@ function SpaceFormFields({ form, onChange }: { form: SpaceForm; onChange: (f: Sp
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-5 gap-3">
+      <div className="grid grid-cols-6 gap-3">
+        <div>
+          <label className="block text-xs text-brand-silver mb-1">Privacy</label>
+          <select value={form.privacy_tag} onChange={set('privacy_tag')} className="w-full border border-brand-silver/30 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown text-sm">
+            <option value="">—</option>
+            {PRIVACY_TAG_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
         <div>
           <label className="block text-xs text-brand-silver mb-1">F&B Minimum</label>
           <div className="relative">
@@ -228,6 +240,7 @@ export default function SpacesManager({ venueId, initialSpaces }: Props) {
                       {space.service_charge_default !== null && <span>Svc: {(space.service_charge_default * 100).toFixed(1)}%</span>}
                       {space.gratuity_default !== null && <span>Grat: {(space.gratuity_default * 100).toFixed(1)}%</span>}
                       {space.admin_fee_default !== null && <span>Admin: {(space.admin_fee_default * 100).toFixed(1)}%</span>}
+                      {space.privacy_tag && <span>{PRIVACY_TAG_OPTIONS.find((o) => o.value === space.privacy_tag)?.label ?? space.privacy_tag}</span>}
                     </div>
                     {space.notes && <div className="text-xs text-brand-silver mt-1 italic">{space.notes}</div>}
                   </div>

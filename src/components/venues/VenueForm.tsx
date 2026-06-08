@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { DbVenue } from '@/lib/supabase/queries';
 import { updateVenue } from '@/app/(programs)/venues/actions';
+import { VENDOR_TYPES, type VendorType } from '@/lib/vendors/constants';
 
 interface Props {
   venue: DbVenue;
@@ -26,14 +27,18 @@ export default function VenueForm({ venue }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState(venue.name);
+  const [vendorType, setVendorType] = useState<VendorType>((venue.vendor_type as VendorType) ?? 'venue');
   const [address, setAddress] = useState(venue.address ?? '');
   const [city, setCity] = useState(venue.city ?? '');
   const [state, setState] = useState(venue.state ?? '');
   const [zip, setZip] = useState(venue.zip ?? '');
+  const [market, setMarket] = useState(venue.market ?? '');
   const [styles, setStyles] = useState<string[]>(venue.service_styles ?? []);
   const [contactName, setContactName] = useState(venue.contact_name ?? '');
+  const [contactTitle, setContactTitle] = useState(venue.contact_title ?? '');
   const [contactEmail, setContactEmail] = useState(venue.contact_email ?? '');
   const [contactPhone, setContactPhone] = useState(venue.contact_phone ?? '');
+  const [emailSignature, setEmailSignature] = useState(venue.email_signature ?? '');
   const [website, setWebsite] = useState(venue.website ?? '');
   const [notes, setNotes] = useState(venue.notes ?? '');
 
@@ -47,14 +52,18 @@ export default function VenueForm({ venue }: Props) {
     startTransition(async () => {
       const result = await updateVenue(venue.id, {
         name: name.trim(),
+        vendor_type: vendorType,
         address: address.trim() || null,
         city: city.trim() || null,
         state: state || null,
         zip: zip.trim() || null,
+        market: market.trim() || null,
         service_styles: styles,
         contact_name: contactName.trim() || null,
+        contact_title: contactTitle.trim() || null,
         contact_email: contactEmail.trim() || null,
         contact_phone: contactPhone.trim() || null,
+        email_signature: emailSignature.trim() || null,
         website: website.trim() || null,
         notes: notes.trim() || null,
       });
@@ -67,14 +76,26 @@ export default function VenueForm({ venue }: Props) {
 
   return (
     <div className="space-y-5">
-      {/* Name */}
-      <div>
-        <label className="block text-xs font-medium text-brand-silver uppercase tracking-wide mb-1">Venue Name *</label>
-        <input
-          value={name}
-          onChange={(e) => { setName(e.target.value); setSaved(false); }}
-          className="w-full border border-brand-silver/30 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown font-medium"
-        />
+      {/* Name + Type */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="col-span-2">
+          <label className="block text-xs font-medium text-brand-silver uppercase tracking-wide mb-1">Name *</label>
+          <input
+            value={name}
+            onChange={(e) => { setName(e.target.value); setSaved(false); }}
+            className="w-full border border-brand-silver/30 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown font-medium"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-brand-silver uppercase tracking-wide mb-1">Vendor Type</label>
+          <select
+            value={vendorType}
+            onChange={(e) => { setVendorType(e.target.value as VendorType); setSaved(false); }}
+            className="w-full border border-brand-silver/30 rounded px-2 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
+          >
+            {VENDOR_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </div>
       </div>
 
       {/* Address */}
@@ -97,7 +118,7 @@ export default function VenueForm({ venue }: Props) {
             placeholder="Charlotte"
           />
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <div>
             <label className="block text-xs font-medium text-brand-silver uppercase tracking-wide mb-1">State</label>
             <select
@@ -116,6 +137,15 @@ export default function VenueForm({ venue }: Props) {
               onChange={(e) => { setZip(e.target.value); setSaved(false); }}
               className="w-full border border-brand-silver/30 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
               placeholder="28277"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-brand-silver uppercase tracking-wide mb-1">Market</label>
+            <input
+              value={market}
+              onChange={(e) => { setMarket(e.target.value); setSaved(false); }}
+              className="w-full border border-brand-silver/30 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
+              placeholder="Charlotte"
             />
           </div>
         </div>
@@ -145,13 +175,22 @@ export default function VenueForm({ venue }: Props) {
       {/* Contact */}
       <div>
         <label className="block text-xs font-medium text-brand-silver uppercase tracking-wide mb-2">Contact</label>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-4 gap-3">
           <div>
             <label className="block text-xs text-brand-silver mb-1">Name</label>
             <input
               value={contactName}
               onChange={(e) => { setContactName(e.target.value); setSaved(false); }}
               className="w-full border border-brand-silver/30 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-brand-silver mb-1">Title</label>
+            <input
+              value={contactTitle}
+              onChange={(e) => { setContactTitle(e.target.value); setSaved(false); }}
+              className="w-full border border-brand-silver/30 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
+              placeholder="Sales Manager"
             />
           </div>
           <div>
@@ -171,6 +210,16 @@ export default function VenueForm({ venue }: Props) {
               className="w-full border border-brand-silver/30 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
             />
           </div>
+        </div>
+        <div className="mt-3">
+          <label className="block text-xs text-brand-silver mb-1">Email Signature</label>
+          <textarea
+            value={emailSignature}
+            onChange={(e) => { setEmailSignature(e.target.value); setSaved(false); }}
+            rows={3}
+            className="w-full border border-brand-silver/30 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown resize-none font-mono"
+            placeholder="Paste the vendor's email signature block here for quick copying…"
+          />
         </div>
       </div>
 
@@ -204,7 +253,7 @@ export default function VenueForm({ venue }: Props) {
           disabled={isPending || !name.trim()}
           className="bg-brand-brown text-white text-sm px-5 py-2 rounded hover:bg-brand-brown/90 disabled:opacity-50"
         >
-          {isPending ? 'Saving…' : 'Save Venue'}
+          {isPending ? 'Saving…' : 'Save'}
         </button>
         {saved && <span className="text-sm text-green-600">Saved</span>}
       </div>

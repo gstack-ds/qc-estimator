@@ -44,14 +44,14 @@ export default async function VenueDetailPage({ params }: Props) {
     <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-1 text-sm">
-        <Link href="/venues" className="text-brand-silver hover:text-brand-brown transition-colors">Venues</Link>
+        <Link href="/venues" className="text-brand-silver hover:text-brand-brown transition-colors">Vendors</Link>
         <span className="text-brand-silver/40 mx-0.5">›</span>
         <span className="font-medium text-brand-charcoal">{venue.name}</span>
       </div>
 
       {/* Venue fields */}
       <div className="bg-white border border-brand-silver/20 rounded-xl p-6">
-        <h1 className="text-lg font-serif text-brand-charcoal mb-5">Venue Details</h1>
+        <h1 className="text-lg font-serif text-brand-charcoal mb-5">Vendor Details</h1>
         <VenueForm venue={venue} />
       </div>
 
