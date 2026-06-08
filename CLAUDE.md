@@ -371,6 +371,9 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Bug fix: productionFeeTax missing from Copy Numbers Tax row (buildSummaryRows + buildDetailedCopyText in export.ts + dead-code buildClientExport in pricing.ts); 5 new export tests; 408 total
 - [x] Bug fix: SummaryPanel Show Math displayed location default tax rate instead of override rate when overrides set; mathRates now mirrors effectiveLocation pattern; 4 new implied-rate tests; 412 total
 - [x] Coverage audit: 14 calculation areas rated SOLID/THIN/NONE; 24 new tests closing highest-risk gaps (third-party commissions, production fee dollar, all 11 markup categories, row-sum export guard, pricePerPerson rounding); 436 total
+- [x] Budget Plan feature — all 4 phases complete (migration 040, reverseCalculateBudgetTargetRange, estimate sandbox pre-fill + Apply button, calculateBudgetRollup + rollup table); 508 tests passing
+- [x] Migration 039 run in production — Washington DC city normalization backfill live
+- [x] Migration 040 run in production — budget_plan_entries table live
 - [ ] **Venue profile data** — need real estimates with `venue_id` set to verify history section populates. Trigger by opening an existing venue estimate, selecting a venue, then visiting the venue profile.
 - [ ] **Tell Alex** — Bright Darling is not on Google Fonts; Cormorant Garamond is used in the Slide Copy preview instead; she should swap to Bright Darling in the actual Canva template
 - [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs (note: EXPECTED_QC_MARGIN values changed significantly with bug #5 fix and again with production fee tax)
@@ -378,9 +381,9 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- All migrations through 038 are live in production.
-- 436 tests passing. 24 new tests added this session closing coverage gaps identified in audit.
-- Verify Tour estimate end-to-end on live site: create tour estimate, guide scaling, "Add as line item", save/load template.
+- All migrations through 040 are live in production.
+- 508 tests passing. Budget Plan feature (all 4 phases) complete this session.
+- Budget Plan is live but has no entries yet — test by creating a program, adding budget entries, linking estimates, and verifying the rollup table.
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in Slide Copy preview; she swaps in Canva).
 - Venue profile attachment downloads: signed URL generation is the next small task.
 - Proposal validation against Excel is the next quality check — enter the 3 scenarios from proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values.
