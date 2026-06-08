@@ -15,10 +15,14 @@ export async function createVenue(data: {
   zip?: string | null;
   service_styles?: string[];
   contact_name?: string | null;
+  contact_title?: string | null;
   contact_email?: string | null;
   contact_phone?: string | null;
+  email_signature?: string | null;
   website?: string | null;
+  market?: string | null;
   notes?: string | null;
+  vendor_type?: 'venue' | 'restaurant' | 'tour' | 'transportation' | 'entertainment' | 'decor';
   skipNameCheck?: boolean;
 }): Promise<{ id: string } | { error: string; existingId?: string; existingName?: string; isWarning?: boolean }> {
   console.log('[createVenue] called with name=%s address=%s', data.name, data.address ?? '(none)');
@@ -76,11 +80,15 @@ export async function updateVenue(id: string, data: {
   zip?: string | null;
   service_styles?: string[];
   contact_name?: string | null;
+  contact_title?: string | null;
   contact_email?: string | null;
   contact_phone?: string | null;
+  email_signature?: string | null;
   website?: string | null;
+  market?: string | null;
   notes?: string | null;
   last_used_date?: string | null;
+  vendor_type?: 'venue' | 'restaurant' | 'tour' | 'transportation' | 'entertainment' | 'decor';
 }): Promise<{ error?: string }> {
   const supabase = await createClient();
   const patch = data.city ? { ...data, city: normalizeCity(data.city) } : data;
@@ -113,6 +121,7 @@ export async function createVenueSpace(venueId: string, data: {
   service_charge_default?: number | null;
   gratuity_default?: number | null;
   admin_fee_default?: number | null;
+  privacy_tag?: 'private' | 'semi_private' | 'main_dining' | null;
   notes?: string | null;
 }): Promise<{ id: string } | { error: string }> {
   const supabase = await createClient();
@@ -135,6 +144,7 @@ export async function updateVenueSpace(id: string, venueId: string, data: {
   service_charge_default?: number | null;
   gratuity_default?: number | null;
   admin_fee_default?: number | null;
+  privacy_tag?: 'private' | 'semi_private' | 'main_dining' | null;
   notes?: string | null;
 }): Promise<{ error?: string }> {
   const supabase = await createClient();

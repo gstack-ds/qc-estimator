@@ -774,11 +774,15 @@ export interface DbVenue {
   zip: string | null;
   service_styles: string[];
   contact_name: string | null;
+  contact_title: string | null;
   contact_email: string | null;
   contact_phone: string | null;
+  email_signature: string | null;
   website: string | null;
+  market: string | null;
   notes: string | null;
   last_used_date: string | null;
+  vendor_type: 'venue' | 'restaurant' | 'tour' | 'transportation' | 'entertainment' | 'decor';
   created_at: string;
   updated_at: string;
 }
@@ -794,6 +798,7 @@ export interface DbVenueSpace {
   service_charge_default: number | null;
   gratuity_default: number | null;
   admin_fee_default: number | null;
+  privacy_tag: 'private' | 'semi_private' | 'main_dining' | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -803,7 +808,8 @@ export interface DbVenueWithSpaces extends DbVenue {
   spaces: DbVenueSpace[];
 }
 
-const VENUE_FIELDS = 'id, name, address, city, state, zip, service_styles, contact_name, contact_email, contact_phone, website, notes, last_used_date, created_at, updated_at';
+const VENUE_FIELDS = 'id, name, address, city, state, zip, service_styles, contact_name, contact_title, contact_email, contact_phone, email_signature, website, market, notes, last_used_date, vendor_type, created_at, updated_at';
+const SPACE_FIELDS = 'id, venue_id, name, capacity_seated, capacity_standing, fb_minimum, room_fee, service_charge_default, gratuity_default, admin_fee_default, privacy_tag, notes, created_at, updated_at';
 
 export async function getVenues(): Promise<DbVenue[]> {
   const supabase = await createClient();
@@ -830,7 +836,7 @@ export async function getVenueSpaces(venueId: string): Promise<DbVenueSpace[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('venue_spaces')
-    .select('id, venue_id, name, capacity_seated, capacity_standing, fb_minimum, room_fee, service_charge_default, gratuity_default, admin_fee_default, notes, created_at, updated_at')
+    .select(SPACE_FIELDS)
     .eq('venue_id', venueId)
     .order('name');
   if (error) throw new Error(error.message);
@@ -841,7 +847,7 @@ export async function getAllVenueSpaces(): Promise<DbVenueSpace[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('venue_spaces')
-    .select('id, venue_id, name, capacity_seated, capacity_standing, fb_minimum, room_fee, service_charge_default, gratuity_default, admin_fee_default, notes, created_at, updated_at')
+    .select(SPACE_FIELDS)
     .order('name');
   if (error) throw new Error(error.message);
   return data ?? [];
@@ -851,11 +857,24 @@ export async function getVenueWithSpaces(id: string): Promise<DbVenueWithSpaces 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('venues')
-    .select(`${VENUE_FIELDS}, spaces:venue_spaces(id, venue_id, name, capacity_seated, capacity_standing, fb_minimum, room_fee, service_charge_default, gratuity_default, admin_fee_default, notes, created_at, updated_at)`)
+    .select(`${VENUE_FIELDS}, spaces:venue_spaces(${SPACE_FIELDS})`)
     .eq('id', id)
     .single();
   if (error) return null;
   return data as unknown as DbVenueWithSpaces;
+}
+
+// Filtered to vendor_type IN ('venue','restaurant') — used by the estimate picker.
+// Other vendor types are not linkable to estimates.
+export async function getVenuePickerVendors(): Promise<DbVenue[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('venues')
+    .select(VENUE_FIELDS)
+    .in('vendor_type', ['venue', 'restaurant'])
+    .order('name');
+  if (error) throw new Error(error.message);
+  return data ?? [];
 }
 
 // ─── Venue History ────────────────────────────────────────

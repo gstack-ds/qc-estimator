@@ -123,8 +123,10 @@ export default function VenuePicker({ estimateId, programId, venues, venueSpaces
     const newVenueData: DbVenue = {
       id: result.id, name: cName.trim(), address: cAddress.trim(),
       city: cCity.trim() || null, state: cState.trim() || null, zip: null,
-      service_styles: [], contact_name: null, contact_email: null, contact_phone: null,
-      website: null, notes: null, last_used_date: null,
+      service_styles: [], contact_name: null, contact_title: null,
+      contact_email: null, contact_phone: null, email_signature: null,
+      website: null, market: null, notes: null, last_used_date: null,
+      vendor_type: 'venue',
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     };
     onSelect(result.id, null, cCity.trim() || null, newVenueData);
