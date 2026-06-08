@@ -375,7 +375,7 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Migration 039 run in production — Washington DC city normalization backfill live
 - [x] Migration 040 run in production — budget_plan_entries table live
 - [x] Vendor directory Phase 1 (database + directory UI): migration 041 (vendor_type enum, contact_title, email_signature, market on venues; privacy_tag on venue_spaces); VendorsList with type tabs + CopyEmailSigButton + TypeBadge; VenueForm + SpacesManager updated; picker filtered to venue+restaurant; 508 tests, 0 TS errors
-- [ ] **Run migration 041 in production** — vendor_type, contact_title, email_signature, market columns + space privacy_tag; re-tags known restaurants
+- [x] Migration 041 run in production — vendor_type, contact_title, email_signature, market columns + space privacy_tag; re-tags known restaurants
 - [ ] **Venue profile data** — need real estimates with `venue_id` set to verify history section populates. Trigger by opening an existing venue estimate, selecting a venue, then visiting the vendor profile.
 - [ ] **Tell Alex** — Bright Darling is not on Google Fonts; Cormorant Garamond is used in the Slide Copy preview instead; she should swap to Bright Darling in the actual Canva template
 - [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs (note: EXPECTED_QC_MARGIN values changed significantly with bug #5 fix and again with production fee tax)
@@ -383,10 +383,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- All migrations through 040 are live in production. Migration 041 (vendor directory) is written and committed but NOT YET RUN.
-- 508 tests passing.
-- Next: run migration 041 in production (Gary reviews supabase/migrations/041_vendor_directory.sql first).
-- After 041 runs: re-tag any restaurants the UPDATE missed, verify vendor type tabs, test CopyEmailSigButton with a real email signature.
+- All migrations through 041 are live in production. 518 tests passing.
+- Vendor directory Phase 1 is live — verify type tabs, re-tag any restaurants the migration UPDATE missed, test CopyEmailSigButton with a real email signature.
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in Slide Copy preview; she swaps in Canva).
 - Venue profile attachment downloads: signed URL generation is the next small task.
-- Proposal validation against Excel is the next quality check.
+- Proposal validation against Excel is the next quality check — enter the 3 scenarios from proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values.
