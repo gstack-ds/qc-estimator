@@ -1,8 +1,11 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { getVenueWithSpaces, getEstimatesForVenue, getAttachmentsForVenue } from '@/lib/supabase/queries';
+import { getVenueWithSpaces, getEstimatesForVenue, getAttachmentsForVenue, getVendorPhotos } from '@/lib/supabase/queries';
+import { parseMenus, parseBarOptions, parseInclusions } from '@/lib/vendors/profileTypes';
 import VenueForm from '@/components/venues/VenueForm';
 import SpacesManager from '@/components/venues/SpacesManager';
+import VendorProfileSection from '@/components/venues/VendorProfileSection';
+import PhotoGallery from '@/components/venues/PhotoGallery';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,12 +23,15 @@ function formatDate(val: string | null) {
 
 export default async function VenueDetailPage({ params }: Props) {
   const { id } = await params;
-  const [venue, estimatesResult, attachmentsResult] = await Promise.all([
+  const [venue, estimatesResult, attachmentsResult, photos] = await Promise.all([
     getVenueWithSpaces(id),
     getEstimatesForVenue(id),
     getAttachmentsForVenue(id),
+    getVendorPhotos(id),
   ]);
   if (!venue) notFound();
+
+  const isProfileVendor = venue.vendor_type === 'venue' || venue.vendor_type === 'restaurant';
 
   const estimates = estimatesResult.data;
   const attachments = attachmentsResult.data;
@@ -59,6 +65,28 @@ export default async function VenueDetailPage({ params }: Props) {
       <div className="bg-white border border-brand-silver/20 rounded-xl p-6">
         <SpacesManager venueId={venue.id} initialSpaces={venue.spaces} />
       </div>
+
+      {/* Vendor Profile (venue + restaurant only) */}
+      {isProfileVendor && (
+        <div className="bg-white border border-brand-silver/20 rounded-xl p-6">
+          <h2 className="text-base font-serif text-brand-charcoal mb-5">Profile Content</h2>
+          <VendorProfileSection
+            vendorId={venue.id}
+            initialMenus={parseMenus(venue.menus)}
+            initialBarOptions={parseBarOptions(venue.bar_options)}
+            initialInclusions={parseInclusions(venue.inclusions)}
+            initialProfileNotes={venue.profile_notes ?? ''}
+          />
+        </div>
+      )}
+
+      {/* Photo Gallery (venue + restaurant only) */}
+      {isProfileVendor && (
+        <div className="bg-white border border-brand-silver/20 rounded-xl p-6">
+          <h2 className="text-base font-serif text-brand-charcoal mb-5">Photos</h2>
+          <PhotoGallery vendorId={venue.id} initialPhotos={photos} />
+        </div>
+      )}
 
       {/* Program History */}
       <div className="bg-white border border-brand-silver/20 rounded-xl p-6">
