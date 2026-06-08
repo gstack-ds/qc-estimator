@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
-import { normalizeAddress, normalizeName } from '@/lib/venues/normalize';
+import { normalizeAddress, normalizeName, normalizeCity } from '@/lib/venues/normalize';
 import { validateVenueInput } from '@/lib/venues/validate';
 
 // ─── Venues ──────────────────────────────────────────────
@@ -53,6 +53,7 @@ export async function createVenue(data: {
 
   // Exclude non-DB fields from insert
   const { skipNameCheck: _skip, ...insertData } = data;
+  if (insertData.city) insertData.city = normalizeCity(insertData.city);
   const { data: venue, error } = await supabase
     .from('venues')
     .insert({ ...insertData, service_styles: insertData.service_styles ?? [] })
@@ -82,9 +83,10 @@ export async function updateVenue(id: string, data: {
   last_used_date?: string | null;
 }): Promise<{ error?: string }> {
   const supabase = await createClient();
+  const patch = data.city ? { ...data, city: normalizeCity(data.city) } : data;
   const { error } = await supabase
     .from('venues')
-    .update({ ...data, updated_at: new Date().toISOString() })
+    .update({ ...patch, updated_at: new Date().toISOString() })
     .eq('id', id);
   if (error) return { error: error.message };
   revalidatePath('/venues');

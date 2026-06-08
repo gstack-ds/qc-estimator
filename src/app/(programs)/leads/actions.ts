@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { LeadStatus } from '@/lib/supabase/queries';
+import { normalizeCity } from '@/lib/venues/normalize';
 
 export type LeadInput = Partial<{
   client_name: string | null;
@@ -55,9 +56,10 @@ export type LeadInput = Partial<{
 
 export async function createLead(data: LeadInput): Promise<{ error: string | null; id: string | null }> {
   const supabase = await createClient();
+  const normalized = data.city ? { ...data, city: normalizeCity(data.city) } : data;
   const { data: lead, error } = await supabase
     .from('leads')
-    .insert({ ...data, status: data.status ?? 'new_lead' })
+    .insert({ ...normalized, status: normalized.status ?? 'new_lead' })
     .select('id')
     .single();
   if (error) return { error: error.message, id: null };
@@ -67,7 +69,8 @@ export async function createLead(data: LeadInput): Promise<{ error: string | nul
 
 export async function updateLead(id: string, data: LeadInput): Promise<{ error: string | null }> {
   const supabase = await createClient();
-  const { error } = await supabase.from('leads').update(data).eq('id', id);
+  const normalized = data.city ? { ...data, city: normalizeCity(data.city) } : data;
+  const { error } = await supabase.from('leads').update(normalized).eq('id', id);
   if (error) return { error: error.message };
   revalidatePath('/leads');
   revalidatePath(`/leads/${id}`);

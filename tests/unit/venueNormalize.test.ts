@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeAddress, normalizeName } from '@/lib/venues/normalize';
+import { normalizeAddress, normalizeName, normalizeCity } from '@/lib/venues/normalize';
 
 describe('normalizeAddress', () => {
   it('lowercases and strips punctuation', () => {
@@ -41,6 +41,53 @@ describe('normalizeName', () => {
   it('strips hyphens and apostrophes', () => {
     expect(normalizeName("O'Hare Hall")).toBe('oharehall');
     expect(normalizeName('SkyView Bar-Grill')).toBe('skyviewbargrill');
+  });
+});
+
+describe('normalizeCity', () => {
+  // DC canonical variants
+  it('maps "Washington" → "Washington, DC"', () => {
+    expect(normalizeCity('Washington')).toBe('Washington, DC');
+  });
+
+  it('maps "Washington DC" → "Washington, DC"', () => {
+    expect(normalizeCity('Washington DC')).toBe('Washington, DC');
+  });
+
+  it('maps "Washington, DC" → "Washington, DC" (idempotent)', () => {
+    expect(normalizeCity('Washington, DC')).toBe('Washington, DC');
+  });
+
+  it('maps "Washington D.C." → "Washington, DC"', () => {
+    expect(normalizeCity('Washington D.C.')).toBe('Washington, DC');
+  });
+
+  it('maps "Washington, D.C." → "Washington, DC"', () => {
+    expect(normalizeCity('Washington, D.C.')).toBe('Washington, DC');
+  });
+
+  it('is case-insensitive for DC variants', () => {
+    expect(normalizeCity('WASHINGTON DC')).toBe('Washington, DC');
+    expect(normalizeCity('washington d.c.')).toBe('Washington, DC');
+  });
+
+  it('trims and collapses whitespace before canonical lookup', () => {
+    expect(normalizeCity('  Washington  DC  ')).toBe('Washington, DC');
+  });
+
+  // Default behavior for non-canonical cities
+  it('title-cases regular city names', () => {
+    expect(normalizeCity('charlotte')).toBe('Charlotte');
+    expect(normalizeCity('new york')).toBe('New York');
+    expect(normalizeCity('atlanta')).toBe('Atlanta');
+  });
+
+  it('preserves already-correct title case', () => {
+    expect(normalizeCity('Charlotte')).toBe('Charlotte');
+  });
+
+  it('trims whitespace on non-canonical cities', () => {
+    expect(normalizeCity('  charlotte  ')).toBe('Charlotte');
   });
 });
 

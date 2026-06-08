@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { ParsedLead } from './types';
+import { normalizeCity } from '../venues/normalize';
 
 // ─── Dropdown normalization ────────────────────────────────
 
@@ -99,6 +100,7 @@ export async function writeLead(input: WriteLeadInput): Promise<WriteLeadResult>
 
   const row = {
     ...input.lead,
+    city: input.lead.city ? normalizeCity(input.lead.city) : input.lead.city,
     // Map ParsedLead field names → migration 020 column names, normalized to dropdown values
     gdp_advisor:     matchOption(input.lead.source_advisor, GDP_ADVISORS),
     gdp_coordinator: matchOption(input.lead.source_coordinator, GDP_COORDINATORS),
