@@ -42,6 +42,51 @@ describe('normalizeName', () => {
     expect(normalizeName("O'Hare Hall")).toBe('oharehall');
     expect(normalizeName('SkyView Bar-Grill')).toBe('skyviewbargrill');
   });
+
+  // Connector canonicalization
+  it('"Saints & Council" matches "Saints + Council"', () => {
+    expect(normalizeName('Saints & Council')).toBe(normalizeName('Saints + Council'));
+  });
+
+  it('"Saints & Council" matches "Saints and Council"', () => {
+    expect(normalizeName('Saints & Council')).toBe(normalizeName('Saints and Council'));
+  });
+
+  it('"A and B" matches "A & B"', () => {
+    expect(normalizeName('A and B')).toBe(normalizeName('A & B'));
+  });
+
+  it('"A and B" matches "A + B"', () => {
+    expect(normalizeName('A and B')).toBe(normalizeName('A + B'));
+  });
+
+  // Diacritics
+  it('"Café Monte" matches "Cafe Monte"', () => {
+    expect(normalizeName('Café Monte')).toBe(normalizeName('Cafe Monte'));
+  });
+
+  it('strips other accented characters', () => {
+    expect(normalizeName('Fiancé')).toBe(normalizeName('Fiance'));
+    expect(normalizeName('naïve')).toBe(normalizeName('naive'));
+  });
+
+  // Possessives / apostrophes
+  it('"Tony\'s" matches "Tonys"', () => {
+    expect(normalizeName("Tony's")).toBe(normalizeName('Tonys'));
+  });
+
+  it('"St. Claire\'s" matches "St Claires"', () => {
+    expect(normalizeName("St. Claire's")).toBe(normalizeName('St Claires'));
+  });
+
+  // Stop words preserved — these must NOT match
+  it('"The Mill" does NOT match "Mill" (stop words preserved)', () => {
+    expect(normalizeName('The Mill')).not.toBe(normalizeName('Mill'));
+  });
+
+  it('"A Frame" does NOT match "Frame" (stop words preserved)', () => {
+    expect(normalizeName('A Frame')).not.toBe(normalizeName('Frame'));
+  });
 });
 
 describe('normalizeCity', () => {

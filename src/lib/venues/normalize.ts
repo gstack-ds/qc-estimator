@@ -3,9 +3,25 @@ export function normalizeAddress(s: string): string {
   return s.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
-/** Normalize a venue name for fuzzy-match detection: lowercase, strip all non-alphanumeric. */
+/**
+ * Normalize a vendor name for duplicate-detection comparison.
+ * The stored display name is NEVER modified — this is for collision checks only.
+ *
+ * Steps:
+ *  1. Lowercase
+ *  2. Strip diacritics (NFD decompose → remove combining marks) — Café → cafe
+ *  3. Canonicalize connectors: & and + → "and" — Saints & Council === Saints + Council
+ *  4. Strip all remaining non-alphanumeric (spaces, apostrophes, punctuation)
+ *
+ * Stop words ("the", "a", "of") are intentionally preserved so "The Mill" ≠ "Mill".
+ */
 export function normalizeName(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[&+]/g, 'and')
+    .replace(/[^a-z0-9]/g, '');
 }
 
 // Map from lowercase-collapsed city input → canonical storage value.
