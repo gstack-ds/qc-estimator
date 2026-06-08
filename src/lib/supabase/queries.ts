@@ -783,6 +783,11 @@ export interface DbVenue {
   notes: string | null;
   last_used_date: string | null;
   vendor_type: 'venue' | 'restaurant' | 'tour' | 'transportation' | 'entertainment' | 'decor';
+  // Profile content columns (JSONB) — display/brochure data, NOT pricing inputs
+  menus: unknown;
+  bar_options: unknown;
+  inclusions: unknown;
+  profile_notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -808,7 +813,7 @@ export interface DbVenueWithSpaces extends DbVenue {
   spaces: DbVenueSpace[];
 }
 
-const VENUE_FIELDS = 'id, name, address, city, state, zip, service_styles, contact_name, contact_title, contact_email, contact_phone, email_signature, website, market, notes, last_used_date, vendor_type, created_at, updated_at';
+const VENUE_FIELDS = 'id, name, address, city, state, zip, service_styles, contact_name, contact_title, contact_email, contact_phone, email_signature, website, market, notes, last_used_date, vendor_type, menus, bar_options, inclusions, profile_notes, created_at, updated_at';
 const SPACE_FIELDS = 'id, venue_id, name, capacity_seated, capacity_standing, fb_minimum, room_fee, service_charge_default, gratuity_default, admin_fee_default, privacy_tag, notes, created_at, updated_at';
 
 export async function getVenues(): Promise<DbVenue[]> {
@@ -1010,6 +1015,23 @@ export async function getVenueStats(): Promise<DbVenueStat[]> {
     program_count: programs.size,
     file_count: filesByVenue.get(venue_id) ?? 0,
   }));
+}
+
+// ─── Vendor Photos ────────────────────────────────────────
+
+import type { VendorPhoto } from '@/lib/vendors/profileTypes';
+export type { VendorPhoto };
+
+export async function getVendorPhotos(vendorId: string): Promise<VendorPhoto[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('vendor_photos')
+    .select('id, vendor_id, file_url, storage_path, caption, tag, sort_order, created_at')
+    .eq('vendor_id', vendorId)
+    .order('sort_order')
+    .order('created_at');
+  if (error) return [];
+  return (data ?? []) as VendorPhoto[];
 }
 
 // ─── Leads ────────────────────────────────────────────────
