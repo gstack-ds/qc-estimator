@@ -7,7 +7,7 @@ import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrate
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { TaxType, TaxBucket } from '@/types';
-import type { DbProgram, DbEstimate, DbEvent, DbLineItem, DbMarkup, DbTier, DbLocation, DbVenue, DbVenueSpace, DbEstimateSection } from '@/lib/supabase/queries';
+import type { DbProgram, DbEstimate, DbEvent, DbLineItem, DbMarkup, DbTier, DbLocation, DbVenue, DbVenueSpace, DbEstimateSection, DbBudgetPlanEntry } from '@/lib/supabase/queries';
 import type { SlideCopyData } from '@/types/slideCopy';
 import {
   calculateVenueEstimate,
@@ -31,7 +31,8 @@ import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection, reorderSections, reorderLineItems } from '@/app/(programs)/programs/[id]/estimates/actions';
 import { linkVenueToEstimate, syncVenueSpaceDefaults } from '@/app/(programs)/venues/actions';
-import { updateProgram } from '@/app/(programs)/programs/actions';
+import { updateProgram, applyBudgetPin } from '@/app/(programs)/programs/actions';
+import { effectivePrefillPP } from '@/lib/engine/budgetPlan';
 import type { DbTemplate, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
 // TravelRefData, DbTrip no longer imported — travel is program-level.
 
@@ -181,6 +182,7 @@ interface Props {
   venues?: DbVenue[];
   venueSpaces?: DbVenueSpace[];
   allLocations?: DbLocation[];
+  budgetPlanEntry?: DbBudgetPlanEntry | null;
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -188,7 +190,7 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 export default function EstimateBuilder({
   program, location, allEstimates, estimate, dbLineItems, dbSections, markups, tiers, eventName,
   event = null, initialSlideCopyData = null, venues = [], venueSpaces = [], allLocations = [],
-  programTravelTotal = 0, includeTravelInProductionFee = false,
+  programTravelTotal = 0, includeTravelInProductionFee = false, budgetPlanEntry = null,
 }: Props) {
   const router = useRouter();
   const programConfig = useMemo(() => toProgramConfig(program, location), [program, location]);
@@ -252,8 +254,12 @@ export default function EstimateBuilder({
   // Travel is now program-level — comes from props, not local state.
   const travelExpenses = programTravelTotal;
   const [showMath, setShowMath] = useState(false);
-  const [showBudgetTarget, setShowBudgetTarget] = useState(false);
-  const [budgetTargetPP, setBudgetTargetPP] = useState('');
+  const [showBudgetTarget, setShowBudgetTarget] = useState(!!budgetPlanEntry);
+  const [budgetTargetPP, setBudgetTargetPP] = useState(
+    budgetPlanEntry ? String(effectivePrefillPP(budgetPlanEntry)) : ''
+  );
+  const [showApplyConfirm, setShowApplyConfirm] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
 
   const [pendingSlideMenuData, setPendingSlideMenuData] = useState<import('@/types/slideCopy').MenuCourse[] | null>(null);
   const slideCopyRef = useRef<HTMLDivElement | null>(null);
@@ -1414,6 +1420,49 @@ export default function EstimateBuilder({
                       <span>${budgetTargetResult.totalCheck.toFixed(2)}</span>
                     </div>
                     <p className="text-xs text-brand-silver pt-1">Reference only — does not modify line items.</p>
+                    {budgetPlanEntry && (
+                      <div className="pt-2 border-t border-brand-cream">
+                        {!showApplyConfirm ? (
+                          <button
+                            type="button"
+                            onClick={() => { setApplyError(null); setShowApplyConfirm(true); }}
+                            className="text-xs font-medium text-brand-copper hover:underline"
+                          >
+                            Apply to Budget Plan
+                          </button>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="text-xs text-brand-charcoal">
+                              Set the pinned target for <strong>{budgetPlanEntry.label || 'this entry'}</strong> to <strong>${parseFloat(budgetTargetPP || '0').toFixed(2)}/pp</strong>? This updates the program budget rollup.
+                            </p>
+                            {applyError && <p className="text-xs text-red-500">{applyError}</p>}
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const val = parseFloat(budgetTargetPP);
+                                  if (isNaN(val) || val <= 0) { setApplyError('Enter a valid budget target first.'); return; }
+                                  const { error } = await applyBudgetPin(budgetPlanEntry.id, budgetPlanEntry.program_id, val);
+                                  if (error) { setApplyError(error); return; }
+                                  setShowApplyConfirm(false);
+                                  setApplyError(null);
+                                }}
+                                className="text-xs font-medium bg-brand-copper text-white rounded px-3 py-1 hover:opacity-90 transition-opacity"
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setShowApplyConfirm(false); setApplyError(null); }}
+                                className="text-xs text-brand-silver hover:text-brand-charcoal"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

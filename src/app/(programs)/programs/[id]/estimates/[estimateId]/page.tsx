@@ -14,6 +14,7 @@ import {
   getAllVenueSpaces,
   getLocations,
   getTravelItems,
+  getBudgetPlanEntryForEstimate,
 } from '@/lib/supabase/queries';
 import { ensureDefaultSections } from '@/app/(programs)/programs/[id]/estimates/actions';
 import EstimateBuilder from '@/components/estimates/EstimateBuilder';
@@ -32,7 +33,7 @@ interface Props {
 export default async function EstimatePage({ params }: Props) {
   const { id: programId, estimateId } = await params;
 
-  const [program, allEstimates, estimate, markups, tiers, venues, allLocations, travelItems] = await Promise.all([
+  const [program, allEstimates, estimate, markups, tiers, venues, allLocations, travelItems, budgetPlanEntry] = await Promise.all([
     getProgram(programId),
     getEstimatesForProgram(programId),
     getEstimate(estimateId),
@@ -41,6 +42,7 @@ export default async function EstimatePage({ params }: Props) {
     getVenues(),
     getLocations(),
     getTravelItems(programId),
+    getBudgetPlanEntryForEstimate(estimateId),
   ]);
 
   if (!program || !estimate) notFound();
@@ -109,6 +111,7 @@ export default async function EstimatePage({ params }: Props) {
           allLocations={allLocations}
           programTravelTotal={programTravelTotal}
           includeTravelInProductionFee={program.include_travel_in_production_fee ?? false}
+          budgetPlanEntry={budgetPlanEntry}
         />
       </div>
     );
