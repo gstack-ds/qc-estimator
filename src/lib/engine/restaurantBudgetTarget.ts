@@ -50,6 +50,30 @@ export interface BudgetTargetResult {
   totalCheck: number;              // must equal targetClientPP (within floating point)
 }
 
+export interface BudgetTargetRangeInput extends Omit<BudgetTargetInput, 'targetClientPP'> {
+  targetClientPPLow: number;
+  targetClientPPHigh: number;
+  pinnedClientPP?: number | null;
+}
+
+export interface BudgetTargetRangeResult {
+  atLow: BudgetTargetResult;
+  atHigh: BudgetTargetResult;
+  atPinned: BudgetTargetResult;
+  pinnedClientPPUsed: number;
+}
+
+export function reverseCalculateBudgetTargetRange(input: BudgetTargetRangeInput): BudgetTargetRangeResult {
+  const { targetClientPPLow, targetClientPPHigh, pinnedClientPP, ...rest } = input;
+  const pinnedClientPPUsed = pinnedClientPP ?? (targetClientPPLow + targetClientPPHigh) / 2;
+  return {
+    atLow:   reverseCalculateBudgetTarget({ ...rest, targetClientPP: targetClientPPLow }),
+    atHigh:  reverseCalculateBudgetTarget({ ...rest, targetClientPP: targetClientPPHigh }),
+    atPinned: reverseCalculateBudgetTarget({ ...rest, targetClientPP: pinnedClientPPUsed }),
+    pinnedClientPPUsed,
+  };
+}
+
 export function reverseCalculateBudgetTarget(input: BudgetTargetInput): BudgetTargetResult {
   const {
     targetClientPP,
