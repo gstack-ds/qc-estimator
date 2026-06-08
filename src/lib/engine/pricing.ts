@@ -321,7 +321,7 @@ export function buildClientExport(
     ['Equipment', summary.equipmentSubtotalClient],
     ['Venue Rental', summary.venueSubtotalClient],
     ['Production Fee', summary.productionFee],
-    ['Tax', summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax],
+    ['Tax', summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax + summary.productionFeeTax],
   ];
 
   return items

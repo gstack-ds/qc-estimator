@@ -220,6 +220,31 @@ describe('buildSummaryRows (venue)', () => {
 // ─── buildSummaryRows — av ───────────────────────────────
 
 describe('buildSummaryRows (av)', () => {
+  it('Tax row includes productionFeeTax', () => {
+    const summary = makeSummary({
+      equipmentSubtotalClient: 5000,
+      equipmentTax: 50,
+      productionFee: 400,
+      productionFeeTax: 29,
+      totalClient: 5479,
+    });
+    const rows = buildSummaryRows(summary, 'av', [], MARKUPS);
+    expect(rows.find((r) => r.label === 'Tax')?.amount).toBe(79); // equipmentTax + productionFeeTax
+  });
+
+  it('row amounts sum to totalClient when productionFeeTax > 0', () => {
+    const summary = makeSummary({
+      equipmentSubtotalClient: 5000,
+      equipmentTax: 50,
+      productionFee: 400,
+      productionFeeTax: 29,
+      totalClient: 5479, // 5000 + 50 + 400 + 29
+    });
+    const rows = buildSummaryRows(summary, 'av', [], MARKUPS);
+    const rowSum = rows.reduce((s, r) => s + r.amount, 0);
+    expect(rowSum).toBe(5479);
+  });
+
   it('returns AV Equipment, Labor & Fees, Tax, Production Fee', () => {
     const summary = makeSummary({
       equipmentSubtotalClient: 5000,
@@ -361,6 +386,27 @@ describe('buildDetailedCopyText', () => {
     expect(text).toContain('Tax\t\t\t\t$507.00');
   });
 
+  it('Tax line includes productionFeeTax', () => {
+    const summary = makeSummary({ foodTax: 600, productionFeeTax: 58 });
+    const text = buildDetailedCopyText([], summary, 50, 'Test');
+    expect(text).toContain('Tax\t\t\t\t$658.00'); // 600 + 58
+  });
+
+  it('productionFee + Tax row equals totalClient when no other fees or items', () => {
+    // totalClient = productionFee + foodTax + productionFeeTax
+    const summary = makeSummary({
+      productionFee: 800,
+      foodTax: 600,
+      productionFeeTax: 58,
+      totalClient: 1458,
+    });
+    const text = buildDetailedCopyText([], summary, 50, 'Test');
+    // Both rows present, their amounts must sum to totalClient
+    expect(text).toContain('Production Fee\t\t\t\t$800.00');
+    expect(text).toContain('Tax\t\t\t\t$658.00');
+    expect(text).toContain('TOTAL ESTIMATE\t\t\t\t$1,458.00');
+  });
+
   it('shows TOTAL ESTIMATE and Price PP', () => {
     const summary = makeSummary({ totalClient: 15000 });
     const text = buildDetailedCopyText([], summary, 50, 'Test');
@@ -443,6 +489,19 @@ describe('buildCopyText', () => {
     const text = buildCopyText(summary, 50, 'venue', 'Test', [], MARKUPS);
     // ceil(15001 / 50) = 301
     expect(text).toContain('Price PP\t$301.00');
+  });
+
+  it('Tax row in copy output includes productionFeeTax', () => {
+    const summary = makeSummary({
+      equipmentSubtotalClient: 4000,
+      equipmentTax: 72,
+      productionFee: 350,
+      productionFeeTax: 25,
+      totalClient: 4447, // 4000 + 72 + 350 + 25
+    });
+    const text = buildCopyText(summary, 50, 'av', 'Test', [], MARKUPS);
+    expect(text).toContain('Tax\t$97.00'); // equipmentTax(72) + productionFeeTax(25)
+    expect(text).toContain('TOTAL ESTIMATE\t$4,447.00');
   });
 
   it('full venue estimate with real numbers matches spec format', () => {

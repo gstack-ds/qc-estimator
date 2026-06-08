@@ -57,7 +57,7 @@ export function buildSummaryRows(
   lineItems: LineItemForExport[],
   markups: MarkupForExport[]
 ): { label: string; amount: number }[] {
-  const tax = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax;
+  const tax = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax + summary.productionFeeTax;
   const rows: { label: string; amount: number }[] = [];
 
   if (type === 'av') {
@@ -186,7 +186,7 @@ export function buildDetailedCopyText(
   if (summary.adminFeeClient > 0)      lines.push(`Admin Fee\t\t\t\t${fmtAmt(summary.adminFeeClient)}`);
   if (summary.productionFee > 0)       lines.push(`Production Fee\t\t\t\t${fmtAmt(summary.productionFee)}`);
 
-  const tax = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax;
+  const tax = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax + summary.productionFeeTax;
   if (tax > 0) lines.push(`Tax\t\t\t\t${fmtAmt(tax)}`);
 
   const pp = guestCount > 0 ? Math.ceil(summary.totalClient / guestCount) : 0;
