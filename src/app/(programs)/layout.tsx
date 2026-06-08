@@ -23,6 +23,7 @@ export default async function ProgramsLayout({
     { href: '/leads', label: 'Leads' },
     { href: '/programs', label: 'Programs' },
     { href: '/venues', label: 'Vendors' },
+    { href: '/document-extractor', label: 'Doc Reader' },
     ...(isAdmin ? [{ href: '/admin', label: 'Reference Data' }] : []),
   ];
 
