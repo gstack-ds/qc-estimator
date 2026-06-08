@@ -381,9 +381,12 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs (note: EXPECTED_QC_MARGIN values changed significantly with bug #5 fix and again with production fee tax)
 - [ ] Venue profile: attachment download links (currently shows filename only — needs signed URL for clickable download)
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
+- [x] Document Extractor (Doc Reader): utility page at /document-extractor; pdfImages.ts + docxExtract.ts utility libs + 21 unit tests; POST /api/document-extractor/text (Claude vision/text, model selector); POST /api/document-extractor/images (deterministic byte-scan PDF, word/media DOCX unzip); DocumentExtractorClient.tsx (drop zone, model picker, text sections + Copy, image grid + per-image download + Download All zip); nav link; 539 tests passing
+- [x] normalizeName strengthened: NFD diacritics, &/+ → and connector canonicalization; 10 new unit tests; display names never modified
 
 ### Next Session Start
-- All migrations through 041 are live in production. 518 tests passing.
+- All migrations through 041 are live in production. 539 tests passing.
+- Doc Reader is live at /document-extractor — no DB migrations needed, standalone utility.
 - Vendor directory Phase 1 is live — verify type tabs, re-tag any restaurants the migration UPDATE missed, test CopyEmailSigButton with a real email signature.
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in Slide Copy preview; she swaps in Canva).
 - Venue profile attachment downloads: signed URL generation is the next small task.
