@@ -18,7 +18,7 @@ export const REGION_RULES: RegionRule[] = [
   },
   {
     keywords: ['georgia', 'ga', 'atlanta'],
-    owner: 'Lydia',
+    owner: 'Khloe',
   },
 ];
 

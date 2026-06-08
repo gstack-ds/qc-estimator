@@ -42,12 +42,12 @@ describe('suggestOwner', () => {
     expect(suggestOwner(null, 'Bethesda', 'MD')).toBe('Lindsey');
   });
 
-  it('matches Atlanta → Lydia', () => {
-    expect(suggestOwner(null, 'Atlanta', 'GA')).toBe('Lydia');
+  it('matches Atlanta → Khloe', () => {
+    expect(suggestOwner(null, 'Atlanta', 'GA')).toBe('Khloe');
   });
 
-  it('matches Georgia → Lydia', () => {
-    expect(suggestOwner('Georgia')).toBe('Lydia');
+  it('matches Georgia → Khloe', () => {
+    expect(suggestOwner('Georgia')).toBe('Khloe');
   });
 
   it('returns null for unmatched region', () => {
@@ -64,6 +64,6 @@ describe('suggestOwner', () => {
 
   it('is case-insensitive', () => {
     expect(suggestOwner('CHARLOTTE')).toBe('Alex');
-    expect(suggestOwner('atlanta')).toBe('Lydia');
+    expect(suggestOwner('atlanta')).toBe('Khloe');
   });
 });
