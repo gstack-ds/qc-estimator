@@ -363,9 +363,9 @@ export default function EstimateBuilder({
     adminFeeRate: resolveOverride(est.adminFeeOverride, program.admin_fee_default),
     ccProcessingFee: programConfig.ccProcessingFee,
     clientCommissionRate: programConfig.clientCommission,
-    foodTaxRate: programConfig.location.foodTaxRate,
-    alcoholTaxRate: programConfig.location.alcoholTaxRate,
-    generalTaxRate: programConfig.location.generalTaxRate,
+    foodTaxRate: est.foodTaxOverride ?? programConfig.location.foodTaxRate,
+    alcoholTaxRate: est.alcoholTaxOverride ?? programConfig.location.alcoholTaxRate,
+    generalTaxRate: est.generalTaxOverride ?? programConfig.location.generalTaxRate,
   }), [est, program, programConfig]);
 
   // ─── Cache total (debounced 2s) ───────────────────────────

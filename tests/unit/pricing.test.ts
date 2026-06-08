@@ -1100,6 +1100,53 @@ describe('calculateVenueEstimate — tax overrides', () => {
     expect(s.foodTax).toBeCloseTo(1550 * 0.085);
     expect(s.foodTax).not.toBeCloseTo(1550 * 0.0725);
   });
+
+  // Implied-rate tests: the ratio tax ÷ subtotal must equal the override rate,
+  // not the location default. These guard the engine contract that the panel's
+  // Show Math formula "subtotal × overrideRate = taxAmount" holds.
+
+  it('implied food tax rate (foodTax / fbFoodSubtotalClient) equals override, not location default', () => {
+    const input: VenueEstimateInput = {
+      ...BASE_INPUT,
+      lineItems: [FOOD_ITEM],
+      foodTaxOverride: 0.0825, // 8.25% — location default is 7.25%
+    };
+    const s = calculateVenueEstimate(input, NO_COMM_CONFIG);
+    const impliedRate = s.foodTax / s.fbFoodSubtotalClient;
+    expect(impliedRate).toBeCloseTo(0.0825, 4); // must use override
+    expect(impliedRate).not.toBeCloseTo(0.0725, 4); // must NOT use location default
+  });
+
+  it('implied alcohol tax rate (alcoholTax / fbAlcoholSubtotalClient) equals override', () => {
+    const input: VenueEstimateInput = {
+      ...BASE_INPUT,
+      lineItems: [ALCOHOL_ITEM],
+      alcoholTaxOverride: 0.0775,
+    };
+    const s = calculateVenueEstimate(input, NO_COMM_CONFIG);
+    const impliedRate = s.alcoholTax / s.fbAlcoholSubtotalClient;
+    expect(impliedRate).toBeCloseTo(0.0775, 4);
+    expect(impliedRate).not.toBeCloseTo(0.0725, 4);
+  });
+
+  it('implied general tax rate (equipmentTax / equipmentSubtotalClient) equals override', () => {
+    const input: VenueEstimateInput = {
+      ...BASE_INPUT,
+      lineItems: [EQUIPMENT_ITEM],
+      generalTaxOverride: 0.0825,
+    };
+    const s = calculateVenueEstimate(input, NO_COMM_CONFIG);
+    const impliedRate = s.equipmentTax / s.equipmentSubtotalClient;
+    expect(impliedRate).toBeCloseTo(0.0825, 4);
+    expect(impliedRate).not.toBeCloseTo(0.0725, 4);
+  });
+
+  it('without overrides, implied food tax rate equals location default', () => {
+    const input: VenueEstimateInput = { ...BASE_INPUT, lineItems: [FOOD_ITEM] };
+    const s = calculateVenueEstimate(input, NO_COMM_CONFIG);
+    const impliedRate = s.foodTax / s.fbFoodSubtotalClient;
+    expect(impliedRate).toBeCloseTo(0.0725, 4); // location default
+  });
 });
 
 // ─── Travel in production fee ─────────────────────────────
