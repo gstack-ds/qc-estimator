@@ -363,7 +363,7 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 ### Remaining
 - [x] Migrations 035 and 036 run in production — enum values live, data remapped, program_staffing table created
 - [x] Tour estimate type — all 4 phases complete (migrations 037 + 038, vehicleSizing, guideScaling, catalog, PDF; 403 tests passing)
-- [ ] **Run migration 038 in production** — `tour_catalog` table (fixed trigger name: `update_updated_at()`)
+- [x] Migration 038 run in production — `tour_catalog` table live
 - [ ] **Venue profile data** — need real estimates with `venue_id` set to verify history section populates. Trigger by opening an existing venue estimate, selecting a venue, then visiting the venue profile.
 - [ ] **Tell Alex** — Bright Darling is not on Google Fonts; Cormorant Garamond is used in the Slide Copy preview instead; she should swap to Bright Darling in the actual Canva template
 - [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs (note: EXPECTED_QC_MARGIN values changed significantly with bug #5 fix and again with production fee tax)
@@ -371,7 +371,7 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- **Run migration 038 in production** (tour_catalog table) before testing Load/Save template on the live site.
+- Migration 038 is live — tour_catalog table exists in production.
 - Verify Tour estimate end-to-end: create a tour estimate, fill TourDetailsPanel fields (including guide scaling), use "Add as line item", save a template, load it back.
 - Run the Phase 4 verification checklist (items 4.2–4.13) against the live site.
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in Slide Copy preview; she swaps in Canva).
