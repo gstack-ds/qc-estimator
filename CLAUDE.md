@@ -243,6 +243,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-06-04 | 10-lane pipeline + tracking_on_hold/negotiations enum values + data remaps | Migration 035: ALTER TYPE adds tracking_on_hold + negotiations; UPDATE remaps halted→tracking_on_hold, planning/planning_not_started→under_contract. LeadStatusGroup loses 'paused' (now open/closed only). PIPELINE_LANES has 10 lanes with correct colors. Legacy values kept in type for DB compat but mapped to safe lanes. | Recreate enum (risky with existing data); split into separate migration per value (unnecessary) |
 | 2026-06-04 | Tour estimate type — 4 phases, pure TS engine modules, JSONB detail storage | Phase 1: migration 037 (tour_details JSONB, estimate_type='tour'), TourEstimateBuilder shell. Phase 2: vehicleSizing.ts (suggestFleet, 4 candidate fleets, greeter logic). Phase 3: guideScaling.ts (waves, venue cap, self-guided), GuideSuggestionBanner + "Add as line item". Phase 4: tour_catalog table (migration 038), getTourCatalog/saveTourTemplate actions, Load/Save template UI, buildSummaryRows tour branch, ProposalDocument tourDetails logistics block. | Inline engine logic in component (untestable); separate tour DB tables (overkill for JSONB details) |
 | 2026-06-04 | TourDetails extracted to src/lib/tours/types.ts (server-free) | ProposalDocument is dynamically imported client-side — can't safely use `import type` from a 'use server' file in all bundling contexts. Moving TourDetails + TourCatalogEntry to a plain TS file avoids this entirely. Pattern mirrors leads/constants.ts and programs/documentTypes.ts. | Keep in actions.ts (risky for dynamic imports); duplicate interface (drift) |
+| 2026-06-07 | productionFeeTax included in export Tax row via + summary.productionFeeTax | When a new tax field is added to EstimateSummary, every tax aggregation site must be updated: buildSummaryRows, buildDetailedCopyText, buildClientExport, and the panel/PDF display. The engine computes correctly but export utilities are separate code paths. Fixed all four sites; dead-code buildClientExport fixed for future safety. | Omit from export utilities (itemized rows don't add up to total — invisible until caught by implied-rate tests) |
+| 2026-06-07 | mathRates tax rate fields follow effectiveLocation pattern (override ?? locationDefault) | mathRates drives Show Math formula display; if it diverges from the engine's effectiveConfig, the formula shows a rate inconsistent with the computed dollar amount. The fix mirrors the effectiveLocation useMemo pattern already present in EstimateBuilder. | Use programConfig.location.* directly (shows wrong rate when override is set) |
 
 ## Gotchas Log
 
@@ -273,6 +275,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-06-02 | uploadLineItemThumbnail pointed at wrong bucket ('estimates' instead of 'line-item-thumbnails') | 'estimates' is the DB table name, not a storage bucket. The upload silently failed — Supabase returned an error but the server action swallowed it. Always verify bucket names in Storage dashboard before writing upload code. |
 | 2026-06-02 | PDF section order was arbitrary — items sorted by item-level sort_order, not section-level | Array.from(new Set(lineItems.map(li => li.section))) gives section order from the first item of each section encountered. When multiple sections have items at sort_order 0, the output is unpredictable. Fix: pass orderedSections[] from each builder. |
 | 2026-06-02 | PDF extraction silently capped at 5-10 items — prompt said "aim for 5-10 total" | Claude honored the instruction and deliberately skipped items on larger menus. The cap was a leftover from early development. Removed from prompt; max_tokens raised from 4096 to 16000. Always check extraction prompts for unintended quantity limits. |
+| 2026-06-07 | productionFeeTax missing from export Tax row — Copy Numbers itemized rows didn't add up to total | Commit a0c096c added productionFeeTax to totalClient in the engine but did not update export.ts. The `tax` variable in buildSummaryRows and buildDetailedCopyText was missing `+ summary.productionFeeTax`. ProposalDocument.tsx was correctly updated at the time. Always update export.ts when adding new tax fields to EstimateSummary. |
+| 2026-06-07 | mathRates in EstimateBuilder used raw location tax rates instead of effective (override) rates | effectiveLocation was computed correctly and passed to LineItemSection/ExportButtons, but mathRates (lines 366-368) still read programConfig.location.foodTaxRate etc. Show Math formula showed 7.25% while the dollar amount was computed at the 8.25% override — visually inconsistent. Fix: mirror effectiveLocation logic in mathRates. |
 
 ## Current TODOs
 
@@ -364,6 +368,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Migrations 035 and 036 run in production — enum values live, data remapped, program_staffing table created
 - [x] Tour estimate type — all 4 phases complete (migrations 037 + 038, vehicleSizing, guideScaling, catalog, PDF; 403 tests passing)
 - [x] Migration 038 run in production — `tour_catalog` table live
+- [x] Bug fix: productionFeeTax missing from Copy Numbers Tax row (buildSummaryRows + buildDetailedCopyText in export.ts + dead-code buildClientExport in pricing.ts); 5 new export tests; 408 total
+- [x] Bug fix: SummaryPanel Show Math displayed location default tax rate instead of override rate when overrides set; mathRates now mirrors effectiveLocation pattern; 4 new implied-rate tests; 412 total
 - [ ] **Venue profile data** — need real estimates with `venue_id` set to verify history section populates. Trigger by opening an existing venue estimate, selecting a venue, then visiting the venue profile.
 - [ ] **Tell Alex** — Bright Darling is not on Google Fonts; Cormorant Garamond is used in the Slide Copy preview instead; she should swap to Bright Darling in the actual Canva template
 - [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs (note: EXPECTED_QC_MARGIN values changed significantly with bug #5 fix and again with production fee tax)
@@ -371,11 +377,10 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [ ] Role-based access — admin vs user distinction exists in DB but UI enforcement is minimal
 
 ### Next Session Start
-- Migration 038 is live — tour_catalog table exists in production.
-- Verify Tour estimate end-to-end: create a tour estimate, fill TourDetailsPanel fields (including guide scaling), use "Add as line item", save a template, load it back.
-- Run the Phase 4 verification checklist (items 4.2–4.13) against the live site.
+- All migrations through 038 are live in production.
+- Two export/display bugs fixed this session (productionFeeTax in Copy Numbers, mathRates Show Math); 412 tests passing.
+- Verify Tour estimate end-to-end on live site: create tour estimate, guide scaling, "Add as line item", save/load template.
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in Slide Copy preview; she swaps in Canva).
 - Venue profile attachment downloads: signed URL generation is the next small task.
-- Scanner is live and working. Run `npm run dedup` if duplicate leads accumulate.
 - Proposal validation against Excel is the next quality check.
 - Role-based access (admin vs user UI enforcement) is the remaining backlog item after Excel validation.
