@@ -9,15 +9,15 @@ export interface RegionRule {
 // Routing map: add or edit rules here, or load from DB in Phase 2.
 export const REGION_RULES: RegionRule[] = [
   {
-    keywords: ['charlotte', 'north carolina', 'nc', 'raleigh', 'durham', 'asheville'],
-    owner: 'Alex',
+    keywords: ['north carolina', 'nc', 'charlotte', 'raleigh', 'durham', 'asheville', 'south carolina', 'sc', 'columbia', 'greenville', 'charleston'],
+    owner: 'Abbie',
   },
   {
-    keywords: ['dc', 'washington', 'd.c.', 'maryland', 'md', 'virginia', 'va', 'nova', 'northern virginia', 'new york', 'ny', 'nyc', 'philadelphia', 'philly', 'pa'],
+    keywords: ['dc', 'washington', 'd.c.', 'maryland', 'md', 'virginia', 'va', 'nova', 'northern virginia', 'new york', 'ny', 'nyc'],
     owner: 'Lindsey',
   },
   {
-    keywords: ['georgia', 'ga', 'atlanta'],
+    keywords: ['georgia', 'ga', 'atlanta', 'philadelphia', 'philly', 'pa'],
     owner: 'Khloe',
   },
 ];

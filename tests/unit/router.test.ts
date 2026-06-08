@@ -2,22 +2,32 @@ import { describe, it, expect } from 'vitest';
 import { suggestOwner } from '../../src/lib/scanner/router';
 
 describe('suggestOwner', () => {
-  it('matches Charlotte → Alex', () => {
-    expect(suggestOwner('Charlotte', 'Charlotte', 'NC')).toBe('Alex');
+  // Abbie — NC + SC
+  it('matches Charlotte → Abbie', () => {
+    expect(suggestOwner('Charlotte', 'Charlotte', 'NC')).toBe('Abbie');
   });
 
-  it('matches North Carolina (full state name) → Alex', () => {
-    expect(suggestOwner('North Carolina')).toBe('Alex');
+  it('matches North Carolina (full state name) → Abbie', () => {
+    expect(suggestOwner('North Carolina')).toBe('Abbie');
   });
 
-  it('matches Raleigh → Alex', () => {
-    expect(suggestOwner(null, 'Raleigh', 'NC')).toBe('Alex');
+  it('matches Raleigh → Abbie', () => {
+    expect(suggestOwner(null, 'Raleigh', 'NC')).toBe('Abbie');
   });
 
-  it('matches Asheville → Alex', () => {
-    expect(suggestOwner(null, 'Asheville', 'NC')).toBe('Alex');
+  it('matches Asheville → Abbie', () => {
+    expect(suggestOwner(null, 'Asheville', 'NC')).toBe('Abbie');
   });
 
+  it('matches South Carolina → Abbie', () => {
+    expect(suggestOwner('South Carolina')).toBe('Abbie');
+  });
+
+  it('matches Charleston SC → Abbie', () => {
+    expect(suggestOwner(null, 'Charleston', 'SC')).toBe('Abbie');
+  });
+
+  // Lindsey — DMV + NY
   it('matches DC → Lindsey', () => {
     expect(suggestOwner('DC')).toBe('Lindsey');
   });
@@ -34,14 +44,11 @@ describe('suggestOwner', () => {
     expect(suggestOwner(null, 'New York', 'NY')).toBe('Lindsey');
   });
 
-  it('matches Philadelphia → Lindsey', () => {
-    expect(suggestOwner(null, 'Philadelphia', 'PA')).toBe('Lindsey');
-  });
-
   it('matches Maryland → Lindsey', () => {
     expect(suggestOwner(null, 'Bethesda', 'MD')).toBe('Lindsey');
   });
 
+  // Khloe — Georgia + Philadelphia/PA
   it('matches Atlanta → Khloe', () => {
     expect(suggestOwner(null, 'Atlanta', 'GA')).toBe('Khloe');
   });
@@ -50,6 +57,15 @@ describe('suggestOwner', () => {
     expect(suggestOwner('Georgia')).toBe('Khloe');
   });
 
+  it('matches Philadelphia → Khloe', () => {
+    expect(suggestOwner(null, 'Philadelphia', 'PA')).toBe('Khloe');
+  });
+
+  it('matches Philly → Khloe', () => {
+    expect(suggestOwner('Philly')).toBe('Khloe');
+  });
+
+  // Unmatched
   it('returns null for unmatched region', () => {
     expect(suggestOwner('Chicago', 'Chicago', 'IL')).toBeNull();
   });
@@ -63,7 +79,8 @@ describe('suggestOwner', () => {
   });
 
   it('is case-insensitive', () => {
-    expect(suggestOwner('CHARLOTTE')).toBe('Alex');
+    expect(suggestOwner('CHARLOTTE')).toBe('Abbie');
     expect(suggestOwner('atlanta')).toBe('Khloe');
+    expect(suggestOwner('WASHINGTON DC')).toBe('Lindsey');
   });
 });
