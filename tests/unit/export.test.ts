@@ -9,7 +9,8 @@ import {
   buildDetailedCopyText,
 } from '../../src/lib/utils/export';
 import type { LineItemForExport, MarkupForExport } from '../../src/lib/utils/export';
-import type { EstimateSummary } from '../../src/types';
+import type { EstimateSummary, VenueEstimateInput, ProgramConfig } from '../../src/types';
+import { calculateVenueEstimate } from '../../src/lib/engine/pricing';
 
 // ─── Fixtures ────────────────────────────────────────────
 
@@ -537,5 +538,79 @@ describe('buildCopyText', () => {
     expect(text).toContain('Tax\t$910.00'); // 629+236+45
     expect(text).toContain('TOTAL ESTIMATE\t$19,345.00');
     expect(text).toContain('Price PP\t$258.00'); // ceil(19345/75)
+  });
+});
+
+// ─── buildDetailedCopyText — row sum equals totalClient ───
+// Regression guard for the class of bug fixed 2026-06-07:
+// a new fee field was added to summary.totalClient in the engine (productionFeeTax)
+// but not to the Tax row in buildDetailedCopyText, causing itemized rows to not
+// add up to the total. This test catches any recurrence.
+
+describe('buildDetailedCopyText — row sum equals totalClient', () => {
+  // Multi-section estimate: F&B food + AV equipment + service charge.
+  // Uses calculateVenueEstimate to get the authoritative summary so we test
+  // the real engine values, not manually-cooked numbers.
+  //
+  // Inputs:
+  //   F&B Dinner: qty=25, ourCost=$100, markup=55% → clientCost=$3875 (25×100×1.55)
+  //   AV LED Wall: qty=1, ourCost=$500, markup=65% → clientCost=$825 (1×500×1.65)
+  //   serviceCharge=20% of fbSubtotalClient=3875 → 775
+  //   Charlotte tax 7.25%: foodTax=3875×0.0725=280.94, equipmentTax=825×0.0725=59.81
+  //   CC=3.5%, clientComm=5%, GDP=off
+  //
+  //   markupRevenue = 3875 + 825 + 775 = 5475
+  //   subtotalClient = 3875 + 280.94 + 825 + 59.81 + 775 = 5815.75
+  //   productionFee = 5815.75×0.035 + 5475×0.05 = 203.55 + 273.75 = 477.30
+  //   productionFeeTax = 477.30×0.0725 = 34.60
+  //   totalClient = 5815.75 + 477.30 + 34.60 = 6327.65
+  const config: ProgramConfig = {
+    guestCount: 25,
+    location: { id: 'loc-cllt', name: 'Charlotte NC', foodTaxRate: 0.0725, alcoholTaxRate: 0.0725, generalTaxRate: 0.0725 },
+    ccProcessingFee: 0.035,
+    clientCommission: 0.05,
+    gdpCommissionEnabled: false,
+    gdpCommissionRate: 0.065,
+    serviceChargeDefault: 0.20,
+    gratuityDefault: 0,
+    adminFeeDefault: 0,
+  };
+  const engineInput: VenueEstimateInput = {
+    name: 'Row Sum Test',
+    fbMinimum: 0,
+    isVenueTaxable: false,
+    serviceCharge: 0.20,
+    gratuity: 0,
+    adminFee: 0,
+    lineItems: [
+      { id: 'f1', section: 'F&B', taxBucket: 'fb', name: 'Dinner', qty: 25, unitPrice: 100, categoryMarkupPct: 0.55, taxType: 'food' },
+      { id: 'e1', section: 'AV', taxBucket: 'equipment', name: 'LED Wall', qty: 1, unitPrice: 500, categoryMarkupPct: 0.65, taxType: 'general' },
+    ],
+  };
+  const lineItemsForExport: LineItemForExport[] = [
+    { name: 'Dinner', section: 'F&B', qty: 25, unitPrice: 100, categoryMarkupPct: 0.55, categoryId: 'markup-catering', taxType: 'food' },
+    { name: 'LED Wall', section: 'AV', qty: 1, unitPrice: 500, categoryMarkupPct: 0.65, categoryId: 'markup-av', taxType: 'general' },
+  ];
+
+  it('Tax row in output includes productionFeeTax (not just line item taxes)', () => {
+    const summary = calculateVenueEstimate(engineInput, config);
+    const text = buildDetailedCopyText(lineItemsForExport, summary, 25, 'Row Sum Test');
+    const expectedTax = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax + summary.productionFeeTax;
+    // productionFeeTax must be included — if missing the Tax line would be ~340, not ~375
+    expect(text).toContain(`Tax\t\t\t\t${fmtAmt(expectedTax)}`);
+  });
+
+  it('section client totals + service charge + production fee + all taxes sum to totalClient', () => {
+    const summary = calculateVenueEstimate(engineInput, config);
+    // itemClientCost produces the same values as the engine for non-override items
+    const fbSectionClientTotal = itemClientCost(lineItemsForExport[0]);  // 25×100×1.55 = 3875
+    const avSectionClientTotal = itemClientCost(lineItemsForExport[1]);  // 1×500×1.65  = 825
+    const allTaxes = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax + summary.productionFeeTax;
+    const rowsSum = fbSectionClientTotal + avSectionClientTotal
+      + summary.serviceChargeClient
+      + summary.productionFee
+      + allTaxes;
+    // If any fee is missing from allTaxes, rowsSum < totalClient and this assertion fails
+    expect(rowsSum).toBeCloseTo(summary.totalClient, 1);
   });
 });

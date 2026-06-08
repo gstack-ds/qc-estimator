@@ -1241,3 +1241,286 @@ describe('calculateVenueEstimate — travel in production fee', () => {
     expect(marginIncluded.trueNetProfit - marginExcluded.trueNetProfit).toBeCloseTo(travelAmt, 0);
   });
 });
+
+// ─── Third-Party Commissions ──────────────────────────────
+// thirdPartyCommissionsTotal = sum(markupRevenue × rate) for each third-party.
+// No existing test asserts a specific dollar value with a non-zero rate.
+
+describe('calculateMarginAnalysis — third-party commissions', () => {
+  // Simple estimate: 1 item, ourCost=$500, markup=85%, clientCost=$925, no tax, no restaurant fees.
+  const simpleInput: VenueEstimateInput = {
+    name: 'Third-Party Test',
+    fbMinimum: 0, isVenueTaxable: false,
+    serviceCharge: 0, gratuity: 0, adminFee: 0,
+    lineItems: [
+      { id: '1', section: 'Décor', taxBucket: 'equipment', name: 'Centerpieces', qty: 1, unitPrice: 500, categoryMarkupPct: 0.85, taxType: 'none' },
+    ],
+  };
+
+  // Third-party only (all other commissions zeroed so numbers are clean)
+  // markupRevenue = clientCost = 925
+  // thirdPartyCommissionsTotal = 925 × 0.04 = 37.00
+  // productionFee = 0 (CC=0, clientComm=0)
+  // totalClient = 925
+  // vendorCostsBase = 500
+  // qcRevenue = 925 − 500 − 0 − 0 − 0 − 0 − 37 = 388.00
+  const thirdPartyOnlyConfig: ProgramConfig = {
+    ...BASE_CONFIG,
+    ccProcessingFee: 0,
+    clientCommission: 0,
+    gdpCommissionEnabled: false,
+    thirdPartyCommissions: [{ name: 'Hotel DMC', rate: 0.04 }],
+  };
+
+  it('thirdPartyCommissionsTotal equals markupRevenue × rate', () => {
+    const summary = calculateVenueEstimate(simpleInput, thirdPartyOnlyConfig);
+    const margin = calculateMarginAnalysis(summary, thirdPartyOnlyConfig, TEAM_HOURS_TIERS, 0);
+    // markupRevenue = 925 (clientCost of 1 item, no restaurant fees)
+    expect(margin.thirdPartyCommissionsTotal).toBeCloseTo(37.0);
+  });
+
+  it('qcRevenue is reduced by thirdPartyCommissionsTotal', () => {
+    const summary = calculateVenueEstimate(simpleInput, thirdPartyOnlyConfig);
+    const margin = calculateMarginAnalysis(summary, thirdPartyOnlyConfig, TEAM_HOURS_TIERS, 0);
+    // qcRevenue = 925 − 500 − 37 = 388
+    expect(margin.qcRevenue).toBeCloseTo(388.0);
+  });
+
+  // All four commissions active simultaneously.
+  // 1 AV item: ourCost=$1000, markup=65%, clientCost=$1650, no tax.
+  // CC=3.5%, clientComm=5%, GDP=6.5%, thirdParty=4%
+  //
+  // markupRevenue = 1650
+  // subtotalClient = 1650 (no taxes, no restaurant fees)
+  // productionFee = 1650×0.035 + 1650×0.05 = 57.75 + 82.50 = 140.25
+  // totalClient = 1650 + 140.25 = 1790.25
+  //
+  // margin analysis:
+  //   vendorCostsBase = 1000 (no vendor taxes)
+  //   totalTaxes = 0
+  //   ccProcessingAmount = 1650 × 0.035 = 57.75
+  //   clientCommissionAmount = 1650 × 0.05 = 82.50
+  //   gdpCommissionAmount = 1790.25 × 0.065 = 116.3663
+  //   thirdPartyCommissionsTotal = 1650 × 0.04 = 66.00
+  //   qcRevenue = 1790.25 − 1000 − 0 − 57.75 − 82.50 − 116.3663 − 66.00 = 467.63
+  //   (algebraic check: markup(650) − GDP(116.37) − thirdParty(66) = 467.63 ✓)
+  const allFourConfig: ProgramConfig = {
+    ...BASE_CONFIG,
+    location: { id: 'z', name: 'No Tax', foodTaxRate: 0, alcoholTaxRate: 0, generalTaxRate: 0 },
+    ccProcessingFee: 0.035,
+    clientCommission: 0.05,
+    gdpCommissionEnabled: true,
+    gdpCommissionRate: 0.065,
+    thirdPartyCommissions: [{ name: 'DMC', rate: 0.04 }],
+  };
+  const avInput: VenueEstimateInput = {
+    name: 'All-Four Commission Test',
+    fbMinimum: 0, isVenueTaxable: false,
+    serviceCharge: 0, gratuity: 0, adminFee: 0,
+    lineItems: [
+      { id: '1', section: 'AV & Production', taxBucket: 'equipment', name: 'LED Wall', qty: 1, unitPrice: 1000, categoryMarkupPct: 0.65, taxType: 'none' },
+    ],
+  };
+
+  it('all four commissions (CC + clientComm + GDP + third-party): thirdPartyCommissionsTotal = 66.00', () => {
+    const summary = calculateVenueEstimate(avInput, allFourConfig);
+    const margin = calculateMarginAnalysis(summary, allFourConfig, TEAM_HOURS_TIERS, 0);
+    // markupRevenue = 1650, thirdParty rate = 4%
+    expect(margin.thirdPartyCommissionsTotal).toBeCloseTo(66.0);
+  });
+
+  it('all four commissions: qcRevenue ≈ 467.63 (markup − GDP − third-party, CC/clientComm cancel)', () => {
+    const summary = calculateVenueEstimate(avInput, allFourConfig);
+    const margin = calculateMarginAnalysis(summary, allFourConfig, TEAM_HOURS_TIERS, 0);
+    expect(margin.qcRevenue).toBeCloseTo(467.63, 1);
+  });
+
+  it('all four commissions: qcRevenue satisfies the algebraic identity', () => {
+    const summary = calculateVenueEstimate(avInput, allFourConfig);
+    const margin = calculateMarginAnalysis(summary, allFourConfig, TEAM_HOURS_TIERS, 0);
+    const expected = summary.totalClient
+      - margin.vendorCostsBase - margin.totalTaxes
+      - margin.ccProcessingAmount - margin.clientCommissionAmount
+      - margin.gdpCommissionAmount - margin.thirdPartyCommissionsTotal;
+    expect(margin.qcRevenue).toBeCloseTo(expected);
+  });
+});
+
+// ─── Production Fee Direct Dollar Assertion ───────────────
+// productionFee = subtotalClient × ccProcessingFee + markupRevenue × clientCommission + travelInProductionFee
+// No existing test asserts the specific dollar value of productionFee itself.
+// These four cases cover each term independently and together.
+
+describe('calculateVenueEstimate — production fee direct assertion', () => {
+  // 1 AV item: ourCost=$1000, markup=65%, clientCost=$1650.
+  // No taxes (generalTaxRate=0) so subtotalClient = markupRevenue = 1650.
+  const noTaxBase: ProgramConfig = {
+    ...BASE_CONFIG,
+    location: { id: 'z', name: 'No Tax', foodTaxRate: 0, alcoholTaxRate: 0, generalTaxRate: 0 },
+    gdpCommissionEnabled: false,
+  };
+  const avInput: VenueEstimateInput = {
+    name: 'ProdFee Test',
+    fbMinimum: 0, isVenueTaxable: false,
+    serviceCharge: 0, gratuity: 0, adminFee: 0,
+    lineItems: [
+      { id: '1', section: 'AV', taxBucket: 'equipment', name: 'LED Wall', qty: 1, unitPrice: 1000, categoryMarkupPct: 0.65, taxType: 'none' },
+    ],
+  };
+
+  it('CC-only: productionFee = subtotalClient × ccProcessingFee = 57.75', () => {
+    const config: ProgramConfig = { ...noTaxBase, ccProcessingFee: 0.035, clientCommission: 0 };
+    const s = calculateVenueEstimate(avInput, config);
+    // subtotalClient = 1650, productionFee = 1650 × 0.035 = 57.75
+    expect(s.productionFee).toBeCloseTo(57.75);
+  });
+
+  it('clientCommission-only: productionFee = markupRevenue × clientCommission = 82.50', () => {
+    const config: ProgramConfig = { ...noTaxBase, ccProcessingFee: 0, clientCommission: 0.05 };
+    const s = calculateVenueEstimate(avInput, config);
+    // markupRevenue = 1650, productionFee = 1650 × 0.05 = 82.50
+    expect(s.productionFee).toBeCloseTo(82.5);
+  });
+
+  it('CC + clientCommission: productionFee = 57.75 + 82.50 = 140.25', () => {
+    const config: ProgramConfig = { ...noTaxBase, ccProcessingFee: 0.035, clientCommission: 0.05 };
+    const s = calculateVenueEstimate(avInput, config);
+    // productionFee = 1650×0.035 + 1650×0.05 = 57.75 + 82.50
+    expect(s.productionFee).toBeCloseTo(140.25);
+  });
+
+  it('CC + clientCommission + travel: productionFee = 57.75 + 82.50 + 200 = 340.25', () => {
+    const config: ProgramConfig = { ...noTaxBase, ccProcessingFee: 0.035, clientCommission: 0.05 };
+    const inputWithTravel: VenueEstimateInput = { ...avInput, travelTotal: 200, includeTravelInProductionFee: true };
+    const s = calculateVenueEstimate(inputWithTravel, config);
+    // productionFee = 57.75 + 82.50 + 200 = 340.25
+    expect(s.productionFee).toBeCloseTo(340.25);
+  });
+});
+
+// ─── Category Markup Rates (by name + rate) ───────────────
+// Every one of the 11 standard markup categories must have an explicit
+// assertion: given ourCost → clientCost = ourCost × (1 + rate).
+// Already covered: 55% Catering, 90% Staffing, 85% Decor.
+// The eight below and the 50% floor are not yet explicitly tested.
+
+describe('calculateLineItem — all category markup rates', () => {
+  const zeroTaxConfig: ProgramConfig = {
+    ...BASE_CONFIG,
+    location: { id: 'z', name: 'No Tax', foodTaxRate: 0, alcoholTaxRate: 0, generalTaxRate: 0 },
+  };
+
+  function mkItem(markupPct: number, bucket: 'equipment' | 'venue' | 'staffing' | 'fb' = 'equipment'): LineItem {
+    return {
+      id: '1', section: 'Test', taxBucket: bucket,
+      name: 'Test Item', qty: 1, unitPrice: 1000,
+      categoryMarkupPct: markupPct, taxType: 'none',
+    };
+  }
+
+  it('AV & Production (65%): clientCost = ourCost × 1.65', () => {
+    const result = calculateLineItem(mkItem(0.65), zeroTaxConfig);
+    expect(result.ourCost).toBe(1000);
+    expect(result.clientCost).toBe(1650); // 1000 × 1.65
+  });
+
+  it('Venues & Room Rentals (60%): clientCost = ourCost × 1.60', () => {
+    const result = calculateLineItem(mkItem(0.60, 'venue'), zeroTaxConfig);
+    expect(result.ourCost).toBe(1000);
+    expect(result.clientCost).toBe(1600); // 1000 × 1.60
+  });
+
+  it('Entertainment (75%): clientCost = ourCost × 1.75', () => {
+    const result = calculateLineItem(mkItem(0.75), zeroTaxConfig);
+    expect(result.ourCost).toBe(1000);
+    expect(result.clientCost).toBe(1750); // 1000 × 1.75
+  });
+
+  it('Transportation (75%): clientCost = ourCost × 1.75', () => {
+    const result = calculateLineItem(mkItem(0.75), zeroTaxConfig);
+    expect(result.ourCost).toBe(1000);
+    expect(result.clientCost).toBe(1750); // 1000 × 1.75
+  });
+
+  it('Activities & Experiences (75%): clientCost = ourCost × 1.75', () => {
+    const result = calculateLineItem(mkItem(0.75), zeroTaxConfig);
+    expect(result.ourCost).toBe(1000);
+    expect(result.clientCost).toBe(1750); // 1000 × 1.75
+  });
+
+  it('Purchased / Sourced Items (200%): clientCost = ourCost × 3.00', () => {
+    const result = calculateLineItem(mkItem(2.00), zeroTaxConfig);
+    expect(result.ourCost).toBe(1000);
+    expect(result.clientCost).toBe(3000); // 1000 × 3.00
+  });
+
+  it('Delivery & Logistics (85%): clientCost = ourCost × 1.85', () => {
+    const result = calculateLineItem(mkItem(0.85, 'staffing'), zeroTaxConfig);
+    expect(result.ourCost).toBe(1000);
+    expect(result.clientCost).toBe(1850); // 1000 × 1.85
+  });
+
+  it('Tours & Guided Experiences (65%): clientCost = ourCost × 1.65', () => {
+    const result = calculateLineItem(mkItem(0.65), zeroTaxConfig);
+    expect(result.ourCost).toBe(1000);
+    expect(result.clientCost).toBe(1650); // 1000 × 1.65
+  });
+
+  it('50% floor (absolute minimum): clientCost = ourCost × 1.50', () => {
+    const result = calculateLineItem(mkItem(0.50), zeroTaxConfig);
+    expect(result.ourCost).toBe(1000);
+    expect(result.clientCost).toBe(1500); // 1000 × 1.50
+  });
+});
+
+// ─── pricePerPerson Rounding ──────────────────────────────
+// pricePerPerson = Math.ceil(totalClient / guestCount), or 0 if guestCount=0.
+// Only tested indirectly (via export tests). These cover the engine directly,
+// including edge cases: guestCount=1, large prime, fractional ceil, zero.
+
+describe('calculateVenueEstimate — pricePerPerson rounding', () => {
+  // 1 AV item: ourCost=$1000, markup=65%, clientCost=$1650.
+  // No tax, no fees, no commissions → totalClient = 1650 exactly.
+  const noFeeConfig = (guestCount: number): ProgramConfig => ({
+    guestCount,
+    location: { id: 'z', name: 'No Tax', foodTaxRate: 0, alcoholTaxRate: 0, generalTaxRate: 0 },
+    ccProcessingFee: 0,
+    clientCommission: 0,
+    gdpCommissionEnabled: false,
+    gdpCommissionRate: 0.065,
+    serviceChargeDefault: 0,
+    gratuityDefault: 0,
+    adminFeeDefault: 0,
+  });
+  const singleItem: VenueEstimateInput = {
+    name: 'PP Test', fbMinimum: 0, isVenueTaxable: false,
+    serviceCharge: 0, gratuity: 0, adminFee: 0,
+    lineItems: [
+      { id: '1', section: 'AV', taxBucket: 'equipment', name: 'Item', qty: 1, unitPrice: 1000, categoryMarkupPct: 0.65, taxType: 'none' },
+    ],
+  };
+  // totalClient = 1650 (no tax, no fees, no commissions)
+
+  it('guestCount=1: pricePerPerson equals totalClient (no division effect)', () => {
+    const s = calculateVenueEstimate(singleItem, noFeeConfig(1));
+    // ceil(1650 / 1) = 1650
+    expect(s.pricePerPerson).toBe(1650);
+  });
+
+  it('large prime guest count (97): pricePerPerson uses Math.ceil', () => {
+    const s = calculateVenueEstimate(singleItem, noFeeConfig(97));
+    // 1650 / 97 = 17.0103... → ceil = 18
+    expect(s.pricePerPerson).toBe(18);
+  });
+
+  it('guest count that produces fractional quotient (7): rounds up not truncates', () => {
+    const s = calculateVenueEstimate(singleItem, noFeeConfig(7));
+    // 1650 / 7 = 235.714... → ceil = 236, NOT floor(235)
+    expect(s.pricePerPerson).toBe(236);
+  });
+
+  it('guestCount=0: pricePerPerson is 0 (no division by zero)', () => {
+    const s = calculateVenueEstimate(singleItem, noFeeConfig(0));
+    expect(s.pricePerPerson).toBe(0);
+  });
+});

@@ -370,6 +370,7 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Migration 038 run in production — `tour_catalog` table live
 - [x] Bug fix: productionFeeTax missing from Copy Numbers Tax row (buildSummaryRows + buildDetailedCopyText in export.ts + dead-code buildClientExport in pricing.ts); 5 new export tests; 408 total
 - [x] Bug fix: SummaryPanel Show Math displayed location default tax rate instead of override rate when overrides set; mathRates now mirrors effectiveLocation pattern; 4 new implied-rate tests; 412 total
+- [x] Coverage audit: 14 calculation areas rated SOLID/THIN/NONE; 24 new tests closing highest-risk gaps (third-party commissions, production fee dollar, all 11 markup categories, row-sum export guard, pricePerPerson rounding); 436 total
 - [ ] **Venue profile data** — need real estimates with `venue_id` set to verify history section populates. Trigger by opening an existing venue estimate, selecting a venue, then visiting the venue profile.
 - [ ] **Tell Alex** — Bright Darling is not on Google Fonts; Cormorant Garamond is used in the Slide Copy preview instead; she should swap to Bright Darling in the actual Canva template
 - [ ] **Validate proposal-validation.test.ts against Excel** — enter the 3 scenarios from tests/unit/proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values; update if engine has bugs (note: EXPECTED_QC_MARGIN values changed significantly with bug #5 fix and again with production fee tax)
@@ -378,9 +379,9 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 
 ### Next Session Start
 - All migrations through 038 are live in production.
-- Two export/display bugs fixed this session (productionFeeTax in Copy Numbers, mathRates Show Math); 412 tests passing.
+- 436 tests passing. 24 new tests added this session closing coverage gaps identified in audit.
 - Verify Tour estimate end-to-end on live site: create tour estimate, guide scaling, "Add as line item", save/load template.
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in Slide Copy preview; she swaps in Canva).
 - Venue profile attachment downloads: signed URL generation is the next small task.
-- Proposal validation against Excel is the next quality check.
+- Proposal validation against Excel is the next quality check — enter the 3 scenarios from proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values.
 - Role-based access (admin vs user UI enforcement) is the remaining backlog item after Excel validation.
