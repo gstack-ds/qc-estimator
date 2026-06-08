@@ -21,6 +21,21 @@ const MODEL_OPTIONS: { value: Model; label: string }[] = [
   { value: 'claude-opus-4-8', label: 'Opus (most thorough)' },
 ];
 
+// Vercel serverless functions cap the request body at ~4.5 MB before the
+// function runs, returning plain-text "Request Entity Too Large" (413).
+const UPLOAD_SIZE_WARN_BYTES = 4 * 1024 * 1024; // 4 MB
+
+async function readResponseError(res: Response): Promise<string> {
+  const ct = res.headers.get('content-type') ?? '';
+  if (ct.includes('application/json')) {
+    const json = await res.json().catch(() => null);
+    return (json as { error?: string } | null)?.error ?? `Extraction failed (${res.status})`;
+  }
+  if (res.status === 413) return 'File too large — Vercel limits uploads to ~4.5 MB. Try a smaller file.';
+  if (res.status === 504 || res.status === 524) return 'Request timed out — try a smaller file or switch to Haiku or Sonnet.';
+  return `Extraction failed (${res.status} ${res.statusText || 'error'})`;
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   const handle = async () => {
@@ -93,8 +108,8 @@ export default function DocumentExtractorClient() {
       const fd = buildFormData();
       fd.append('model', model);
       const res = await fetch('/api/document-extractor/text', { method: 'POST', body: fd });
+      if (!res.ok) throw new Error(await readResponseError(res));
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Extraction failed');
       setSections(json.sections);
     } catch (err) {
       setTextError(err instanceof Error ? err.message : 'Extraction failed');
@@ -111,8 +126,8 @@ export default function DocumentExtractorClient() {
     try {
       const fd = buildFormData();
       const res = await fetch('/api/document-extractor/images', { method: 'POST', body: fd });
+      if (!res.ok) throw new Error(await readResponseError(res));
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Extraction failed');
       setImages(json.images);
     } catch (err) {
       setImgError(err instanceof Error ? err.message : 'Extraction failed');
@@ -210,6 +225,14 @@ export default function DocumentExtractorClient() {
           >
             {imgLoading ? 'Extracting images…' : 'Extract images'}
           </button>
+        </div>
+      )}
+
+      {/* Large-file warning */}
+      {file && file.size > UPLOAD_SIZE_WARN_BYTES && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          This file is {(file.size / 1024 / 1024).toFixed(1)} MB — uploads over ~4.5 MB may fail on Vercel.
+          If extraction fails, try a smaller file or use a compressed version.
         </div>
       )}
 
