@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
+import { createClient } from '@/lib/supabase/client';
 
 type Model = 'claude-haiku-4-5-20251001' | 'claude-sonnet-4-6' | 'claude-opus-4-8';
 
@@ -21,19 +22,32 @@ const MODEL_OPTIONS: { value: Model; label: string }[] = [
   { value: 'claude-opus-4-8', label: 'Opus (most thorough)' },
 ];
 
-// Vercel serverless functions cap the request body at ~4.5 MB before the
-// function runs, returning plain-text "Request Entity Too Large" (413).
-const UPLOAD_SIZE_WARN_BYTES = 4 * 1024 * 1024; // 4 MB
-
 async function readResponseError(res: Response): Promise<string> {
   const ct = res.headers.get('content-type') ?? '';
   if (ct.includes('application/json')) {
     const json = await res.json().catch(() => null);
     return (json as { error?: string } | null)?.error ?? `Extraction failed (${res.status})`;
   }
-  if (res.status === 413) return 'File too large — Vercel limits uploads to ~4.5 MB. Try a smaller file.';
+  if (res.status === 413) return 'File too large for this route.';
   if (res.status === 504 || res.status === 524) return 'Request timed out — try a smaller file or switch to Haiku or Sonnet.';
   return `Extraction failed (${res.status} ${res.statusText || 'error'})`;
+}
+
+/** Upload file to Supabase Storage directly from the browser (no Vercel body limit). */
+async function uploadToStorage(file: File): Promise<{ storagePath: string } | { error: string }> {
+  const supabase = createClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return { error: 'Not authenticated' };
+
+  const sanitized = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120);
+  const storagePath = `extractor-temp/${user.id}/${Date.now()}-${sanitized}`;
+
+  const { error } = await supabase.storage
+    .from('estimate-attachments')
+    .upload(storagePath, file, { contentType: file.type, upsert: false });
+
+  if (error) return { error: `Upload failed: ${error.message}` };
+  return { storagePath };
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -58,10 +72,12 @@ export default function DocumentExtractorClient() {
   const [model, setModel] = useState<Model>('claude-sonnet-4-6');
   const [dragging, setDragging] = useState(false);
 
+  const [uploading, setUploading] = useState(false);
   const [textLoading, setTextLoading] = useState(false);
   const [textError, setTextError] = useState<string | null>(null);
   const [sections, setSections] = useState<ExtractedSection[] | null>(null);
 
+  const [imgUploading, setImgUploading] = useState(false);
   const [imgLoading, setImgLoading] = useState(false);
   const [imgError, setImgError] = useState<string | null>(null);
   const [images, setImages] = useState<ExtractedImage[] | null>(null);
@@ -93,21 +109,29 @@ export default function DocumentExtractorClient() {
     if (f) acceptFile(f);
   };
 
-  const buildFormData = () => {
-    const fd = new FormData();
-    fd.append('file', file!);
-    return fd;
-  };
-
   const extractText = async () => {
     if (!file) return;
-    setTextLoading(true);
     setTextError(null);
     setSections(null);
+
+    // Step 1: upload to Supabase Storage
+    setUploading(true);
+    const uploadResult = await uploadToStorage(file);
+    setUploading(false);
+
+    if ('error' in uploadResult) {
+      setTextError(uploadResult.error);
+      return;
+    }
+
+    // Step 2: call extraction route with storage path
+    setTextLoading(true);
     try {
-      const fd = buildFormData();
-      fd.append('model', model);
-      const res = await fetch('/api/document-extractor/text', { method: 'POST', body: fd });
+      const res = await fetch('/api/document-extractor/text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storagePath: uploadResult.storagePath, model }),
+      });
       if (!res.ok) throw new Error(await readResponseError(res));
       const json = await res.json();
       setSections(json.sections);
@@ -120,12 +144,27 @@ export default function DocumentExtractorClient() {
 
   const extractImages = async () => {
     if (!file) return;
-    setImgLoading(true);
     setImgError(null);
     setImages(null);
+
+    // Step 1: upload to Supabase Storage
+    setImgUploading(true);
+    const uploadResult = await uploadToStorage(file);
+    setImgUploading(false);
+
+    if ('error' in uploadResult) {
+      setImgError(uploadResult.error);
+      return;
+    }
+
+    // Step 2: call extraction route with storage path
+    setImgLoading(true);
     try {
-      const fd = buildFormData();
-      const res = await fetch('/api/document-extractor/images', { method: 'POST', body: fd });
+      const res = await fetch('/api/document-extractor/images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storagePath: uploadResult.storagePath }),
+      });
       if (!res.ok) throw new Error(await readResponseError(res));
       const json = await res.json();
       setImages(json.images);
@@ -145,7 +184,6 @@ export default function DocumentExtractorClient() {
 
   const downloadAllImages = async () => {
     if (!images?.length) return;
-    // Dynamic import jszip for the zip-and-download operation
     const JSZip = (await import('jszip')).default;
     const zip = new JSZip();
     for (const img of images) {
@@ -159,6 +197,12 @@ export default function DocumentExtractorClient() {
     a.click();
     URL.revokeObjectURL(a.href);
   };
+
+  const textBusy = uploading || textLoading;
+  const imgBusy = imgUploading || imgLoading;
+
+  const textButtonLabel = uploading ? 'Uploading…' : textLoading ? 'Extracting text…' : 'Extract text';
+  const imgButtonLabel  = imgUploading ? 'Uploading…' : imgLoading ? 'Extracting images…' : 'Extract images';
 
   return (
     <div className="space-y-6">
@@ -184,7 +228,7 @@ export default function DocumentExtractorClient() {
         {file ? (
           <div>
             <p className="font-medium text-brand-charcoal">{file.name}</p>
-            <p className="text-sm text-brand-slate mt-1">{(file.size / 1024).toFixed(0)} KB — click or drop to replace</p>
+            <p className="text-sm text-brand-slate mt-1">{(file.size / 1024 / 1024).toFixed(1)} MB — click or drop to replace</p>
           </div>
         ) : (
           <div>
@@ -196,7 +240,6 @@ export default function DocumentExtractorClient() {
 
       {file && (
         <div className="flex flex-wrap items-center gap-3">
-          {/* Model selector */}
           <div className="flex items-center gap-2">
             <label className="text-sm text-brand-slate whitespace-nowrap">Model:</label>
             <select
@@ -212,27 +255,19 @@ export default function DocumentExtractorClient() {
 
           <button
             onClick={extractText}
-            disabled={textLoading}
+            disabled={textBusy || imgBusy}
             className="px-4 py-1.5 text-sm font-medium rounded bg-brand-charcoal text-white hover:bg-brand-charcoal/80 disabled:opacity-50 transition-colors"
           >
-            {textLoading ? 'Extracting text…' : 'Extract text'}
+            {textButtonLabel}
           </button>
 
           <button
             onClick={extractImages}
-            disabled={imgLoading}
+            disabled={textBusy || imgBusy}
             className="px-4 py-1.5 text-sm font-medium rounded border border-brand-charcoal text-brand-charcoal hover:bg-brand-charcoal/5 disabled:opacity-50 transition-colors"
           >
-            {imgLoading ? 'Extracting images…' : 'Extract images'}
+            {imgButtonLabel}
           </button>
-        </div>
-      )}
-
-      {/* Large-file warning */}
-      {file && file.size > UPLOAD_SIZE_WARN_BYTES && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          This file is {(file.size / 1024 / 1024).toFixed(1)} MB — uploads over ~4.5 MB may fail on Vercel.
-          If extraction fails, try a smaller file or use a compressed version.
         </div>
       )}
 
