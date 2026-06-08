@@ -15,6 +15,7 @@ import {
   getProgramBrief,
   getStaffingForProgram,
   getTeamMembers,
+  getBudgetPlanEntries,
   type DbEstimate,
   type DbLineItem,
   type DbMarkup,
@@ -34,6 +35,7 @@ import DeleteProgramButton from '@/components/estimates/DeleteProgramButton';
 import ProgramPnLPanel, { type PnLRow } from '@/components/estimates/ProgramPnLPanel';
 import ProgramStatusDropdown from '@/components/programs/ProgramStatusDropdown';
 import StaffingSection from '@/components/programs/StaffingSection';
+import BudgetPlanSection from '@/components/programs/BudgetPlanSection';
 import type { ProgramStatus } from '@/lib/programs/constants';
 import { calculateVenueEstimate, calculateMarginAnalysis } from '@/lib/engine/pricing';
 import { calcTransportSummary } from '@/lib/engine/transportation';
@@ -290,7 +292,7 @@ function buildBudgetEstimate(
 export default async function ProgramPage({ params }: Props) {
   const { id } = await params;
 
-  const [program, locations, estimates, dbEvents, markups, dbTiers, travelItems, programDocs, existingBrief, staffingRoles, teamMembers] = await Promise.all([
+  const [program, locations, estimates, dbEvents, markups, dbTiers, travelItems, programDocs, existingBrief, staffingRoles, teamMembers, budgetEntries] = await Promise.all([
     getProgram(id),
     getLocations(),
     getEstimatesForProgram(id),
@@ -302,6 +304,7 @@ export default async function ProgramPage({ params }: Props) {
     getProgramBrief(id),
     getStaffingForProgram(id),
     getTeamMembers(),
+    getBudgetPlanEntries(id),
   ]);
 
   const tiers: TeamHoursTier[] = dbTiers.map((t) => ({
@@ -470,6 +473,19 @@ export default async function ProgramPage({ params }: Props) {
             programId={id}
             initialRoles={staffingRoles}
             teamMembers={teamMembers}
+          />
+        </div>
+      </div>
+
+      {/* Budget Plan */}
+      <div className="max-w-3xl">
+        <div className="bg-white border border-brand-cream rounded-lg p-5">
+          <BudgetPlanSection
+            programId={id}
+            initialEntries={budgetEntries}
+            estimates={estimates.map((e) => ({ id: e.id, name: e.name, type: e.type }))}
+            events={dbEvents.map((ev) => ({ id: ev.id, name: ev.name }))}
+            programGuestCount={program.guest_count}
           />
         </div>
       </div>

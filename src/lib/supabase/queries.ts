@@ -1215,3 +1215,45 @@ export async function getTeamMembers(): Promise<DbTeamMember[]> {
   if (error) return [];
   return (data ?? []) as DbTeamMember[];
 }
+
+// ─── Budget Plan ──────────────────────────────────────────
+
+export interface DbBudgetPlanEntry {
+  id: string;
+  program_id: string;
+  entry_type: 'per_event' | 'pooled';
+  label: string;
+  linked_estimate_id: string | null;
+  linked_event_id: string | null;
+  pricing_basis: 'per_person' | 'flat';
+  value_low: number;
+  value_high: number;
+  guest_low: number | null;
+  guest_high: number | null;
+  pinned_value: number | null;
+  pool_total: number | null;
+  sort_order: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getBudgetPlanEntries(programId: string): Promise<DbBudgetPlanEntry[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('budget_plan_entries')
+    .select('*')
+    .eq('program_id', programId)
+    .order('sort_order');
+  return (data ?? []) as DbBudgetPlanEntry[];
+}
+
+export async function getBudgetPlanEntryForEstimate(estimateId: string): Promise<DbBudgetPlanEntry | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('budget_plan_entries')
+    .select('*')
+    .eq('linked_estimate_id', estimateId)
+    .maybeSingle();
+  return (data ?? null) as DbBudgetPlanEntry | null;
+}

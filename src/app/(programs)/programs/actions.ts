@@ -907,3 +907,77 @@ export async function deleteStaffingRole(id: string, programId: string): Promise
   return { error: null };
 }
 
+// ─── Budget Plan ──────────────────────────────────────────
+
+export interface BudgetEntryInput {
+  entry_type: 'per_event' | 'pooled';
+  label: string;
+  linked_estimate_id?: string | null;
+  linked_event_id?: string | null;
+  pricing_basis?: 'per_person' | 'flat';
+  value_low?: number;
+  value_high?: number;
+  guest_low?: number | null;
+  guest_high?: number | null;
+  pinned_value?: number | null;
+  pool_total?: number | null;
+  sort_order?: number;
+  notes?: string | null;
+}
+
+export async function addBudgetEntry(
+  programId: string,
+  data: BudgetEntryInput,
+): Promise<{ id: string | null; error: string | null }> {
+  const supabase = await createClient();
+  const { data: row, error } = await supabase
+    .from('budget_plan_entries')
+    .insert({ ...data, program_id: programId })
+    .select('id')
+    .single();
+  if (error) return { id: null, error: error.message };
+  revalidatePath(`/programs/${programId}`);
+  return { id: row.id as string, error: null };
+}
+
+export async function updateBudgetEntry(
+  id: string,
+  programId: string,
+  data: Partial<BudgetEntryInput>,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('budget_plan_entries')
+    .update({ ...data, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath(`/programs/${programId}`);
+  return { error: null };
+}
+
+export async function deleteBudgetEntry(id: string, programId: string): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from('budget_plan_entries').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath(`/programs/${programId}`);
+  return { error: null };
+}
+
+// applyBudgetPin: promote a sandboxed per-person target back to the entry's pinned_value.
+// Called from the estimate calculator "Apply to Budget Plan" button after confirmation.
+export async function applyBudgetPin(
+  entryId: string,
+  programId: string,
+  pinnedValue: number,
+): Promise<{ error: string | null }> {
+  if (pinnedValue <= 0) return { error: 'Pinned value must be greater than zero.' };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('budget_plan_entries')
+    .update({ pinned_value: pinnedValue, updated_at: new Date().toISOString() })
+    .eq('id', entryId);
+  if (error) return { error: error.message };
+  revalidatePath(`/programs/${programId}`);
+  return { error: null };
+}
+
