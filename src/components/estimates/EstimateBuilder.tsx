@@ -13,6 +13,8 @@ import {
   calculateVenueEstimate,
   calculateMarginAnalysis,
 } from '@/lib/engine/pricing';
+import { reverseCalculateBudgetTarget } from '@/lib/engine/restaurantBudgetTarget';
+import type { BudgetTargetInput } from '@/lib/engine/restaurantBudgetTarget';
 import type { ProgramConfig, TeamHoursTier, VenueEstimateInput } from '@/types';
 import EstimateNav from './EstimateNav';
 import VenuePicker from './VenuePicker';
@@ -250,6 +252,8 @@ export default function EstimateBuilder({
   // Travel is now program-level — comes from props, not local state.
   const travelExpenses = programTravelTotal;
   const [showMath, setShowMath] = useState(false);
+  const [showBudgetTarget, setShowBudgetTarget] = useState(false);
+  const [budgetTargetPP, setBudgetTargetPP] = useState('');
 
   const [pendingSlideMenuData, setPendingSlideMenuData] = useState<import('@/types/slideCopy').MenuCourse[] | null>(null);
   const slideCopyRef = useRef<HTMLDivElement | null>(null);
@@ -367,6 +371,25 @@ export default function EstimateBuilder({
     alcoholTaxRate: est.alcoholTaxOverride ?? programConfig.location.alcoholTaxRate,
     generalTaxRate: est.generalTaxOverride ?? programConfig.location.generalTaxRate,
   }), [est, program, programConfig]);
+
+  const budgetTargetResult = useMemo(() => {
+    const parsed = parseFloat(budgetTargetPP);
+    if (!budgetTargetPP || isNaN(parsed) || parsed <= 0) return null;
+    const fbMarkup = 0.55; // Catering & F&B default — the expected markup for this bucket
+    const input: BudgetTargetInput = {
+      targetClientPP: parsed,
+      fbMarkupPct: fbMarkup,
+      foodTaxRate: est.foodTaxOverride ?? programConfig.location.foodTaxRate,
+      generalTaxRate: est.generalTaxOverride ?? programConfig.location.generalTaxRate,
+      serviceChargeRate: resolveOverride(est.serviceChargeOverride, program.service_charge_default),
+      gratuityRate: resolveOverride(est.gratuityOverride, program.gratuity_default),
+      adminFeeRate: resolveOverride(est.adminFeeOverride, program.admin_fee_default),
+      ccProcessingFee: programConfig.ccProcessingFee,
+      clientCommission: programConfig.clientCommission,
+      taxExempt: est.taxExempt,
+    };
+    return reverseCalculateBudgetTarget(input);
+  }, [budgetTargetPP, est, program, programConfig]);
 
   // ─── Cache total (debounced 2s) ───────────────────────────
 
@@ -1313,6 +1336,88 @@ export default function EstimateBuilder({
                 </button>
               )}
             </div>
+          </div>
+
+          {/* Budget Target */}
+          <div className="bg-white border border-brand-cream rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowBudgetTarget((v) => !v)}
+              className="w-full flex items-center justify-between px-5 py-3 text-sm font-medium text-brand-charcoal hover:bg-brand-offwhite transition-colors"
+            >
+              <span>Budget Target Calculator</span>
+              <span className="text-brand-silver text-xs">{showBudgetTarget ? '▲' : '▼'}</span>
+            </button>
+            {showBudgetTarget && (
+              <div className="px-5 pb-5 pt-2 border-t border-brand-cream space-y-4">
+                <p className="text-xs text-brand-silver">
+                  Enter a client budget per person to see the maximum F&B vendor spend that fits — using this estimate&apos;s actual fees, taxes, and commission settings.
+                </p>
+                <div className="flex items-center gap-3">
+                  <label className="text-xs text-brand-charcoal font-medium w-40 shrink-0">Client Budget ($/pp)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="e.g. 150"
+                    value={budgetTargetPP}
+                    onChange={(e) => setBudgetTargetPP(e.target.value)}
+                    className="w-32 border border-brand-cream rounded px-2 py-1 text-sm focus:outline-none focus:border-brand-copper"
+                  />
+                </div>
+                {budgetTargetResult && (
+                  <div className="bg-brand-offwhite rounded-lg p-4 space-y-2 text-sm">
+                    <div className="flex justify-between font-semibold text-brand-charcoal border-b border-brand-cream pb-2 mb-2">
+                      <span>Max F&B vendor cost/pp</span>
+                      <span className="text-brand-copper">${budgetTargetResult.vendorCostPerPerson.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-brand-charcoal/80">
+                      <span>Client F&B (after {(0.55 * 100).toFixed(0)}% markup)</span>
+                      <span>${budgetTargetResult.clientFBPerPerson.toFixed(2)}</span>
+                    </div>
+                    {budgetTargetResult.serviceChargePerPerson > 0 && (
+                      <div className="flex justify-between text-xs text-brand-silver">
+                        <span>Service Charge ({(resolveOverride(est.serviceChargeOverride, program.service_charge_default) * 100).toFixed(1)}%)</span>
+                        <span>${budgetTargetResult.serviceChargePerPerson.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {budgetTargetResult.gratuityPerPerson > 0 && (
+                      <div className="flex justify-between text-xs text-brand-silver">
+                        <span>Gratuity ({(resolveOverride(est.gratuityOverride, program.gratuity_default) * 100).toFixed(1)}%)</span>
+                        <span>${budgetTargetResult.gratuityPerPerson.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {budgetTargetResult.adminFeePerPerson > 0 && (
+                      <div className="flex justify-between text-xs text-brand-silver">
+                        <span>Admin Fee ({(resolveOverride(est.adminFeeOverride, program.admin_fee_default) * 100).toFixed(1)}%)</span>
+                        <span>${budgetTargetResult.adminFeePerPerson.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {budgetTargetResult.fbTaxPerPerson > 0 && (
+                      <div className="flex justify-between text-xs text-brand-silver">
+                        <span>Food Tax ({((est.foodTaxOverride ?? programConfig.location.foodTaxRate) * 100).toFixed(2)}%)</span>
+                        <span>${budgetTargetResult.fbTaxPerPerson.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-xs text-brand-silver">
+                      <span>Production Fee</span>
+                      <span>${budgetTargetResult.productionFeePerPerson.toFixed(2)}</span>
+                    </div>
+                    {budgetTargetResult.productionFeeTaxPerPerson > 0 && (
+                      <div className="flex justify-between text-xs text-brand-silver">
+                        <span>Production Fee Tax</span>
+                        <span>${budgetTargetResult.productionFeeTaxPerPerson.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-xs font-medium text-brand-charcoal border-t border-brand-cream pt-2 mt-1">
+                      <span>Total per person (check)</span>
+                      <span>${budgetTargetResult.totalCheck.toFixed(2)}</span>
+                    </div>
+                    <p className="text-xs text-brand-silver pt-1">Reference only — does not modify line items.</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Slide Copy */}
