@@ -388,12 +388,13 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Estimate snapshot bar: compact read-only strip (event date, timing, guests, budget) at top of all 5 builders; EstimateSnapshotBar component; budgetPlanEntry + event props threaded to all builders
 - [x] Budget comparison on event cards (migration 044): budgetComparison.ts engine (36 tests); compare_each mode shows per-card ±$delta badge; combine mode shows progress bar + remaining/over; mode toggle persists to DB; EventRow carries budgetEntry
 - [x] Migration 044 run in production — comparison_mode column live on budget_plan_entries
+- [x] Vendor merge: mergeVendors server action (repoints estimates.venue_id, venue_spaces.venue_id, vendor_photos.vendor_id; JSONB precedence; duplicate space detection; delete loser after all repointing); mergeLogic.ts pure functions + 22 unit tests; MergeModal UI with side-by-side comparison + survivor picker + "MERGE" confirmation
+- [x] Vendor mass actions: per-row checkboxes + select-all (within filter/tab), bulk action bar with "Set type" dropdown + "Set market" dropdown (from markets table); bulkUpdateVendors server action; optimistic clear + router.refresh; 657 tests passing
 
 ### Next Session Start
-- All migrations through 044 are live in production. 635 tests passing.
+- All migrations through 044 are live in production. 657 tests passing.
+- Vendor merge and mass actions are live on the vendors list.
 - Doc Reader is live at /document-extractor.
-- Vendor directory Phase 1 live — markets dropdown in VenueForm now sourced from markets table.
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in Slide Copy preview; she swaps in Canva).
 - Venue profile attachment downloads: signed URL generation is the next small task.
 - Proposal validation against Excel is the next quality check — enter the 3 scenarios from proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values.
-- Budget comparison: test by linking a budget_plan_entry to an event (via Budget Plan section on program page), then view that event's cards to see compare_each/combine toggle.
