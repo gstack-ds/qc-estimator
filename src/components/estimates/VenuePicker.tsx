@@ -127,6 +127,7 @@ export default function VenuePicker({ estimateId, programId, venues, venueSpaces
       contact_email: null, contact_phone: null, email_signature: null,
       website: null, market: null, notes: null, last_used_date: null,
       vendor_type: 'venue',
+      menus: [], bar_options: [], inclusions: [], profile_notes: null,
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     };
     onSelect(result.id, null, cCity.trim() || null, newVenueData);
