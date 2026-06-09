@@ -3,8 +3,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { EstimateSummary } from '@/types';
 import type { DbEstimate, DbProgram, DbEvent } from '@/lib/supabase/queries';
 import type { SlideCopyData, InclusionToggles, TravelResult, MenuCourse } from '@/types/slideCopy';
+import type { VendorMenu, BarOption, VendorInclusion } from '@/lib/vendors/profileTypes';
 import { saveSlideCopyData, getTravelTime, getAttachmentsForEstimate, generateVenueBio } from '@/app/(programs)/programs/[id]/estimates/actions';
 import { extractedMenuToMenuCourses } from '@/lib/slideCopy/menuMapping';
+import { vendorMenuToMenuCourses, vendorBarToBarNotes, vendorInclusionsToText, formatCapacityBanner } from '@/lib/slideCopy/vendorProfileMapping';
 import MenuSelectionPanel from './MenuSelectionPanel';
 import { spellNumber, oxfordComma, formatCurrency, checkBannedWords } from '@/lib/slideCopy/brandVoice';
 
@@ -25,6 +27,13 @@ interface SlideCopySectionRef {
   name: string;
 }
 
+export interface VendorProfileForSlide {
+  menus: VendorMenu[];
+  barOptions: BarOption[];
+  inclusions: VendorInclusion[];
+  selectedSpace: { name?: string; capacity_seated?: number | null; capacity_standing?: number | null } | null;
+}
+
 interface Props {
   estimate: DbEstimate;
   program: DbProgram;
@@ -38,6 +47,7 @@ interface Props {
   venueAddress?: string;
   pendingMenuData?: MenuCourse[] | null;
   onPendingMenuConsumed?: () => void;
+  vendorProfile?: VendorProfileForSlide | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -106,7 +116,7 @@ const INCLUSION_LABELS: [keyof Omit<InclusionToggles, 'customInclusion'>, string
 
 export default function SlideCopySection({
   estimate, program, event, summary, lineItems, sections, initialData, venueName, venueSpaceName, venueAddress,
-  pendingMenuData, onPendingMenuConsumed,
+  pendingMenuData, onPendingMenuConsumed, vendorProfile,
 }: Props) {
   const [venueUrl, setVenueUrl] = useState(initialData?.venueUrl ?? '');
   const [sqft, setSqft] = useState(initialData?.sqft?.toString() ?? '');
@@ -127,6 +137,12 @@ export default function SlideCopySection({
   const [barNotes, setBarNotes] = useState(initialData?.barNotes ?? '');
   const [menuLoading, setMenuLoading] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
+
+  // Profile import state
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [importMenuPending, setImportMenuPending] = useState<VendorMenu | null>(null);
+  const [importBarPending, setImportBarPending] = useState<BarOption | null>(null);
+
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didMount = useRef(false);
 
@@ -371,6 +387,134 @@ export default function SlideCopySection({
         {bannedFound.length > 0 && (
           <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
             Flagged words: {bannedFound.join(', ')} — review before copying.
+          </div>
+        )}
+
+        {/* Profile import panel */}
+        {vendorProfile && (vendorProfile.menus.length > 0 || vendorProfile.barOptions.length > 0 || vendorProfile.inclusions.length > 0 || vendorProfile.selectedSpace) && (
+          <div className="border border-brand-brown/20 rounded-lg overflow-hidden bg-white">
+            <button
+              type="button"
+              onClick={() => setProfileOpen(o => !o)}
+              className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-brand-brown hover:bg-brand-offwhite transition-colors"
+            >
+              <span className="flex items-center gap-1.5">
+                <span className="text-brand-brown">⬇</span>
+                Import from vendor profile
+              </span>
+              <span className="text-brand-silver">{profileOpen ? '▲' : '▼'}</span>
+            </button>
+
+            {profileOpen && (
+              <div className="border-t border-brand-brown/10 p-3 space-y-3">
+                {/* Capacity */}
+                {vendorProfile.selectedSpace && (vendorProfile.selectedSpace.capacity_seated != null || vendorProfile.selectedSpace.capacity_standing != null) && (
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-xs text-brand-charcoal/70">
+                      <span className="font-medium">Capacity:</span>{' '}
+                      {formatCapacityBanner(vendorProfile.selectedSpace.capacity_seated, vendorProfile.selectedSpace.capacity_standing, vendorProfile.selectedSpace.name)}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const banner = formatCapacityBanner(vendorProfile.selectedSpace!.capacity_seated, vendorProfile.selectedSpace!.capacity_standing, vendorProfile.selectedSpace!.name);
+                        setMaxCapacity(banner);
+                      }}
+                      className="flex-shrink-0 text-[11px] px-2 py-1 rounded border border-brand-brown/30 text-brand-brown hover:bg-brand-cream transition-colors"
+                    >
+                      {maxCapacity ? 'Replace' : 'Import'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Menus */}
+                {vendorProfile.menus.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] text-brand-silver uppercase tracking-wide">Menus ({vendorProfile.menus.length})</p>
+                    {vendorProfile.menus.map(m => (
+                      <div key={m.id} className="flex items-center justify-between gap-3">
+                        <div className="text-xs text-brand-charcoal/80 min-w-0 truncate">
+                          {m.name}
+                          {m.price_per_person != null && <span className="text-brand-silver ml-1">${m.price_per_person}/pp</span>}
+                          <span className="text-brand-silver ml-1">· {m.courses.length} courses</span>
+                        </div>
+                        {importMenuPending?.id === m.id ? (
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <span className="text-[11px] text-brand-charcoal/60">Replace current?</span>
+                            <button type="button" onClick={() => { setMenuCourses(vendorMenuToMenuCourses(m)); setImportMenuPending(null); }} className="text-[11px] px-2 py-0.5 rounded bg-brand-brown text-white">Yes</button>
+                            <button type="button" onClick={() => setImportMenuPending(null)} className="text-[11px] px-2 py-0.5 rounded border border-brand-silver/40 text-brand-silver">Cancel</button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (menuCourses.length > 0) { setImportMenuPending(m); }
+                              else { setMenuCourses(vendorMenuToMenuCourses(m)); }
+                            }}
+                            className="flex-shrink-0 text-[11px] px-2 py-1 rounded border border-brand-brown/30 text-brand-brown hover:bg-brand-cream transition-colors"
+                          >
+                            {menuCourses.length > 0 ? 'Replace' : 'Import'}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Bar options */}
+                {vendorProfile.barOptions.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] text-brand-silver uppercase tracking-wide">Bar Options ({vendorProfile.barOptions.length})</p>
+                    {vendorProfile.barOptions.map(b => (
+                      <div key={b.id} className="flex items-center justify-between gap-3">
+                        <div className="text-xs text-brand-charcoal/80 min-w-0 truncate">
+                          {b.name}
+                          {b.price_per_person != null && <span className="text-brand-silver ml-1">${b.price_per_person}/pp</span>}
+                        </div>
+                        {importBarPending?.id === b.id ? (
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <span className="text-[11px] text-brand-charcoal/60">Replace current?</span>
+                            <button type="button" onClick={() => { setBarNotes(vendorBarToBarNotes(b)); setImportBarPending(null); }} className="text-[11px] px-2 py-0.5 rounded bg-brand-brown text-white">Yes</button>
+                            <button type="button" onClick={() => setImportBarPending(null)} className="text-[11px] px-2 py-0.5 rounded border border-brand-silver/40 text-brand-silver">Cancel</button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (barNotes.trim()) { setImportBarPending(b); }
+                              else { setBarNotes(vendorBarToBarNotes(b)); }
+                            }}
+                            className="flex-shrink-0 text-[11px] px-2 py-1 rounded border border-brand-brown/30 text-brand-brown hover:bg-brand-cream transition-colors"
+                          >
+                            {barNotes.trim() ? 'Replace' : 'Import'}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Inclusions */}
+                {vendorProfile.inclusions.length > 0 && (
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs text-brand-charcoal/80">
+                      <span className="font-medium">Inclusions:</span>{' '}
+                      <span className="text-brand-silver">{vendorProfile.inclusions.length} items</span>
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const text = vendorInclusionsToText(vendorProfile.inclusions);
+                        setInclusions(prev => ({ ...prev, customInclusion: text }));
+                      }}
+                      className="flex-shrink-0 text-[11px] px-2 py-1 rounded border border-brand-brown/30 text-brand-brown hover:bg-brand-cream transition-colors"
+                    >
+                      {inclusions.customInclusion ? 'Replace' : 'Import'} to custom field
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
