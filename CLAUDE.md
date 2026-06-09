@@ -277,6 +277,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-06-02 | PDF extraction silently capped at 5-10 items — prompt said "aim for 5-10 total" | Claude honored the instruction and deliberately skipped items on larger menus. The cap was a leftover from early development. Removed from prompt; max_tokens raised from 4096 to 16000. Always check extraction prompts for unintended quantity limits. |
 | 2026-06-07 | productionFeeTax missing from export Tax row — Copy Numbers itemized rows didn't add up to total | Commit a0c096c added productionFeeTax to totalClient in the engine but did not update export.ts. The `tax` variable in buildSummaryRows and buildDetailedCopyText was missing `+ summary.productionFeeTax`. ProposalDocument.tsx was correctly updated at the time. Always update export.ts when adding new tax fields to EstimateSummary. |
 | 2026-06-07 | mathRates in EstimateBuilder used raw location tax rates instead of effective (override) rates | effectiveLocation was computed correctly and passed to LineItemSection/ExportButtons, but mathRates (lines 366-368) still read programConfig.location.foodTaxRate etc. Show Math formula showed 7.25% while the dollar amount was computed at the 8.25% override — visually inconsistent. Fix: mirror effectiveLocation logic in mathRates. |
+| 2026-06-09 | F&B break-even uses qty===guestCount heuristic to identify per-person items | No explicit per-person flag on line items — qty matching guestCount is the only reliable signal available at the pure-function level. Works correctly for typical estimates; breaks for items manually set to an amount that coincidentally equals guestCount. Noted in code comment. | Explicit isPerPerson flag (would require a new column + migration) |
+| 2026-06-09 | Bar pricing: base_hours + additional_hour_price_per_person added as optional JSONB fields; existing price_per_person unchanged | JSONB extension means zero migration — old records parse fine (new fields absent = simple flat rate). computeBarPricePP() handles both shapes. | Rename price_per_person to base_price_per_person (breaks stored data); separate bar_pricing table (overkill for optional two-field extension) |
 
 ## Current TODOs
 
@@ -395,9 +397,12 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
   - Step 2: applyVendorExtraction server action (basics/spaces/menus/bar_options/inclusions with per-section checkboxes); VendorExtractionReview UI (create/update modes, diff view, duplicate handling); DocumentExtractorClient vendor mode toggle
   - Step 3: menuImport.ts (mapMenuToLineItems, 21 tests); VendorMenuImportModal (two-panel picker); EstimateBuilder "Add from vendor menu" button + handleAddFromVendorMenu (routes through handleImportItems — normal markup/tax apply, never automatic)
 
+- [x] F&B minimum break-even guest count: calculateFbBreakEven() pure function (fbMinimumThreshold.ts, 14 tests); SummaryPanel shows "Needs N+ guests" / "Met at N+ guests ✓"; EstimateBuilder computes via useMemo from F&B line items; 692 total tests
+- [x] Bar packages: base duration + additional hours pricing on BarOption (base_hours, additional_hour_price_per_person); computeBarPricePP() helper; BarEditor 3-field row (Base $/pp / Base hrs / +hr $/pp); VendorBrochure renders "X/pp first N hours, +Y/pp/hr"; VendorMenuImportModal adds "Bar packages" tab with multi-select + duration input + live computed rate; EstimateBuilder handleAddBarPackages routes through handleImportItems (alcohol taxType, F&B section); SlideCopySection bar import shows inline duration field, passes duration to vendorBarToBarNotes; backward-compatible JSONB — existing packages keep working. 12 new tests (704 total)
+
 ### Next Session Start
-- All migrations through 044 are live in production. 678 tests passing.
-- Vendor merge, mass actions, Doc Reader pipeline all live.
+- All migrations through 044 are live in production. 704 tests passing.
+- Vendor merge, mass actions, Doc Reader pipeline, F&B break-even, bar duration pricing all live.
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in Slide Copy preview; she swaps in Canva).
 - Venue profile attachment downloads: signed URL generation is the next small task.
 - Proposal validation against Excel is the next quality check — enter the 3 scenarios from proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values.
