@@ -13,6 +13,7 @@ import {
   calculateVenueEstimate,
   calculateMarginAnalysis,
 } from '@/lib/engine/pricing';
+import { calculateFbBreakEven } from '@/lib/engine/fbMinimumThreshold';
 import { reverseCalculateBudgetTarget } from '@/lib/engine/restaurantBudgetTarget';
 import type { BudgetTargetInput } from '@/lib/engine/restaurantBudgetTarget';
 import type { ProgramConfig, TeamHoursTier, VenueEstimateInput } from '@/types';
@@ -388,6 +389,14 @@ export default function EstimateBuilder({
     () => calculateMarginAnalysis(summary, programConfig, tiersList, travelExpenses),
     [summary, programConfig, tiersList, travelExpenses]
   );
+
+  const fbBreakEven = useMemo(() => {
+    if (est.fbMinimum <= 0) return null;
+    const fbItems = lineItems
+      .filter((li) => li.taxBucket === 'fb')
+      .map((li) => ({ qty: li.qty, unitPrice: li.unitPrice, isRevenueItem: li.isRevenueItem }));
+    return calculateFbBreakEven(est.fbMinimum, program.guest_count, fbItems);
+  }, [est.fbMinimum, program.guest_count, lineItems]);
 
   const mathRates = useMemo(() => ({
     serviceChargeRate: resolveOverride(est.serviceChargeOverride, program.service_charge_default),
@@ -1568,7 +1577,7 @@ export default function EstimateBuilder({
 
         {/* Right sidebar — summary + margin */}
         <div className="w-72 flex-shrink-0 border-l border-brand-cream bg-brand-offwhite overflow-y-auto p-4 space-y-4">
-          <SummaryPanel summary={summary} guestCount={program.guest_count} fbMinimum={est.fbMinimum} sections={sections} showMath={showMath} mathRates={mathRates} />
+          <SummaryPanel summary={summary} guestCount={program.guest_count} fbMinimum={est.fbMinimum} fbBreakEven={fbBreakEven} sections={sections} showMath={showMath} mathRates={mathRates} />
           <MarginPanel margin={marginAnalysis} summary={summary} showMath={showMath} />
         </div>
       </div>}

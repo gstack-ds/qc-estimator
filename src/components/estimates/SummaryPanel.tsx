@@ -2,11 +2,13 @@ import type { ReactNode } from 'react';
 import type { EstimateSummary, SummaryMathRates } from '@/types';
 import { labelForBucket } from '@/lib/utils/sectionLabels';
 import type { SectionRef } from '@/lib/utils/sectionLabels';
+import type { FbBreakEvenResult } from '@/lib/engine/fbMinimumThreshold';
 
 interface Props {
   summary: EstimateSummary;
   guestCount: number;
   fbMinimum: number;
+  fbBreakEven?: FbBreakEvenResult | null;
   sections?: SectionRef[];
   showMath?: boolean;
   mathRates?: SummaryMathRates;
@@ -60,7 +62,7 @@ function Divider() {
   return <div className="border-t border-brand-cream/60 my-1.5" />;
 }
 
-export default function SummaryPanel({ summary, guestCount, fbMinimum, sections, showMath, mathRates }: Props) {
+export default function SummaryPanel({ summary, guestCount, fbMinimum, fbBreakEven, sections, showMath, mathRates }: Props) {
   const pp = (val: number) => guestCount > 0 ? Math.ceil(val / guestCount) : 0;
   const markupRevenue = summary.subtotalClient - summary.foodTax - summary.alcoholTax - summary.equipmentTax - summary.venueTax;
   const s = sections ?? [];
@@ -160,6 +162,17 @@ export default function SummaryPanel({ summary, guestCount, fbMinimum, sections,
             ? `F&B Minimum Met (${fmt(fbMinimum)})`
             : `F&B Minimum NOT Met — Shortfall: ${fmt(summary.fbShortfall)}`
           }
+          {fbBreakEven && fbBreakEven.breakEvenGuestCount != null && (
+            <div className={`mt-1 ${fbBreakEven.currentlyMet ? 'text-green-600' : 'text-amber-700'}`}>
+              {fbBreakEven.currentlyMet
+                ? `✓ Minimum met at ${fbBreakEven.breakEvenGuestCount}+ guests`
+                : `Needs ${fbBreakEven.breakEvenGuestCount}+ guests (current: ${guestCount})`
+              }
+            </div>
+          )}
+          {fbBreakEven?.reason === 'no_pp_items' && !fbBreakEven.currentlyMet && (
+            <div className="mt-1 text-amber-600/80">Cannot be met by adding guests</div>
+          )}
         </div>
       )}
     </div>
