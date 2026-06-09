@@ -17,8 +17,10 @@ export interface EstimateVsBudget {
   budgetLow: number;
   budgetHigh: number;
   budgetPinned: number;
-  delta: number;          // total - budgetPinned; positive = over
+  /** pp delta when pricingBasis=per_person; flat delta when pricingBasis=flat */
+  delta: number;
   status: ComparisonStatus;
+  pricingBasis: 'per_person' | 'flat';
 }
 
 export interface CombineVsBudget {
@@ -57,8 +59,27 @@ export function compareEstimateToBudget(
   guestCount: number,
   target: BudgetTarget,
 ): EstimateVsBudget {
-  const { low, high, pinned } = effectiveBudgetFlat(target);
   const pricePerPerson = guestCount > 0 ? Math.ceil(total / guestCount) : 0;
+
+  if (target.pricingBasis === 'per_person') {
+    // Compare $/pp against the pp budget range — never scale by guestCount.
+    const ppMidpoint = (target.valueLow + target.valueHigh) / 2;
+    const ppPinned = target.pinnedValue !== null ? target.pinnedValue : ppMidpoint;
+    return {
+      estimateId,
+      total,
+      pricePerPerson,
+      budgetLow: target.valueLow,
+      budgetHigh: target.valueHigh,
+      budgetPinned: ppPinned,
+      delta: pricePerPerson - ppPinned,
+      status: statusForValue(pricePerPerson, target.valueLow, target.valueHigh),
+      pricingBasis: 'per_person',
+    };
+  }
+
+  // flat basis: compare total $ against scaled budget
+  const { low, high, pinned } = effectiveBudgetFlat(target);
   return {
     estimateId,
     total,
@@ -68,6 +89,7 @@ export function compareEstimateToBudget(
     budgetPinned: pinned,
     delta: total - pinned,
     status: statusForValue(total, low, high),
+    pricingBasis: 'flat',
   };
 }
 

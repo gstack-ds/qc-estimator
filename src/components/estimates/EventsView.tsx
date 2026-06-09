@@ -85,9 +85,10 @@ function statusColors(status: ComparisonStatus) {
   return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' };
 }
 
-function fmtDelta(delta: number) {
+function fmtDelta(delta: number, pricingBasis: 'per_person' | 'flat') {
   const sign = delta >= 0 ? '+' : '−';
-  return `${sign}$${Math.round(Math.abs(delta)).toLocaleString('en-US')}`;
+  const suffix = pricingBasis === 'per_person' ? '/pp' : '';
+  return `${sign}$${Math.round(Math.abs(delta)).toLocaleString('en-US')}${suffix}`;
 }
 
 // ─── Formatting helpers ───────────────────────────────────
@@ -126,6 +127,7 @@ interface DeltaInfo {
   status: ComparisonStatus;
   budgetLow: number;
   budgetHigh: number;
+  pricingBasis: 'per_person' | 'flat';
 }
 
 function EstimateCardItem({
@@ -199,7 +201,7 @@ function EstimateCardItem({
 
       {deltaInfo && card.total > 0 && (
         <div className={`text-xs font-medium px-2 py-1 rounded border ${statusColors(deltaInfo.status).bg} ${statusColors(deltaInfo.status).text} ${statusColors(deltaInfo.status).border}`}>
-          {fmtDelta(deltaInfo.delta)} vs budget
+          {fmtDelta(deltaInfo.delta, deltaInfo.pricingBasis)} vs budget
         </div>
       )}
 
@@ -501,7 +503,7 @@ function EventCard({
                     let deltaInfo: DeltaInfo | undefined;
                     if (budgetTarget && comparisonMode === 'compare_each' && card.includeInBudget && card.total > 0) {
                       const result = compareEstimateToBudget(card.id, card.total, event.guest_count, budgetTarget);
-                      deltaInfo = { delta: result.delta, status: result.status, budgetLow: result.budgetLow, budgetHigh: result.budgetHigh };
+                      deltaInfo = { delta: result.delta, status: result.status, budgetLow: result.budgetLow, budgetHigh: result.budgetHigh, pricingBasis: result.pricingBasis };
                     }
 
                     return (

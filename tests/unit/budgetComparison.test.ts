@@ -117,22 +117,22 @@ describe('compareEstimateToBudget', () => {
     expect(result.delta).toBe(22000 - 15000);
   });
 
-  it('compares per_person estimate against pp range × guestCount', () => {
-    // $75/pp × 50 = $3,750; range is $3,500–$5,000
+  it('compares per_person estimate by $/pp (budgetLow/High in pp units, not scaled)', () => {
+    // $75/pp total / 50 guests = $75/pp; range is $70–$100/pp
     const result = compareEstimateToBudget('est-1', 3750, 50, ppTarget);
     expect(result.status).toBe('within_range');
-    expect(result.budgetLow).toBe(3500);
-    expect(result.budgetHigh).toBe(5000);
+    expect(result.budgetLow).toBe(70);   // pp value, NOT 3500
+    expect(result.budgetHigh).toBe(100); // pp value, NOT 5000
   });
 
   it('marks pp estimate under range as under', () => {
-    // $60/pp × 50 = $3,000; below $3,500 low
+    // ceil(3000/50) = 60; below $70/pp low
     const result = compareEstimateToBudget('est-1', 3000, 50, ppTarget);
     expect(result.status).toBe('under');
   });
 
   it('marks pp estimate over range as over', () => {
-    // $110/pp × 50 = $5,500; above $5,000 high
+    // ceil(5500/50) = 110; above $100/pp high
     const result = compareEstimateToBudget('est-1', 5500, 50, ppTarget);
     expect(result.status).toBe('over');
   });
@@ -146,6 +146,40 @@ describe('compareEstimateToBudget', () => {
     const zeroGuest: BudgetTarget = { ...ppTarget, guestCount: 0 };
     const result = compareEstimateToBudget('est-1', 3000, 0, zeroGuest);
     expect(result.pricePerPerson).toBe(0);
+  });
+
+  // ── Failing tests (must fail against current code) ───────
+  it('delta for per_person basis is in $/pp (not flat $)', () => {
+    // pricePerPerson = ceil(3750/50) = 75; pinned = midpoint(70,100) = 85; delta = 75-85 = -10
+    const result = compareEstimateToBudget('est-1', 3750, 50, ppTarget);
+    expect(result.delta).toBe(-10); // pp delta, NOT flat delta (currently: 3750 - 4250 = -500)
+  });
+
+  it('pricingBasis field is per_person for pp target', () => {
+    const result = compareEstimateToBudget('est-1', 3750, 50, ppTarget);
+    expect(result.pricingBasis).toBe('per_person');
+  });
+
+  it('pricingBasis field is flat for flat target', () => {
+    const result = compareEstimateToBudget('est-1', 12000, 50, flatTarget);
+    expect(result.pricingBasis).toBe('flat');
+  });
+
+  it('reproduces bug report: $8,089 total / 80 guests / $100pp pinned → +$2/pp delta', () => {
+    // ceil(8089/80) = ceil(101.1125) = 102/pp; pinned = 100/pp; delta = +2
+    const ppTarget100: BudgetTarget = { pricingBasis: 'per_person', valueLow: 100, valueHigh: 100, pinnedValue: 100, guestCount: 80 };
+    const result = compareEstimateToBudget('est-1', 8089, 80, ppTarget100);
+    expect(result.pricePerPerson).toBe(102);
+    expect(result.delta).toBe(2);   // currently returns 8089 - 8000 = 89
+    expect(result.pricingBasis).toBe('per_person');
+  });
+
+  it('pp budgetPinned is the pp pinned value, not scaled', () => {
+    const withPinned: BudgetTarget = { pricingBasis: 'per_person', valueLow: 70, valueHigh: 100, pinnedValue: 90, guestCount: 50 };
+    const result = compareEstimateToBudget('est-1', 4500, 50, withPinned);
+    expect(result.budgetPinned).toBe(90);   // pp pinned, NOT 90×50=4500
+    // pricePerPerson = ceil(4500/50) = 90 → delta = 0
+    expect(result.delta).toBe(0);
   });
 });
 
