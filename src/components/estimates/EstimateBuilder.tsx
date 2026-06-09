@@ -27,6 +27,8 @@ import SummaryPanel from './SummaryPanel';
 import MarginPanel from './MarginPanel';
 // TravelPanel removed — team travel is now entered at the program level.
 import SlideCopySection from './SlideCopySection';
+import type { VendorProfileForSlide } from './SlideCopySection';
+import { parseMenus, parseBarOptions, parseInclusions } from '@/lib/vendors/profileTypes';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection, reorderSections, reorderLineItems } from '@/app/(programs)/programs/[id]/estimates/actions';
@@ -269,6 +271,21 @@ export default function EstimateBuilder({
     venues.find(v => v.id === estimate.venue_id) ?? null
   );
   const [locationSuggestion, setLocationSuggestion] = useState<{ locationId: string; locationName: string } | null>(null);
+
+  const vendorProfile = useMemo((): VendorProfileForSlide | null => {
+    if (!linkedVenueData) return null;
+    const selectedSpace = venueSpaces.find(s => s.id === linkedSpaceId) ?? null;
+    return {
+      menus: parseMenus(linkedVenueData.menus),
+      barOptions: parseBarOptions(linkedVenueData.bar_options),
+      inclusions: parseInclusions(linkedVenueData.inclusions),
+      selectedSpace: selectedSpace ? {
+        name: selectedSpace.name,
+        capacity_seated: selectedSpace.capacity_seated,
+        capacity_standing: selectedSpace.capacity_standing,
+      } : null,
+    };
+  }, [linkedVenueData, linkedSpaceId, venueSpaces]);
 
   function handleVenueSelect(venueId: string, spaceId: string | null, venueCity: string | null, venueData: DbVenue) {
     setLinkedVenueId(venueId);
@@ -899,6 +916,12 @@ export default function EstimateBuilder({
               taxExempt={est.taxExempt}
               location={effectiveLocation}
             />
+            <Link
+              href={`/programs/${program.id}/estimates/${estimate.id}?view=proposal`}
+              className="text-xs px-2.5 py-1 rounded border border-brand-cream bg-white text-brand-charcoal/70 hover:text-brand-charcoal hover:bg-brand-offwhite transition-colors"
+            >
+              Proposal Preview
+            </Link>
             <button
               onClick={() => setShowMath(v => !v)}
               className={`text-xs px-2.5 py-1 rounded border transition-colors ${showMath ? 'border-brand-copper/60 bg-brand-offwhite text-brand-brown' : 'border-brand-cream bg-white text-brand-charcoal/70 hover:text-brand-charcoal hover:bg-brand-offwhite'}`}
@@ -1485,6 +1508,7 @@ export default function EstimateBuilder({
               venueAddress={venueAddress}
               pendingMenuData={pendingSlideMenuData}
               onPendingMenuConsumed={() => setPendingSlideMenuData(null)}
+              vendorProfile={vendorProfile}
             />
           </div>
 
