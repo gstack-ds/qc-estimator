@@ -15,6 +15,8 @@ import {
   getLocations,
   getTravelItems,
   getBudgetPlanEntryForEstimate,
+  getVenueWithSpaces,
+  getVendorPhotos,
 } from '@/lib/supabase/queries';
 import { ensureDefaultSections } from '@/app/(programs)/programs/[id]/estimates/actions';
 import EstimateBuilder from '@/components/estimates/EstimateBuilder';
@@ -23,15 +25,20 @@ import AvEstimateBuilder from '@/components/estimates/AvEstimateBuilder';
 import DecorEstimateBuilder from '@/components/estimates/DecorEstimateBuilder';
 import TransportationEstimateBuilder from '@/components/estimates/TransportationEstimateBuilder';
 import TourEstimateBuilder from '@/components/estimates/TourEstimateBuilder';
+import ProposalPreview from '@/components/estimates/ProposalPreview';
+import { calculateVenueEstimate } from '@/lib/engine/pricing';
+import type { LineItem, TaxType, TaxBucket } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
 interface Props {
   params: Promise<{ id: string; estimateId: string }>;
+  searchParams: Promise<{ view?: string }>;
 }
 
-export default async function EstimatePage({ params }: Props) {
+export default async function EstimatePage({ params, searchParams }: Props) {
   const { id: programId, estimateId } = await params;
+  const { view } = await searchParams;
 
   const [program, allEstimates, estimate, markups, tiers, venues, allLocations, travelItems, budgetPlanEntry] = await Promise.all([
     getProgram(programId),
@@ -89,6 +96,89 @@ export default async function EstimatePage({ params }: Props) {
   if (dbSections.length === 0 && estimate.type !== 'transportation') {
     const { sections } = await ensureDefaultSections(estimateId, estimate.type as import('@/types').EstimateType);
     dbSections = sections.map((s) => ({ ...s, tax_bucket: s.tax_bucket as 'fb' | 'equipment' | 'venue' | 'staffing' }));
+  }
+
+  if (estimate.type === 'venue' && view === 'proposal') {
+    const venueId = estimate.venue_id;
+    const [venue, photos] = await Promise.all([
+      venueId ? getVenueWithSpaces(venueId) : Promise.resolve(null),
+      venueId ? getVendorPhotos(venueId) : Promise.resolve([]),
+    ]);
+
+    const bucketMap = new Map<string, TaxBucket>(
+      dbSections.map((s) => [s.id, s.tax_bucket]),
+    );
+
+    const loc = program.location;
+    const programConfig = {
+      guestCount: effectiveProgram.guest_count,
+      location: loc
+        ? { id: loc.id, name: loc.name, foodTaxRate: loc.food_tax_rate, alcoholTaxRate: loc.alcohol_tax_rate, generalTaxRate: loc.general_tax_rate }
+        : { id: '', name: '', foodTaxRate: 0, alcoholTaxRate: 0, generalTaxRate: 0 },
+      ccProcessingFee: program.cc_processing_fee,
+      clientCommission: program.client_commission,
+      gdpCommissionEnabled: program.gdp_commission_enabled,
+      gdpCommissionRate: program.gdp_commission_rate,
+      serviceChargeDefault: program.service_charge_default,
+      gratuityDefault: program.gratuity_default,
+      adminFeeDefault: program.admin_fee_default,
+      thirdPartyCommissions: program.third_party_commissions ?? [],
+    };
+
+    const engineItems: LineItem[] = lineItems.map((item) => {
+      const markup = markups.find((m) => m.id === item.category_id);
+      const isCustom = item.custom_client_unit_price !== null;
+      const defaultMarkupPct = isCustom ? 0 : (markup?.markup_pct ?? 0.5);
+      return {
+        id: item.id,
+        section: item.section,
+        taxBucket: bucketMap.get(item.section_id ?? '') ?? 'equipment' as TaxBucket,
+        name: item.name,
+        qty: item.qty,
+        unitPrice: item.unit_price,
+        categoryMarkupPct: isCustom ? 0 : (item.markup_override ?? defaultMarkupPct),
+        taxType: item.tax_type as TaxType,
+        isRevenueItem: item.is_revenue_item,
+        clientCostOverride: isCustom ? item.qty * item.custom_client_unit_price! : undefined,
+      };
+    });
+
+    const sc = estimate.service_charge_override ?? programConfig.serviceChargeDefault;
+    const gr = estimate.gratuity_override ?? programConfig.gratuityDefault;
+    const af = estimate.admin_fee_override ?? programConfig.adminFeeDefault;
+    const discount = estimate.discount_type && estimate.discount_value > 0
+      ? { type: estimate.discount_type, value: estimate.discount_value }
+      : null;
+
+    const summary = calculateVenueEstimate(
+      { name: estimate.name, fbMinimum: estimate.fb_minimum, isVenueTaxable: estimate.is_venue_taxable, serviceCharge: sc, gratuity: gr, adminFee: af, lineItems: engineItems, discount },
+      programConfig,
+    );
+
+    const heroPhoto = photos.find((p) => p.tag === 'space') ?? photos[0] ?? null;
+    const galleryPhotos = photos.filter((p) => p !== heroPhoto);
+
+    const spaceId = estimate.venue_space_id;
+    const space = venue?.spaces?.find((s) => s.id === spaceId) ?? null;
+
+    return (
+      <div className="max-w-4xl mx-auto px-6 py-10 print:px-0 print:py-0" data-brochure-page>
+        <ProposalPreview
+          estimate={estimate}
+          program={effectiveProgram}
+          event={event}
+          venueName={venue?.name ?? estimate.name}
+          venueSpaceName={space?.name ?? undefined}
+          venueCity={venue?.city ?? undefined}
+          venueState={venue?.state ?? undefined}
+          heroPhoto={heroPhoto}
+          galleryPhotos={galleryPhotos}
+          summary={summary}
+          slideCopyData={estimate.slide_copy_data as SlideCopyData | null}
+          sections={dbSections}
+        />
+      </div>
+    );
   }
 
   if (estimate.type === 'venue') {
