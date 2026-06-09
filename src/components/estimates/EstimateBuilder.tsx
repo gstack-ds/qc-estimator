@@ -29,6 +29,9 @@ import MarginPanel from './MarginPanel';
 import SlideCopySection from './SlideCopySection';
 import type { VendorProfileForSlide } from './SlideCopySection';
 import { parseMenus, parseBarOptions, parseInclusions } from '@/lib/vendors/profileTypes';
+import type { VendorMenu } from '@/lib/vendors/profileTypes';
+import VendorMenuImportModal from './VendorMenuImportModal';
+import { mapMenuToLineItems } from '@/lib/vendors/menuImport';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection, reorderSections, reorderLineItems } from '@/app/(programs)/programs/[id]/estimates/actions';
@@ -272,6 +275,7 @@ export default function EstimateBuilder({
     venues.find(v => v.id === estimate.venue_id) ?? null
   );
   const [locationSuggestion, setLocationSuggestion] = useState<{ locationId: string; locationName: string } | null>(null);
+  const [showMenuImport, setShowMenuImport] = useState(false);
 
   const vendorProfile = useMemo((): VendorProfileForSlide | null => {
     if (!linkedVenueData) return null;
@@ -592,6 +596,23 @@ export default function EstimateBuilder({
     imported.forEach((item) => setTimeout(() => handleItemSave(item.id), 0));
   }, [handleItemSave]);
 
+  const handleAddFromVendorMenu = useCallback((menu: VendorMenu) => {
+    const fbSection = sections.find((s) => s.taxBucket === 'fb');
+    const cateringMarkup = markups.find((m) => m.name === 'Catering & F&B');
+    if (!fbSection) return;
+    const startOrder = lineItemsRef.current
+      .filter((li) => li.sectionId === fbSection.id)
+      .reduce((max, li) => Math.max(max, li.sortOrder), -1) + 1;
+    const items = mapMenuToLineItems(
+      menu,
+      { id: fbSection.id, name: fbSection.name, taxBucket: fbSection.taxBucket, markupPct: fbSection.markupPct },
+      { id: cateringMarkup?.id ?? null, markupPct: cateringMarkup?.markup_pct ?? 0.55 },
+      program.guest_count,
+      startOrder
+    );
+    handleImportItems(items as LocalLineItem[]);
+  }, [sections, markups, program.guest_count, handleImportItems]);
+
   // ─── Category move ────────────────────────────────────────
 
   // Default tax type per tax bucket — fb sections default to 'food'; staffing to 'none'; rest to 'general'
@@ -883,7 +904,7 @@ export default function EstimateBuilder({
   const fieldClass = 'border border-brand-cream rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper focus:border-brand-brown bg-white text-brand-charcoal w-full';
   const labelClass = 'block text-xs font-medium text-brand-charcoal/60 tracking-wide mb-1';
 
-  return (
+  return (<>
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="bg-brand-offwhite border-b border-brand-cream px-6 py-2 flex items-center gap-4">
@@ -1303,6 +1324,17 @@ export default function EstimateBuilder({
                 >Clear selection</button>
               </div>
             )}
+            {vendorProfile && vendorProfile.menus.length > 0 && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowMenuImport(true)}
+                  className="text-xs text-brand-brown hover:text-brand-charcoal border border-brand-copper/30 rounded px-3 py-1.5 hover:bg-brand-cream/40 transition-colors"
+                >
+                  Add from vendor menu
+                </button>
+              </div>
+            )}
             <DndContext sensors={sectionSensors} collisionDetection={closestCenter} onDragEnd={handleSectionDragEnd}>
               <SortableContext items={sections.map((s) => s.id)} strategy={verticalListSortingStrategy}>
                 {sections.map((sectionDef) => (
@@ -1541,5 +1573,12 @@ export default function EstimateBuilder({
         </div>
       </div>}
     </div>
-  );
+    {showMenuImport && vendorProfile && vendorProfile.menus.length > 0 && (
+      <VendorMenuImportModal
+        menus={vendorProfile.menus}
+        onImport={handleAddFromVendorMenu}
+        onClose={() => setShowMenuImport(false)}
+      />
+    )}
+  </>);
 }
