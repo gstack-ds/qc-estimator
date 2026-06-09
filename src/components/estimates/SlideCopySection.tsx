@@ -142,6 +142,18 @@ export default function SlideCopySection({
   const [profileOpen, setProfileOpen] = useState(false);
   const [importMenuPending, setImportMenuPending] = useState<VendorMenu | null>(null);
   const [importBarPending, setImportBarPending] = useState<BarOption | null>(null);
+  // Duration inputs for duration-priced bar options in slide copy import
+  const [barDurationInputs, setBarDurationInputs] = useState<Record<string, string>>({});
+
+  // Event duration default for bar packages
+  const eventDurationHours = (() => {
+    const start = event?.start_time;
+    const end = event?.end_time;
+    if (!start || !end) return null;
+    const parseTime = (t: string) => { const [h, m] = t.split(':').map(Number); return h + (m ?? 0) / 60; };
+    const dur = parseTime(end) - parseTime(start);
+    return dur > 0 ? Math.round(dur * 2) / 2 : null;
+  })();
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didMount = useRef(false);
@@ -463,34 +475,66 @@ export default function SlideCopySection({
 
                 {/* Bar options */}
                 {vendorProfile.barOptions.length > 0 && (
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <p className="text-[11px] text-brand-silver uppercase tracking-wide">Bar Options ({vendorProfile.barOptions.length})</p>
-                    {vendorProfile.barOptions.map(b => (
-                      <div key={b.id} className="flex items-center justify-between gap-3">
-                        <div className="text-xs text-brand-charcoal/80 min-w-0 truncate">
-                          {b.name}
-                          {b.price_per_person != null && <span className="text-brand-silver ml-1">${b.price_per_person}/pp</span>}
-                        </div>
-                        {importBarPending?.id === b.id ? (
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
-                            <span className="text-[11px] text-brand-charcoal/60">Replace current?</span>
-                            <button type="button" onClick={() => { setBarNotes(vendorBarToBarNotes(b)); setImportBarPending(null); }} className="text-[11px] px-2 py-0.5 rounded bg-brand-brown text-white">Yes</button>
-                            <button type="button" onClick={() => setImportBarPending(null)} className="text-[11px] px-2 py-0.5 rounded border border-brand-silver/40 text-brand-silver">Cancel</button>
+                    {vendorProfile.barOptions.map(b => {
+                      const isDurationPriced = b.base_hours != null && b.additional_hour_price_per_person != null;
+                      const rawDur = barDurationInputs[b.id] ?? (eventDurationHours != null ? String(eventDurationHours) : '');
+                      const durationHours = rawDur ? (parseFloat(rawDur) > 0 ? parseFloat(rawDur) : null) : null;
+                      return (
+                        <div key={b.id} className="space-y-1">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-xs text-brand-charcoal/80 min-w-0 truncate">
+                              {b.name}
+                              {b.price_per_person != null && !isDurationPriced && (
+                                <span className="text-brand-silver ml-1">${b.price_per_person}/pp</span>
+                              )}
+                              {isDurationPriced && (
+                                <span className="text-brand-silver ml-1">${b.price_per_person}/pp first {b.base_hours}hr, +${b.additional_hour_price_per_person}/pp/hr</span>
+                              )}
+                            </div>
+                            {importBarPending?.id === b.id ? (
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <span className="text-[11px] text-brand-charcoal/60">Replace current?</span>
+                                <button type="button" onClick={() => { setBarNotes(vendorBarToBarNotes(b, durationHours)); setImportBarPending(null); }} className="text-[11px] px-2 py-0.5 rounded bg-brand-brown text-white">Yes</button>
+                                <button type="button" onClick={() => setImportBarPending(null)} className="text-[11px] px-2 py-0.5 rounded border border-brand-silver/40 text-brand-silver">Cancel</button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (barNotes.trim()) { setImportBarPending(b); }
+                                  else { setBarNotes(vendorBarToBarNotes(b, durationHours)); }
+                                }}
+                                className="flex-shrink-0 text-[11px] px-2 py-1 rounded border border-brand-brown/30 text-brand-brown hover:bg-brand-cream transition-colors"
+                              >
+                                {barNotes.trim() ? 'Replace' : 'Import'}
+                              </button>
+                            )}
                           </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (barNotes.trim()) { setImportBarPending(b); }
-                              else { setBarNotes(vendorBarToBarNotes(b)); }
-                            }}
-                            className="flex-shrink-0 text-[11px] px-2 py-1 rounded border border-brand-brown/30 text-brand-brown hover:bg-brand-cream transition-colors"
-                          >
-                            {barNotes.trim() ? 'Replace' : 'Import'}
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                          {/* Duration input for duration-priced packages */}
+                          {isDurationPriced && (
+                            <div className="flex items-center gap-2 pl-1">
+                              <label className="text-[10px] text-brand-silver">Bar duration:</label>
+                              <input
+                                type="number"
+                                min="0.5"
+                                step="0.5"
+                                value={rawDur}
+                                onChange={e => setBarDurationInputs(prev => ({ ...prev, [b.id]: e.target.value }))}
+                                className="w-14 border border-brand-silver/40 rounded px-1.5 py-0.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-brand-brown text-center"
+                              />
+                              <span className="text-[10px] text-brand-silver">hrs</span>
+                              {durationHours != null && b.price_per_person != null && (
+                                <span className="text-[10px] text-brand-charcoal font-medium">
+                                  → ${(b.price_per_person + Math.max(0, durationHours - (b.base_hours ?? 0)) * (b.additional_hour_price_per_person ?? 0)).toFixed(0)}/pp
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
