@@ -29,6 +29,7 @@ import {
 } from '@/lib/leads/pipeline';
 import type { LeadStatus } from '@/lib/leads/constants';
 import LeadCard, { LeadCardContent } from './LeadCard';
+import AddLeadPanel from './AddLeadPanel';
 
 // Lanes collapsed by default (finished records)
 const DEFAULT_COLLAPSED = new Set(['completed', 'did_not_book']);
@@ -195,6 +196,9 @@ export default function LeadsBoard({ leads, teamMembers, linkedPrograms }: Props
     });
   }
 
+  // Add lead
+  const [showAdd, setShowAdd] = useState(false);
+
   // Filters
   const [ownerFilter, setOwnerFilter] = useState('');
   const [search, setSearch] = useState('');
@@ -327,7 +331,20 @@ export default function LeadsBoard({ leads, teamMembers, linkedPrograms }: Props
           </button>
         )}
         <span className="ml-auto text-xs text-brand-silver">{filtered.length} leads</span>
+        <button
+          onClick={() => setShowAdd(true)}
+          className="bg-brand-brown text-white text-xs font-medium rounded px-3 py-1.5 hover:bg-brand-charcoal transition-colors flex-shrink-0"
+        >
+          + Add Lead
+        </button>
       </div>
+      {showAdd && (
+        <AddLeadPanel
+          teamMembers={teamMembers}
+          onClose={() => setShowAdd(false)}
+          onCreated={() => { setShowAdd(false); router.refresh(); }}
+        />
+      )}
 
       {/* Board — flex-1 so it fills remaining height; relative for edge fades */}
       <div className="relative flex-1 min-h-0">
