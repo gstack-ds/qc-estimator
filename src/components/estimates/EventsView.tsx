@@ -4,10 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { updateEstimate } from '@/app/(programs)/programs/[id]/estimates/actions';
-import { deleteEvent, updateEvent, reorderEvents } from '@/app/(programs)/programs/actions';
+import { deleteEvent, updateEvent, reorderEvents, updateBudgetEntry } from '@/app/(programs)/programs/actions';
 import AddEstimateButton from './AddEstimateButton';
 import AddEventButton from './AddEventButton';
 import type { EstimateCard } from './ComparisonView';
+import type { DbBudgetPlanEntry } from '@/lib/supabase/queries';
+import { compareEstimateToBudget, combineEstimatesToBudget, type ComparisonStatus } from '@/lib/engine/budgetComparison';
+import type { BudgetTarget } from '@/lib/engine/budgetComparison';
 
 // ─── Event type display config ────────────────────────────
 
@@ -54,6 +57,7 @@ export interface EventRow {
   description: string | null;
   sort_order: number;
   cards: EstimateCard[];
+  budgetEntry: DbBudgetPlanEntry | null;
 }
 
 interface Props {
@@ -61,6 +65,29 @@ interface Props {
   events: EventRow[];
   unassignedCards: EstimateCard[];
   programGuestCount: number;
+}
+
+// ─── Budget comparison helpers ────────────────────────────
+
+function budgetTargetFromEntry(entry: DbBudgetPlanEntry, guestCount: number): BudgetTarget {
+  return {
+    pricingBasis: entry.pricing_basis,
+    valueLow: entry.entry_type === 'pooled' ? (entry.pool_total ?? 0) : entry.value_low,
+    valueHigh: entry.entry_type === 'pooled' ? (entry.pool_total ?? 0) : entry.value_high,
+    pinnedValue: entry.pinned_value,
+    guestCount,
+  };
+}
+
+function statusColors(status: ComparisonStatus) {
+  if (status === 'under') return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' };
+  if (status === 'within_range') return { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' };
+  return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' };
+}
+
+function fmtDelta(delta: number) {
+  const sign = delta >= 0 ? '+' : '−';
+  return `${sign}$${Math.round(Math.abs(delta)).toLocaleString('en-US')}`;
 }
 
 // ─── Formatting helpers ───────────────────────────────────
@@ -94,6 +121,13 @@ function reorderArray<T>(arr: T[], from: number, to: number): T[] {
 
 // ─── Estimate card (mini) ─────────────────────────────────
 
+interface DeltaInfo {
+  delta: number;
+  status: ComparisonStatus;
+  budgetLow: number;
+  budgetHigh: number;
+}
+
 function EstimateCardItem({
   card,
   programId,
@@ -101,6 +135,7 @@ function EstimateCardItem({
   isBestMargin,
   onToggle,
   eventGuestCount,
+  delta: deltaInfo,
 }: {
   card: EstimateCard;
   programId: string;
@@ -108,6 +143,7 @@ function EstimateCardItem({
   isBestMargin: boolean;
   onToggle: (id: string, next: boolean) => void;
   eventGuestCount?: number;
+  delta?: DeltaInfo;
 }) {
   const displayedPricePerPerson = eventGuestCount && eventGuestCount > 0
     ? Math.ceil(card.total / eventGuestCount)
@@ -161,6 +197,12 @@ function EstimateCardItem({
         )}
       </div>
 
+      {deltaInfo && card.total > 0 && (
+        <div className={`text-xs font-medium px-2 py-1 rounded border ${statusColors(deltaInfo.status).bg} ${statusColors(deltaInfo.status).text} ${statusColors(deltaInfo.status).border}`}>
+          {fmtDelta(deltaInfo.delta)} vs budget
+        </div>
+      )}
+
       <div className="border-t border-brand-cream pt-2.5 mt-auto">
         <label className="flex items-center gap-2 cursor-pointer" onClick={(e) => e.preventDefault()}>
           <div
@@ -203,6 +245,9 @@ function EventCard({
   const [isEditing, setIsEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [comparisonMode, setComparisonMode] = useState<'compare_each' | 'combine'>(
+    event.budgetEntry?.comparison_mode ?? 'compare_each'
+  );
 
   // Edit form state — re-synced from event prop each time edit is opened
   const [editName, setEditName] = useState('');
@@ -405,27 +450,110 @@ function EventCard({
             <p className="text-xs text-brand-silver">{event.description}</p>
           )}
 
-          {cards.length === 0 ? (
-            <p className="text-sm text-brand-silver/70 py-2">No estimates yet.</p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {cards.map((card) => {
-                const isLowest = groupLowest !== null && card.total === groupLowest && card.total > 0;
-                const isBestMargin = groupBestMargin !== null && card.qcMarginPct === groupBestMargin && card.total > 0;
-                return (
-                  <EstimateCardItem
-                    key={card.id}
-                    card={card}
-                    programId={programId}
-                    isLowest={isLowest}
-                    isBestMargin={isBestMargin}
-                    onToggle={onToggle}
-                    eventGuestCount={event.guest_count > 0 ? event.guest_count : undefined}
-                  />
-                );
-              })}
+          {/* Comparison mode toggle — only shown when a budget entry is linked */}
+          {event.budgetEntry && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-brand-silver/60 font-medium uppercase tracking-wide">Budget mode</span>
+              <div className="flex bg-brand-offwhite border border-brand-cream rounded-md p-0.5 gap-0.5">
+                {(['compare_each', 'combine'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={async () => {
+                      setComparisonMode(mode);
+                      if (event.budgetEntry) {
+                        await updateBudgetEntry(event.budgetEntry.id, event.budgetEntry.program_id, { comparison_mode: mode });
+                      }
+                    }}
+                    className={`text-xs px-2.5 py-1 rounded transition-colors ${
+                      comparisonMode === mode
+                        ? 'bg-white text-brand-charcoal shadow-sm font-medium'
+                        : 'text-brand-silver hover:text-brand-charcoal'
+                    }`}
+                  >
+                    {mode === 'compare_each' ? 'Compare each' : 'Combine'}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
+
+          {cards.length === 0 ? (
+            <p className="text-sm text-brand-silver/70 py-2">No estimates yet.</p>
+          ) : (() => {
+            const guestCount = event.guest_count > 0 ? event.guest_count : undefined;
+            const budgetTarget = event.budgetEntry
+              ? budgetTargetFromEntry(event.budgetEntry, event.guest_count > 0 ? event.guest_count : 0)
+              : null;
+
+            // combine mode: compute combined result for the footer banner
+            const combineResult = budgetTarget && comparisonMode === 'combine'
+              ? combineEstimatesToBudget(cards, budgetTarget)
+              : null;
+
+            return (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {cards.map((card) => {
+                    const isLowest = groupLowest !== null && card.total === groupLowest && card.total > 0;
+                    const isBestMargin = groupBestMargin !== null && card.qcMarginPct === groupBestMargin && card.total > 0;
+
+                    // compare_each: compute per-card delta against budget
+                    let deltaInfo: DeltaInfo | undefined;
+                    if (budgetTarget && comparisonMode === 'compare_each' && card.includeInBudget && card.total > 0) {
+                      const result = compareEstimateToBudget(card.id, card.total, event.guest_count, budgetTarget);
+                      deltaInfo = { delta: result.delta, status: result.status, budgetLow: result.budgetLow, budgetHigh: result.budgetHigh };
+                    }
+
+                    return (
+                      <EstimateCardItem
+                        key={card.id}
+                        card={card}
+                        programId={programId}
+                        isLowest={isLowest}
+                        isBestMargin={isBestMargin}
+                        onToggle={onToggle}
+                        eventGuestCount={guestCount}
+                        delta={deltaInfo}
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* Combine mode: summary banner */}
+                {combineResult && (
+                  <div className={`rounded-lg border px-4 py-3 space-y-2 ${statusColors(combineResult.status).bg} ${statusColors(combineResult.status).border}`}>
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-3">
+                        <span className={`font-medium ${statusColors(combineResult.status).text}`}>
+                          Combined: ${Math.round(combineResult.combinedTotal).toLocaleString('en-US')}
+                        </span>
+                        <span className="text-brand-silver/60 text-xs">of ${Math.round(combineResult.budgetPinned).toLocaleString('en-US')} budget</span>
+                        {combineResult.budgetLow !== combineResult.budgetHigh && (
+                          <span className="text-brand-silver/50 text-xs">(range: ${Math.round(combineResult.budgetLow).toLocaleString('en-US')}–${Math.round(combineResult.budgetHigh).toLocaleString('en-US')})</span>
+                        )}
+                      </div>
+                      <span className={`text-xs font-medium ${statusColors(combineResult.status).text}`}>
+                        {combineResult.remaining >= 0
+                          ? `$${Math.round(combineResult.remaining).toLocaleString('en-US')} remaining`
+                          : `$${Math.round(Math.abs(combineResult.remaining)).toLocaleString('en-US')} over`}
+                      </span>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="h-1.5 bg-white/60 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          combineResult.status === 'over' ? 'bg-red-400' :
+                          combineResult.status === 'within_range' ? 'bg-amber-400' :
+                          'bg-green-400'
+                        }`}
+                        style={{ width: `${combineResult.pctConsumed * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           <div className="flex justify-end pt-1">
             <AddEstimateButton programId={programId} eventId={event.id} />
