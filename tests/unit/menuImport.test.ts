@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { mapMenuToLineItems } from '../../src/lib/vendors/menuImport';
+import { mapMenuToLineItems, mapBarToLineItems } from '../../src/lib/vendors/menuImport';
 import type { MenuImportSection, MenuImportMarkup } from '../../src/lib/vendors/menuImport';
-import type { VendorMenu } from '../../src/lib/vendors/profileTypes';
+import { computeBarPricePP } from '../../src/lib/vendors/profileTypes';
+import type { VendorMenu, BarOption } from '../../src/lib/vendors/profileTypes';
 
 const FB_SECTION: MenuImportSection = {
   id: 'section-fb-1',
@@ -216,5 +217,89 @@ describe('different guest counts', () => {
     const menu: VendorMenu = { id: 'm7', name: 'Sample', price_per_person: 75, courses: [] };
     const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, 1, 0);
     expect(item.qty).toBe(1);
+  });
+});
+
+// ─── computeBarPricePP ────────────────────────────────────
+
+const BAR_SIMPLE: BarOption = { id: 'b1', name: 'House Bar', price_per_person: 40, categories: [] };
+const BAR_DURATION: BarOption = {
+  id: 'b2', name: 'Premium Open Bar', price_per_person: 45,
+  base_hours: 2, additional_hour_price_per_person: 12,
+  categories: [],
+};
+
+describe('computeBarPricePP', () => {
+  it('returns price_per_person when no duration fields', () => {
+    expect(computeBarPricePP(BAR_SIMPLE)).toBe(40);
+    expect(computeBarPricePP(BAR_SIMPLE, null)).toBe(40);
+    expect(computeBarPricePP(BAR_SIMPLE, 5)).toBe(40);
+  });
+
+  it('returns price_per_person when durationHours is null', () => {
+    expect(computeBarPricePP(BAR_DURATION, null)).toBe(45);
+  });
+
+  it('returns base price when duration <= base_hours', () => {
+    expect(computeBarPricePP(BAR_DURATION, 2)).toBe(45); // exactly at base
+    expect(computeBarPricePP(BAR_DURATION, 1)).toBe(45); // under base
+  });
+
+  it('adds extra hours beyond base_hours', () => {
+    // 3hr: $45 + 1×$12 = $57
+    expect(computeBarPricePP(BAR_DURATION, 3)).toBe(57);
+    // 5hr: $45 + 3×$12 = $81
+    expect(computeBarPricePP(BAR_DURATION, 5)).toBe(81);
+  });
+
+  it('handles fractional extra hours', () => {
+    // 2.5hr: $45 + 0.5×$12 = $51
+    expect(computeBarPricePP(BAR_DURATION, 2.5)).toBe(51);
+  });
+
+  it('returns 0 when price_per_person is 0', () => {
+    const opt: BarOption = { id: 'b3', name: 'Complimentary', price_per_person: 0, categories: [] };
+    expect(computeBarPricePP(opt, 4)).toBe(0);
+  });
+});
+
+// ─── mapBarToLineItems ────────────────────────────────────
+
+describe('mapBarToLineItems', () => {
+  it('creates a single alcohol line item from a simple bar option', () => {
+    const [item] = mapBarToLineItems(BAR_SIMPLE, null, FB_SECTION, CATERING_MARKUP, 100, 0);
+    expect(item.name).toBe('House Bar');
+    expect(item.qty).toBe(100);
+    expect(item.unitPrice).toBe(40);
+    expect(item.taxType).toBe('alcohol');
+    expect(item.taxBucket).toBe('fb');
+    expect(item.isNew).toBe(true);
+  });
+
+  it('applies duration pricing when durationHours is provided', () => {
+    // 4hr: $45 + 2×$12 = $69
+    const [item] = mapBarToLineItems(BAR_DURATION, 4, FB_SECTION, CATERING_MARKUP, 50, 0);
+    expect(item.unitPrice).toBe(69);
+  });
+
+  it('uses base price when no duration provided', () => {
+    const [item] = mapBarToLineItems(BAR_DURATION, null, FB_SECTION, CATERING_MARKUP, 50, 0);
+    expect(item.unitPrice).toBe(45);
+  });
+
+  it('uses guestCount for qty', () => {
+    const [item] = mapBarToLineItems(BAR_SIMPLE, null, FB_SECTION, CATERING_MARKUP, 75, 0);
+    expect(item.qty).toBe(75);
+  });
+
+  it('sets correct section and markup', () => {
+    const [item] = mapBarToLineItems(BAR_SIMPLE, null, FB_SECTION, CATERING_MARKUP, 50, 0);
+    expect(item.sectionId).toBe('section-fb-1');
+    expect(item.categoryMarkupPct).toBe(0.55);
+  });
+
+  it('always returns exactly one item', () => {
+    const items = mapBarToLineItems(BAR_DURATION, 3, FB_SECTION, CATERING_MARKUP, 100, 0);
+    expect(items).toHaveLength(1);
   });
 });

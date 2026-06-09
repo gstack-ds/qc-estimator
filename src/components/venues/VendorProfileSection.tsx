@@ -218,15 +218,35 @@ function BarEditor({ options, onChange }: { options: BarOption[]; onChange: (o: 
     <div className="space-y-4">
       {options.map(opt => (
         <div key={opt.id} className="border border-brand-silver/20 rounded-lg p-4 space-y-3">
-          <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center">
+          <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
             <input className={inp} placeholder="Package name (e.g. Premium Open Bar)" value={opt.name}
               onChange={e => updateOption(opt.id, o => ({ ...o, name: e.target.value }))} />
-            <input className="border border-brand-silver/40 rounded px-2 py-1 text-sm bg-white w-28 text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-brown"
-              placeholder="$/person" type="number" min="0" step="0.01"
-              value={fmt(opt.price_per_person)}
-              onChange={e => updateOption(opt.id, o => ({ ...o, price_per_person: parseNum(e.target.value) }))} />
             <button type="button" onClick={() => delOption(opt.id)}
               className="text-brand-silver hover:text-red-500 text-xs transition-colors">✕</button>
+          </div>
+          {/* Pricing: base price + optional duration tiers */}
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-[10px] text-brand-silver/70 block mb-0.5">Base $/pp</label>
+              <input className="w-full border border-brand-silver/40 rounded px-2 py-1 text-sm bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-brown"
+                placeholder="e.g. 45" type="number" min="0" step="0.01"
+                value={fmt(opt.price_per_person)}
+                onChange={e => updateOption(opt.id, o => ({ ...o, price_per_person: parseNum(e.target.value) }))} />
+            </div>
+            <div>
+              <label className="text-[10px] text-brand-silver/70 block mb-0.5">Base hrs (optional)</label>
+              <input className="w-full border border-brand-silver/40 rounded px-2 py-1 text-sm bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-brown"
+                placeholder="e.g. 2" type="number" min="0" step="0.5"
+                value={fmt(opt.base_hours)}
+                onChange={e => updateOption(opt.id, o => ({ ...o, base_hours: parseNum(e.target.value) }))} />
+            </div>
+            <div>
+              <label className="text-[10px] text-brand-silver/70 block mb-0.5">+hr $/pp (optional)</label>
+              <input className="w-full border border-brand-silver/40 rounded px-2 py-1 text-sm bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-brown"
+                placeholder="e.g. 12" type="number" min="0" step="0.01"
+                value={fmt(opt.additional_hour_price_per_person)}
+                onChange={e => updateOption(opt.id, o => ({ ...o, additional_hour_price_per_person: parseNum(e.target.value) }))} />
+            </div>
           </div>
           <input className={inp} placeholder="Description (optional)" value={opt.description ?? ''}
             onChange={e => updateOption(opt.id, o => ({ ...o, description: e.target.value }))} />

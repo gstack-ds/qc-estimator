@@ -4,6 +4,16 @@ import type {
   VendorMenu, BarOption, VendorInclusion, VendorPhoto, DietaryTag,
 } from '@/lib/vendors/profileTypes';
 import { DIETARY_LABELS } from '@/lib/vendors/profileTypes';
+
+function fmtBarPrice(opt: BarOption): string | null {
+  if (opt.price_per_person == null) return null;
+  if (opt.base_hours != null && opt.additional_hour_price_per_person != null) {
+    const baseHrLabel = opt.base_hours === 1 ? '1 hour' : `${opt.base_hours} hours`;
+    return `$${opt.price_per_person}/pp first ${baseHrLabel}, +$${opt.additional_hour_price_per_person}/pp each additional hour`;
+  }
+  const formatted = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(opt.price_per_person);
+  return `${formatted} per person`;
+}
 import PrintButton from './PrintButton';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -244,8 +254,8 @@ function BarSection({ barOptions }: { barOptions: BarOption[] }) {
           <div key={opt.id} className="print:break-inside-avoid">
             <div className="flex items-baseline gap-3 flex-wrap mb-1">
               <h3 className="font-serif text-xl text-brand-charcoal">{opt.name}</h3>
-              {opt.price_per_person != null && (
-                <span className="text-brand-brown text-sm font-medium">{fmt$(opt.price_per_person)} per person</span>
+              {fmtBarPrice(opt) && (
+                <span className="text-brand-brown text-sm font-medium">{fmtBarPrice(opt)}</span>
               )}
             </div>
             {opt.description && (

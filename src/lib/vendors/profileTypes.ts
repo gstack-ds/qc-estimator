@@ -53,10 +53,25 @@ export interface BarCategory {
 export interface BarOption {
   id: string;
   name: string;
-  price_per_person?: number | null;
+  price_per_person?: number | null;           // base price per person (covers first base_hours)
+  base_hours?: number | null;                  // hours included in price_per_person
+  additional_hour_price_per_person?: number | null;  // extra per person per hour beyond base
   description?: string;
   categories: BarCategory[];
   notes?: string;
+}
+
+/**
+ * Computes the per-person price for a bar option given the actual bar duration.
+ * Falls back to price_per_person when duration pricing fields are absent.
+ */
+export function computeBarPricePP(opt: BarOption, durationHours?: number | null): number {
+  const basePP = opt.price_per_person ?? 0;
+  if (durationHours == null || opt.base_hours == null || opt.additional_hour_price_per_person == null) {
+    return basePP;
+  }
+  const extraHours = Math.max(0, durationHours - opt.base_hours);
+  return basePP + extraHours * opt.additional_hour_price_per_person;
 }
 
 export interface VendorInclusion {

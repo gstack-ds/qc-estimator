@@ -2,6 +2,7 @@
 // Pure functions: no React, no server imports, safe to use anywhere.
 
 import type { VendorMenu, BarOption, VendorInclusion } from '@/lib/vendors/profileTypes';
+import { computeBarPricePP } from '@/lib/vendors/profileTypes';
 import type { MenuCourse, MenuOption } from '@/types/slideCopy';
 
 // ── Menu → MenuCourse[] ───────────────────────────────────────────────────────
@@ -32,9 +33,16 @@ export function vendorMenuToMenuCourses(menu: VendorMenu): MenuCourse[] {
 // Produces the free-text format used in SlideCopySection's barNotes field.
 // Format mirrors the Dianthus/SPIN template: CATEGORY: Brand1, Brand2
 
-export function vendorBarToBarNotes(barOption: BarOption): string {
+export function vendorBarToBarNotes(barOption: BarOption, durationHours?: number | null): string {
   const lines: string[] = [barOption.name.toUpperCase()];
-  if (barOption.price_per_person != null) {
+  const pricePP = computeBarPricePP(barOption, durationHours);
+  if (pricePP > 0) {
+    if (durationHours != null && barOption.base_hours != null && barOption.additional_hour_price_per_person != null) {
+      lines.push(`$${pricePP}/pp (${durationHours} hrs)`);
+    } else if (barOption.price_per_person != null) {
+      lines.push(`$${barOption.price_per_person} per person`);
+    }
+  } else if (barOption.price_per_person != null) {
     lines.push(`$${barOption.price_per_person} per person`);
   }
   if (barOption.description) {

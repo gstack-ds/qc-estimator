@@ -1,7 +1,8 @@
-// Pure function: maps a VendorMenu to importable line items.
+// Pure functions: map vendor profile data to importable line items.
 // No React/Next/Supabase deps — fully testable.
 
-import type { VendorMenu } from './profileTypes';
+import type { VendorMenu, BarOption } from './profileTypes';
+import { computeBarPricePP } from './profileTypes';
 import type { TaxBucket, TaxType } from '@/types';
 
 export interface MenuImportSection {
@@ -89,4 +90,37 @@ export function mapMenuToLineItems(
   }
 
   return items;
+}
+
+/**
+ * Maps a BarOption to a single importable line item.
+ *
+ * - unitPrice = computeBarPricePP(opt, durationHours) — handles base + extra-hour pricing
+ * - taxType = 'alcohol'
+ * - qty = guestCount
+ */
+export function mapBarToLineItems(
+  opt: BarOption,
+  durationHours: number | null,
+  section: MenuImportSection,
+  markup: MenuImportMarkup,
+  guestCount: number,
+  startSortOrder: number,
+): MenuLineItem[] {
+  const pricePP = computeBarPricePP(opt, durationHours);
+  return [{
+    id: `bar-import-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    sectionId: section.id,
+    section: section.name,
+    taxBucket: section.taxBucket,
+    name: opt.name,
+    qty: guestCount,
+    unitPrice: pricePP,
+    categoryId: markup.id,
+    defaultMarkupPct: markup.markupPct,
+    categoryMarkupPct: markup.markupPct,
+    taxType: 'alcohol' as TaxType,
+    sortOrder: startSortOrder,
+    isNew: true as const,
+  }];
 }
