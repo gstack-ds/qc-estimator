@@ -7,6 +7,15 @@ const nextConfig = {
     },
     serverComponentsExternalPackages: ['@react-pdf/renderer'],
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'ysondqarwktqhcesjsyd.supabase.co',
+        pathname: '/storage/v1/object/public/**',
+      },
+    ],
+  },
 };
 
 module.exports = nextConfig;
