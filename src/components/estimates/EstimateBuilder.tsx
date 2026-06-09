@@ -36,6 +36,7 @@ import { linkVenueToEstimate, syncVenueSpaceDefaults } from '@/app/(programs)/ve
 import { updateProgram, applyBudgetPin } from '@/app/(programs)/programs/actions';
 import { effectivePrefillPP } from '@/lib/engine/budgetPlan';
 import type { DbTemplate, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
+import EstimateSnapshotBar from './EstimateSnapshotBar';
 // TravelRefData, DbTrip no longer imported — travel is program-level.
 
 // ─── Types ───────────────────────────────────────────────
@@ -936,6 +937,13 @@ export default function EstimateBuilder({
           </div>
         )}
       </div>
+
+      <EstimateSnapshotBar
+        programId={program.id}
+        guestCount={program.guest_count}
+        event={event}
+        budgetPlanEntry={budgetPlanEntry}
+      />
 
       {/* VenuePicker — shown when no venue is linked */}
       {!linkedVenueId && (

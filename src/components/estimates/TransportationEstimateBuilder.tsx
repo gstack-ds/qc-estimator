@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import type { DbProgram, DbEstimate, DbLocation, DbTier, DbTransportVehicleRate, DbTransportScheduleRow } from '@/lib/supabase/queries';
+import type { DbProgram, DbEstimate, DbLocation, DbTier, DbTransportVehicleRate, DbTransportScheduleRow, DbEvent, DbBudgetPlanEntry } from '@/lib/supabase/queries';
 import { calculateMarginAnalysis, getMarginHealth, getNetHealth, lookupTeamHours } from '@/lib/engine/pricing';
 import type { ProgramConfig, TeamHoursTier, EstimateSummary, MarginAnalysis } from '@/types';
 import {
@@ -24,6 +24,7 @@ import type { ExtractedData, ExtractedTransportVehicleRate, ExtractedTransportSc
 import EstimateNav from './EstimateNav';
 import AttachmentsPanel from './AttachmentsPanel';
 import MarginPanel from './MarginPanel';
+import EstimateSnapshotBar from './EstimateSnapshotBar';
 
 // ─── Local Types ──────────────────────────────────────────
 
@@ -61,6 +62,8 @@ interface Props {
   includeTravelInProductionFee?: boolean;
   tiers: DbTier[];
   eventName?: string | null;
+  event?: DbEvent | null;
+  budgetPlanEntry?: DbBudgetPlanEntry | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -112,7 +115,7 @@ function dbScheduleRowToLocal(r: DbTransportScheduleRow): LocalScheduleRow {
 // ─── Component ────────────────────────────────────────────
 
 export default function TransportationEstimateBuilder({
-  program, location, allEstimates, estimate, vehicleRates: initRates, scheduleRows: initRows, programTravelTotal = 0, includeTravelInProductionFee = false, tiers, eventName,
+  program, location, allEstimates, estimate, vehicleRates: initRates, scheduleRows: initRows, programTravelTotal = 0, includeTravelInProductionFee = false, tiers, eventName, event = null, budgetPlanEntry = null,
 }: Props) {
   const [estimateName, setEstimateName] = useState(estimate.name);
   const [commission, setCommission] = useState(estimate.transport_commission ?? 0);
@@ -386,6 +389,13 @@ export default function TransportationEstimateBuilder({
           estimateName={estimateName}
         />
       </div>
+
+      <EstimateSnapshotBar
+        programId={program.id}
+        guestCount={program.guest_count}
+        event={event}
+        budgetPlanEntry={budgetPlanEntry}
+      />
 
       <div className="flex-1 overflow-y-auto">
         <div className="flex gap-6 p-6 min-h-full">

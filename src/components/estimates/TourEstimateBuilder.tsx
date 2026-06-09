@@ -7,7 +7,7 @@ import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrate
 import { calculateGuideCount } from '@/lib/tours/guideScaling';
 import type { TaxType, TaxBucket } from '@/types';
 import type { SectionTotal } from '@/lib/utils/sectionLabels';
-import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation, DbEstimateSection } from '@/lib/supabase/queries';
+import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation, DbEstimateSection, DbEvent, DbBudgetPlanEntry } from '@/lib/supabase/queries';
 import { calculateVenueEstimate, calculateMarginAnalysis } from '@/lib/engine/pricing';
 import type { ProgramConfig, TeamHoursTier } from '@/types';
 import EstimateNav from './EstimateNav';
@@ -23,6 +23,7 @@ import type { TourDetails, TourCatalogEntry } from '@/lib/tours/types';
 import type { LocalLineItem } from './EstimateBuilder';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
+import EstimateSnapshotBar from './EstimateSnapshotBar';
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -389,12 +390,14 @@ interface Props {
   programTravelTotal?: number;
   includeTravelInProductionFee?: boolean;
   eventName?: string | null;
+  event?: DbEvent | null;
+  budgetPlanEntry?: DbBudgetPlanEntry | null;
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 export default function TourEstimateBuilder({
-  program, location, allEstimates, estimate, dbLineItems, dbSections, markups, tiers, programTravelTotal = 0, includeTravelInProductionFee = false, eventName,
+  program, location, allEstimates, estimate, dbLineItems, dbSections, markups, tiers, programTravelTotal = 0, includeTravelInProductionFee = false, eventName, event = null, budgetPlanEntry = null,
 }: Props) {
   const programConfig = useMemo(() => toProgramConfig(program, location), [program, location]);
   const tiersList = useMemo(() => toTiers(tiers), [tiers]);
@@ -868,6 +871,13 @@ export default function TourEstimateBuilder({
           </div>
         </div>
       </div>
+
+      <EstimateSnapshotBar
+        programId={program.id}
+        guestCount={program.guest_count}
+        event={event}
+        budgetPlanEntry={budgetPlanEntry}
+      />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Main content */}

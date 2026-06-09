@@ -6,7 +6,7 @@ import type { DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import type { TaxType, TaxBucket } from '@/types';
 import type { SectionTotal } from '@/lib/utils/sectionLabels';
-import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation, DbEstimateSection } from '@/lib/supabase/queries';
+import type { DbProgram, DbEstimate, DbLineItem, DbMarkup, DbTier, DbLocation, DbEstimateSection, DbEvent, DbBudgetPlanEntry } from '@/lib/supabase/queries';
 import { calculateVenueEstimate, calculateMarginAnalysis } from '@/lib/engine/pricing';
 import type { ProgramConfig, TeamHoursTier } from '@/types';
 import EstimateNav from './EstimateNav';
@@ -22,6 +22,7 @@ import type { LocalLineItem } from './EstimateBuilder';
 // TravelPanel removed — team travel is now entered at the program level.
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
+import EstimateSnapshotBar from './EstimateSnapshotBar';
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -130,12 +131,14 @@ interface Props {
   programTravelTotal?: number;
   includeTravelInProductionFee?: boolean;
   eventName?: string | null;
+  event?: DbEvent | null;
+  budgetPlanEntry?: DbBudgetPlanEntry | null;
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 export default function DecorEstimateBuilder({
-  program, location, allEstimates, estimate, dbLineItems, dbSections, markups, tiers, programTravelTotal = 0, includeTravelInProductionFee = false, eventName,
+  program, location, allEstimates, estimate, dbLineItems, dbSections, markups, tiers, programTravelTotal = 0, includeTravelInProductionFee = false, eventName, event = null, budgetPlanEntry = null,
 }: Props) {
   const programConfig = useMemo(() => toProgramConfig(program, location), [program, location]);
   const tiersList = useMemo(() => toTiers(tiers), [tiers]);
@@ -586,6 +589,13 @@ export default function DecorEstimateBuilder({
           </div>
         </div>
       </div>
+
+      <EstimateSnapshotBar
+        programId={program.id}
+        guestCount={program.guest_count}
+        event={event}
+        budgetPlanEntry={budgetPlanEntry}
+      />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Main content */}

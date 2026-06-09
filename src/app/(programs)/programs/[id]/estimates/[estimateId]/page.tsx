@@ -79,8 +79,10 @@ export default async function EstimatePage({ params, searchParams }: Props) {
           scheduleRows={scheduleRows}
           tiers={tiers}
           eventName={eventName}
+          event={event}
           programTravelTotal={programTravelTotal}
           includeTravelInProductionFee={program.include_travel_in_production_fee ?? false}
+          budgetPlanEntry={budgetPlanEntry}
         />
       </div>
     );
@@ -220,8 +222,10 @@ export default async function EstimatePage({ params, searchParams }: Props) {
           markups={markups}
           tiers={tiers}
           eventName={eventName}
+          event={event}
           programTravelTotal={programTravelTotal}
           includeTravelInProductionFee={program.include_travel_in_production_fee ?? false}
+          budgetPlanEntry={budgetPlanEntry}
         />
       </div>
     );
@@ -243,8 +247,10 @@ export default async function EstimatePage({ params, searchParams }: Props) {
         markups={markups}
         tiers={tiers}
         eventName={eventName}
+        event={event}
         programTravelTotal={programTravelTotal}
         includeTravelInProductionFee={program.include_travel_in_production_fee ?? false}
+        budgetPlanEntry={budgetPlanEntry}
       />
     </div>
   );
