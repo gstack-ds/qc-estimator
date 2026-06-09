@@ -37,7 +37,8 @@ import { mapMenuToLineItems, mapBarToLineItems } from '@/lib/vendors/menuImport'
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection, reorderSections, reorderLineItems } from '@/app/(programs)/programs/[id]/estimates/actions';
-import { linkVenueToEstimate, syncVenueSpaceDefaults } from '@/app/(programs)/venues/actions';
+import { linkVenueToEstimate, syncVenueSpaceDefaults, updateVenueSpace, createVenueSpace } from '@/app/(programs)/venues/actions';
+import { classifySpaceSync, findMatchingSpace, isAutoFilled } from '@/lib/vendors/venueSync';
 import { updateProgram, applyBudgetPin } from '@/app/(programs)/programs/actions';
 import { effectivePrefillPP } from '@/lib/engine/budgetPlan';
 import type { DbTemplate, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
@@ -279,6 +280,19 @@ export default function EstimateBuilder({
   const [locationSuggestion, setLocationSuggestion] = useState<{ locationId: string; locationName: string } | null>(null);
   const [showMenuImport, setShowMenuImport] = useState(false);
 
+  // ─── Venue ↔ estimate sync ────────────────────────────────
+  // Records the fbMinimum value last auto-filled from a vendor space selection.
+  // Write-back skips when the current value matches (loop guard).
+  const spaceAutoFilledRef = useRef<{ fbMinimum?: number }>({});
+  const [syncToast, setSyncToast] = useState<string | null>(null);
+  const [spaceSyncPrompt, setSpaceSyncPrompt] = useState<{
+    spaceId: string; spaceName: string; vendorName: string; newValue: number;
+  } | null>(null);
+  const [addSpaceOffer, setAddSpaceOffer] = useState<{
+    name: string; capacitySeated: string; capacityStanding: string;
+  } | null>(null);
+  const [addSpacePending, setAddSpacePending] = useState(false);
+
   const vendorProfile = useMemo((): VendorProfileForSlide | null => {
     if (!linkedVenueData) return null;
     const selectedSpace = venueSpaces.find(s => s.id === linkedSpaceId) ?? null;
@@ -331,6 +345,41 @@ export default function EstimateBuilder({
     });
   }
 
+  // Scenario A: smart write-back for F&B minimum on blur.
+  // Skips when loop guard fires (value came from auto-fill, not user input).
+  async function handleFbMinimumWriteBack() {
+    if (!linkedSpaceId || !linkedVenueId || !linkedVenueData) return;
+    const selectedSpace = venueSpaces.find((s) => s.id === linkedSpaceId) ?? null;
+    if (!selectedSpace) return;
+    if (isAutoFilled(est.fbMinimum, spaceAutoFilledRef.current.fbMinimum)) return;
+
+    const classification = classifySpaceSync(est.fbMinimum, selectedSpace.fb_minimum);
+    if (classification === 'blank_vendor') {
+      await updateVenueSpace(selectedSpace.id, linkedVenueId, { fb_minimum: est.fbMinimum });
+      const msg = `Saved to ${linkedVenueData.name} · ${selectedSpace.name}: F&B min $${est.fbMinimum.toLocaleString()}`;
+      setSyncToast(msg);
+      setTimeout(() => setSyncToast(null), 4000);
+    } else if (classification === 'differing') {
+      setSpaceSyncPrompt({
+        spaceId: selectedSpace.id,
+        spaceName: selectedSpace.name,
+        vendorName: linkedVenueData.name,
+        newValue: est.fbMinimum,
+      });
+    }
+  }
+
+  // Scenario B: when room space is typed manually and doesn't match a known
+  // space on the linked vendor, offer to create that space.
+  function handleRoomSpaceWriteBack() {
+    if (!linkedVenueId || !linkedVenueData || !est.roomSpace.trim()) return;
+    if (linkedSpaceId) return; // space already formally linked — no offer needed
+    const spacesForVenue = venueSpaces.filter((s) => s.venue_id === linkedVenueId);
+    const match = findMatchingSpace(est.roomSpace.trim(), spacesForVenue);
+    if (match) return; // already exists
+    setAddSpaceOffer({ name: est.roomSpace.trim(), capacitySeated: '', capacityStanding: '' });
+  }
+
   function handleVenueAutoFill(fields: {
     roomSpace?: string;
     fbMinimum?: number;
@@ -340,7 +389,10 @@ export default function EstimateBuilder({
   }) {
     const patch: Partial<LocalEstimate> = {};
     if (fields.roomSpace !== undefined) patch.roomSpace = fields.roomSpace;
-    if (fields.fbMinimum !== undefined) patch.fbMinimum = fields.fbMinimum;
+    if (fields.fbMinimum !== undefined) {
+      patch.fbMinimum = fields.fbMinimum;
+      spaceAutoFilledRef.current.fbMinimum = fields.fbMinimum;
+    }
     if (fields.serviceChargeOverride !== undefined) patch.serviceChargeOverride = fields.serviceChargeOverride;
     if (fields.gratuityOverride !== undefined) patch.gratuityOverride = fields.gratuityOverride;
     if (fields.adminFeeOverride !== undefined) patch.adminFeeOverride = fields.adminFeeOverride;
@@ -1055,8 +1107,8 @@ export default function EstimateBuilder({
                 <input
                   type="text"
                   value={est.roomSpace}
-                  onChange={(e) => updateEstField({ roomSpace: e.target.value })}
-                  onBlur={() => saveEstimate({ roomSpace: est.roomSpace })}
+                  onChange={(e) => { updateEstField({ roomSpace: e.target.value }); setAddSpaceOffer(null); }}
+                  onBlur={() => { saveEstimate({ roomSpace: est.roomSpace }); handleRoomSpaceWriteBack(); }}
                   className={fieldClass}
                   placeholder="e.g., Ballroom A"
                 />
@@ -1097,6 +1149,93 @@ export default function EstimateBuilder({
               </div>
             )}
 
+            {/* Scenario A2: F&B minimum differs from vendor space — ask before overwriting */}
+            {spaceSyncPrompt && (
+              <div className="flex items-center gap-3 rounded-md px-3 py-2 text-sm bg-amber-50 border border-amber-200 text-amber-800">
+                <span className="flex-1">
+                  Update <strong>{spaceSyncPrompt.vendorName}</strong> · {spaceSyncPrompt.spaceName}: set F&amp;B min to <strong>${spaceSyncPrompt.newValue.toLocaleString()}</strong>?
+                </span>
+                <button
+                  onClick={async () => {
+                    await updateVenueSpace(spaceSyncPrompt.spaceId, linkedVenueId!, { fb_minimum: spaceSyncPrompt.newValue });
+                    setSpaceSyncPrompt(null);
+                    setSyncToast(`Updated ${spaceSyncPrompt.vendorName} · ${spaceSyncPrompt.spaceName}: F&B min $${spaceSyncPrompt.newValue.toLocaleString()}`);
+                    setTimeout(() => setSyncToast(null), 4000);
+                  }}
+                  className="text-xs bg-amber-600 text-white rounded px-2 py-0.5 hover:bg-amber-700 transition-colors whitespace-nowrap"
+                >
+                  Update
+                </button>
+                <button
+                  onClick={() => setSpaceSyncPrompt(null)}
+                  className="text-current/50 hover:text-current text-base leading-none flex-shrink-0"
+                  aria-label="Dismiss"
+                >
+                  &times;
+                </button>
+              </div>
+            )}
+
+            {/* Scenario B: room space typed manually, no matching space on vendor */}
+            {addSpaceOffer && linkedVenueData && (
+              <div className="rounded-md px-3 py-2 text-sm bg-brand-cream/60 border border-brand-silver/20">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="flex-1 text-brand-charcoal">
+                    Add <strong>&ldquo;{addSpaceOffer.name}&rdquo;</strong> as a space on <strong>{linkedVenueData.name}</strong>?
+                  </span>
+                  <button onClick={() => setAddSpaceOffer(null)} className="text-brand-silver/50 hover:text-brand-charcoal text-base leading-none">&times;</button>
+                </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs text-brand-silver whitespace-nowrap">Seated cap:</label>
+                    <input
+                      type="number" min="0" placeholder="—"
+                      value={addSpaceOffer.capacitySeated}
+                      onChange={(e) => setAddSpaceOffer((prev) => prev ? { ...prev, capacitySeated: e.target.value } : null)}
+                      className="w-16 border border-brand-silver/30 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-brand-brown text-center"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs text-brand-silver whitespace-nowrap">Standing cap:</label>
+                    <input
+                      type="number" min="0" placeholder="—"
+                      value={addSpaceOffer.capacityStanding}
+                      onChange={(e) => setAddSpaceOffer((prev) => prev ? { ...prev, capacityStanding: e.target.value } : null)}
+                      className="w-16 border border-brand-silver/30 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-brand-brown text-center"
+                    />
+                  </div>
+                  <button
+                    disabled={addSpacePending}
+                    onClick={async () => {
+                      if (!addSpaceOffer || !linkedVenueId) return;
+                      setAddSpacePending(true);
+                      const seated = parseInt(addSpaceOffer.capacitySeated) || null;
+                      const standing = parseInt(addSpaceOffer.capacityStanding) || null;
+                      const result = await createVenueSpace(linkedVenueId, {
+                        name: addSpaceOffer.name,
+                        capacity_seated: seated,
+                        capacity_standing: standing,
+                        fb_minimum: est.fbMinimum > 0 ? est.fbMinimum : 0,
+                      });
+                      setAddSpacePending(false);
+                      if ('error' in result) {
+                        setSyncToast(`Could not add space: ${result.error}`);
+                        setTimeout(() => setSyncToast(null), 5000);
+                      } else {
+                        setAddSpaceOffer(null);
+                        setSyncToast(`Added "${addSpaceOffer.name}" to ${linkedVenueData!.name}`);
+                        setTimeout(() => setSyncToast(null), 4000);
+                        router.refresh();
+                      }
+                    }}
+                    className="text-xs bg-brand-brown text-white rounded px-3 py-1 hover:bg-brand-brown/90 disabled:opacity-50 transition-colors whitespace-nowrap"
+                  >
+                    {addSpacePending ? 'Adding…' : 'Add space'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className={labelClass}>F&B Minimum</label>
@@ -1107,7 +1246,7 @@ export default function EstimateBuilder({
                     min="0"
                     value={est.fbMinimum === 0 ? '' : est.fbMinimum}
                     onChange={(e) => updateEstField({ fbMinimum: parseFloat(e.target.value) || 0 })}
-                    onBlur={() => { saveEstimate({ fbMinimum: est.fbMinimum }); syncSpaceOnBlur(); }}
+                    onBlur={() => { saveEstimate({ fbMinimum: est.fbMinimum }); handleFbMinimumWriteBack(); }}
                     className={fieldClass + ' pl-5'}
                     placeholder="0.00"
                   />
@@ -1609,6 +1748,12 @@ export default function EstimateBuilder({
         </div>
       </div>}
     </div>
+    {/* Venue sync toast — auto-dismisses after 4s */}
+    {syncToast && (
+      <div className="fixed bottom-5 right-5 z-50 bg-brand-charcoal text-white text-xs rounded-lg px-4 py-2.5 shadow-lg max-w-xs">
+        {syncToast}
+      </div>
+    )}
     {showMenuImport && vendorProfile && (vendorProfile.menus.length > 0 || vendorProfile.barOptions.length > 0) && (
       <VendorMenuImportModal
         menus={vendorProfile.menus}
