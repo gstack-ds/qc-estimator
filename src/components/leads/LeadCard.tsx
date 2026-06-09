@@ -23,6 +23,21 @@ function fmtDate(d: string | null) {
   const [y, m, day] = d.slice(0, 10).split('-').map(Number);
   return `${MONTHS[m - 1]} ${day}, ${y}`;
 }
+function fmtDateShort(d: string | null) {
+  if (!d) return null;
+  const [, m, day] = d.slice(0, 10).split('-').map(Number);
+  return `${MONTHS[m - 1]} ${day}`;
+}
+function dueDateUrgency(d: string | null): 'overdue' | 'soon' | null {
+  if (!d) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(d + 'T00:00:00');
+  const diff = (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
+  if (diff < 0) return 'overdue';
+  if (diff <= 3) return 'soon';
+  return null;
+}
 
 // ─── Read-only content (used for DragOverlay) ─────────────
 
@@ -63,6 +78,18 @@ export function LeadCardContent({ lead, teamMembers, isOverlay = false, linkedPr
             )}
           </div>
         </div>
+        {lead.current_due_date && (() => {
+          const urgency = dueDateUrgency(lead.current_due_date);
+          return (
+            <div className={`text-[10px] font-medium px-1.5 py-0.5 rounded inline-block ${
+              urgency === 'overdue' ? 'bg-red-100 text-red-700' :
+              urgency === 'soon'   ? 'bg-amber-100 text-amber-700' :
+              'bg-white/60 text-brand-silver'
+            }`}>
+              Due {fmtDateShort(lead.current_due_date)}
+            </div>
+          );
+        })()}
         {linkedProgram && (
           <div className="text-[9px] font-semibold text-brand-copper truncate">→ {linkedProgram.name}</div>
         )}
@@ -163,6 +190,18 @@ export default function LeadCard({ lead, teamMembers, laneStatuses, onUpdate, is
                 )}
               </div>
             </div>
+            {lead.current_due_date && (() => {
+              const urgency = dueDateUrgency(lead.current_due_date);
+              return (
+                <div className={`text-[10px] font-medium px-1.5 py-0.5 rounded inline-block ${
+                  urgency === 'overdue' ? 'bg-red-100 text-red-700' :
+                  urgency === 'soon'   ? 'bg-amber-100 text-amber-700' :
+                  'bg-white/60 text-brand-silver'
+                }`}>
+                  Due {fmtDateShort(lead.current_due_date)}
+                </div>
+              );
+            })()}
             {/* Program type badge */}
             {linkedProgram?.program_type && (
               <span className="inline-block text-[9px] font-medium bg-brand-charcoal/10 text-brand-charcoal/60 rounded px-1.5 py-0.5">
@@ -222,6 +261,13 @@ export default function LeadCard({ lead, teamMembers, laneStatuses, onUpdate, is
               onChange={e => handleField('start_date', e.target.value || null)}
               className="w-full text-[10px] border border-brand-cream rounded px-1.5 py-0.5 bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
               title="Event date"
+            />
+            <input
+              type="date"
+              value={lead.current_due_date?.slice(0, 10) ?? ''}
+              onChange={e => handleField('current_due_date', e.target.value || null)}
+              className="w-full text-[10px] border border-brand-cream rounded px-1.5 py-0.5 bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
+              title="Due date"
             />
           </div>
         </div>
