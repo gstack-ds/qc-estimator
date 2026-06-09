@@ -1,10 +1,10 @@
-import { getVenues, getAllVenueSpaces, getVenueStats } from '@/lib/supabase/queries';
+import { getVenues, getAllVenueSpaces, getVenueStats, getMarkets } from '@/lib/supabase/queries';
 import VendorsList from '@/components/venues/VendorsList';
 
 export const dynamic = 'force-dynamic';
 
 export default async function VendorsPage() {
-  const [venues, allSpaces, stats] = await Promise.all([getVenues(), getAllVenueSpaces(), getVenueStats()]);
+  const [venues, allSpaces, stats, markets] = await Promise.all([getVenues(), getAllVenueSpaces(), getVenueStats(), getMarkets()]);
 
   const spacesByVenue = new Map<string, typeof allSpaces>();
   for (const space of allSpaces) {
@@ -37,7 +37,7 @@ export default async function VendorsPage() {
         <h1 className="text-2xl font-serif text-brand-charcoal">Vendors</h1>
         <p className="text-sm text-brand-silver mt-1">Venues, restaurants, and all other vendor types used across programs.</p>
       </div>
-      <VendorsList vendors={venueRows} />
+      <VendorsList vendors={venueRows} markets={markets} />
     </div>
   );
 }
