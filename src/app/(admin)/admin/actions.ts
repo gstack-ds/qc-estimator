@@ -42,6 +42,23 @@ export async function upsertLocation(data: {
   return { error: null };
 }
 
+export async function createLocation(data: {
+  name: string;
+  food_tax_rate: number;
+  alcohol_tax_rate: number;
+  general_tax_rate: number;
+}): Promise<{ location: { id: string; name: string; food_tax_rate: number; alcohol_tax_rate: number; general_tax_rate: number } | null; error: string | null }> {
+  const supabase = await createClient();
+  const { data: row, error } = await supabase
+    .from('locations')
+    .insert({ name: data.name, food_tax_rate: data.food_tax_rate, alcohol_tax_rate: data.alcohol_tax_rate, general_tax_rate: data.general_tax_rate })
+    .select('id, name, food_tax_rate, alcohol_tax_rate, general_tax_rate')
+    .single();
+  if (error) return { location: null, error: error.message };
+  revalidatePath('/admin');
+  return { location: row, error: null };
+}
+
 export async function deleteLocation(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from('locations').delete().eq('id', id);
