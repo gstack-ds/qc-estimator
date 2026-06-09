@@ -22,6 +22,7 @@ function entry(overrides: Partial<DbBudgetPlanEntry> = {}): DbBudgetPlanEntry {
     pool_total: null,
     sort_order: 0,
     notes: null,
+    comparison_mode: 'compare_each',
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
     ...overrides,

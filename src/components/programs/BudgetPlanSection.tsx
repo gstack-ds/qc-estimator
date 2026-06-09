@@ -312,6 +312,7 @@ export default function BudgetPlanSection({ programId, initialEntries, estimates
         pool_total: addForm.pool_total ?? null,
         sort_order: prev.length,
         notes: addForm.notes ?? null,
+        comparison_mode: 'compare_each',
         created_at: now,
         updated_at: now,
       } satisfies DbBudgetPlanEntry]);

@@ -1282,6 +1282,7 @@ export interface DbBudgetPlanEntry {
   pool_total: number | null;
   sort_order: number;
   notes: string | null;
+  comparison_mode: 'compare_each' | 'combine';
   created_at: string;
   updated_at: string;
 }

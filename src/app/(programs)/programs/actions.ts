@@ -923,6 +923,7 @@ export interface BudgetEntryInput {
   pool_total?: number | null;
   sort_order?: number;
   notes?: string | null;
+  comparison_mode?: 'compare_each' | 'combine';
 }
 
 export async function addBudgetEntry(
