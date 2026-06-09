@@ -1,13 +1,17 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { getVenues } from '@/lib/supabase/queries';
 import DocumentExtractorClient from '@/components/document-extractor/DocumentExtractorClient';
 
 export const metadata = { title: 'Doc Reader — QC Estimator' };
+export const dynamic = 'force-dynamic';
 
 export default async function DocumentExtractorPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
+
+  const vendors = await getVenues();
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
@@ -17,7 +21,7 @@ export default async function DocumentExtractorPage() {
           Extract text and images from vendor PDFs and Word documents.
         </p>
       </div>
-      <DocumentExtractorClient />
+      <DocumentExtractorClient vendors={vendors} />
     </div>
   );
 }

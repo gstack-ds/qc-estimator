@@ -2,8 +2,12 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import type { ExtractedVendorProfile } from '@/lib/vendors/extractedVendorTypes';
+import type { DbVenue } from '@/lib/supabase/queries';
+import VendorExtractionReview from './VendorExtractionReview';
 
 type Model = 'claude-haiku-4-5-20251001' | 'claude-sonnet-4-6' | 'claude-opus-4-8';
+type ExtractionMode = 'general' | 'vendor';
 
 interface ExtractedSection {
   title: string;
@@ -67,10 +71,15 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export default function DocumentExtractorClient() {
+interface Props {
+  vendors?: DbVenue[];
+}
+
+export default function DocumentExtractorClient({ vendors = [] }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [model, setModel] = useState<Model>('claude-sonnet-4-6');
   const [dragging, setDragging] = useState(false);
+  const [extractionMode, setExtractionMode] = useState<ExtractionMode>('general');
 
   const [uploading, setUploading] = useState(false);
   const [textLoading, setTextLoading] = useState(false);
@@ -81,6 +90,11 @@ export default function DocumentExtractorClient() {
   const [imgLoading, setImgLoading] = useState(false);
   const [imgError, setImgError] = useState<string | null>(null);
   const [images, setImages] = useState<ExtractedImage[] | null>(null);
+
+  // Vendor extraction state
+  const [vendorProfile, setVendorProfile] = useState<ExtractedVendorProfile | null>(null);
+  const [vendorLoading, setVendorLoading] = useState(false);
+  const [vendorError, setVendorError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -95,6 +109,8 @@ export default function DocumentExtractorClient() {
     setImages(null);
     setTextError(null);
     setImgError(null);
+    setVendorProfile(null);
+    setVendorError(null);
   }, []);
 
   const onDrop = useCallback((e: React.DragEvent) => {
@@ -139,6 +155,38 @@ export default function DocumentExtractorClient() {
       setTextError(err instanceof Error ? err.message : 'Extraction failed');
     } finally {
       setTextLoading(false);
+    }
+  };
+
+  const extractVendor = async () => {
+    if (!file) return;
+    setVendorError(null);
+    setVendorProfile(null);
+
+    setUploading(true);
+    const uploadResult = await uploadToStorage(file);
+    setUploading(false);
+
+    if ('error' in uploadResult) {
+      setVendorError(uploadResult.error);
+      return;
+    }
+
+    setVendorLoading(true);
+    try {
+      const res = await fetch('/api/document-extractor/vendor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storagePath: uploadResult.storagePath, model }),
+      });
+      if (!res.ok) throw new Error(await readResponseError(res));
+      const json = await res.json() as { vendor: ExtractedVendorProfile; warning?: string };
+      if (json.warning) setVendorError(`Note: ${json.warning}`);
+      setVendorProfile(json.vendor);
+    } catch (err) {
+      setVendorError(err instanceof Error ? err.message : 'Extraction failed');
+    } finally {
+      setVendorLoading(false);
     }
   };
 
@@ -200,9 +248,12 @@ export default function DocumentExtractorClient() {
 
   const textBusy = uploading || textLoading;
   const imgBusy = imgUploading || imgLoading;
+  const vendorBusy = uploading || vendorLoading;
+  const anyBusy = textBusy || imgBusy || vendorBusy;
 
-  const textButtonLabel = uploading ? 'Uploading…' : textLoading ? 'Extracting text…' : 'Extract text';
-  const imgButtonLabel  = imgUploading ? 'Uploading…' : imgLoading ? 'Extracting images…' : 'Extract images';
+  const textButtonLabel   = uploading ? 'Uploading…' : textLoading ? 'Extracting text…' : 'Extract text';
+  const imgButtonLabel    = imgUploading ? 'Uploading…' : imgLoading ? 'Extracting images…' : 'Extract images';
+  const vendorButtonLabel = uploading ? 'Uploading…' : vendorLoading ? 'Extracting profile…' : 'Extract vendor profile';
 
   return (
     <div className="space-y-6">
@@ -238,37 +289,87 @@ export default function DocumentExtractorClient() {
         )}
       </div>
 
-      {file && (
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-brand-slate whitespace-nowrap">Model:</label>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value as Model)}
-              className="text-sm border border-brand-silver rounded px-2 py-1 bg-white text-brand-charcoal"
+      {/* If vendor profile review is active, show review screen */}
+      {vendorProfile && (
+        <VendorExtractionReview
+          profile={vendorProfile}
+          vendors={vendors}
+          onBack={() => { setVendorProfile(null); setVendorError(null); }}
+        />
+      )}
+
+      {!vendorProfile && file && (
+        <div className="space-y-3">
+          {/* Mode toggle */}
+          <div className="flex gap-1 p-1 bg-brand-cream/40 rounded-lg border border-brand-silver/20 w-fit">
+            <button
+              onClick={() => setExtractionMode('general')}
+              className={`px-3 py-1 text-xs font-medium rounded transition-colors ${extractionMode === 'general' ? 'bg-white text-brand-charcoal shadow-sm' : 'text-brand-silver hover:text-brand-charcoal'}`}
             >
-              {MODEL_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
+              General
+            </button>
+            <button
+              onClick={() => setExtractionMode('vendor')}
+              className={`px-3 py-1 text-xs font-medium rounded transition-colors ${extractionMode === 'vendor' ? 'bg-white text-brand-charcoal shadow-sm' : 'text-brand-silver hover:text-brand-charcoal'}`}
+            >
+              Vendor profile
+            </button>
           </div>
 
-          <button
-            onClick={extractText}
-            disabled={textBusy || imgBusy}
-            className="px-4 py-1.5 text-sm font-medium rounded bg-brand-charcoal text-white hover:bg-brand-charcoal/80 disabled:opacity-50 transition-colors"
-          >
-            {textButtonLabel}
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-brand-slate whitespace-nowrap">Model:</label>
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value as Model)}
+                className="text-sm border border-brand-silver rounded px-2 py-1 bg-white text-brand-charcoal"
+              >
+                {MODEL_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
 
-          <button
-            onClick={extractImages}
-            disabled={textBusy || imgBusy}
-            className="px-4 py-1.5 text-sm font-medium rounded border border-brand-charcoal text-brand-charcoal hover:bg-brand-charcoal/5 disabled:opacity-50 transition-colors"
-          >
-            {imgButtonLabel}
-          </button>
+            {extractionMode === 'general' && <>
+              <button
+                onClick={extractText}
+                disabled={anyBusy}
+                className="px-4 py-1.5 text-sm font-medium rounded bg-brand-charcoal text-white hover:bg-brand-charcoal/80 disabled:opacity-50 transition-colors"
+              >
+                {textButtonLabel}
+              </button>
+
+              <button
+                onClick={extractImages}
+                disabled={anyBusy}
+                className="px-4 py-1.5 text-sm font-medium rounded border border-brand-charcoal text-brand-charcoal hover:bg-brand-charcoal/5 disabled:opacity-50 transition-colors"
+              >
+                {imgButtonLabel}
+              </button>
+            </>}
+
+            {extractionMode === 'vendor' && (
+              <button
+                onClick={extractVendor}
+                disabled={anyBusy}
+                className="px-4 py-1.5 text-sm font-medium rounded bg-brand-brown text-white hover:bg-brand-brown/90 disabled:opacity-50 transition-colors"
+              >
+                {vendorButtonLabel}
+              </button>
+            )}
+          </div>
+
+          {extractionMode === 'vendor' && (
+            <p className="text-xs text-brand-silver">
+              Extracts structured vendor data (spaces, menus, bar options, contact info) and opens a review screen before writing anything.
+            </p>
+          )}
         </div>
+      )}
+
+      {/* Vendor extraction error */}
+      {vendorError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">{vendorError}</div>
       )}
 
       {/* Text extraction results */}
