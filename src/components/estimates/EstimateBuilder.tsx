@@ -32,7 +32,8 @@ import type { VendorProfileForSlide } from './SlideCopySection';
 import { parseMenus, parseBarOptions, parseInclusions } from '@/lib/vendors/profileTypes';
 import type { VendorMenu } from '@/lib/vendors/profileTypes';
 import VendorMenuImportModal from './VendorMenuImportModal';
-import { mapMenuToLineItems } from '@/lib/vendors/menuImport';
+import type { BarSelection } from './VendorMenuImportModal';
+import { mapMenuToLineItems, mapBarToLineItems } from '@/lib/vendors/menuImport';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection, reorderSections, reorderLineItems } from '@/app/(programs)/programs/[id]/estimates/actions';
@@ -621,6 +622,32 @@ export default function EstimateBuilder({
     );
     handleImportItems(items as LocalLineItem[]);
   }, [sections, markups, program.guest_count, handleImportItems]);
+
+  const handleAddBarPackages = useCallback((selections: BarSelection[]) => {
+    const fbSection = sections.find((s) => s.taxBucket === 'fb');
+    const cateringMarkup = markups.find((m) => m.name === 'Catering & F&B');
+    if (!fbSection || selections.length === 0) return;
+    let nextOrder = lineItemsRef.current
+      .filter((li) => li.sectionId === fbSection.id)
+      .reduce((max, li) => Math.max(max, li.sortOrder), -1) + 1;
+    const sectionDef = { id: fbSection.id, name: fbSection.name, taxBucket: fbSection.taxBucket, markupPct: fbSection.markupPct };
+    const markupDef = { id: cateringMarkup?.id ?? null, markupPct: cateringMarkup?.markup_pct ?? 0.55 };
+    const allItems: LocalLineItem[] = [];
+    for (const { opt, durationHours } of selections) {
+      const items = mapBarToLineItems(opt, durationHours, sectionDef, markupDef, program.guest_count, nextOrder);
+      allItems.push(...(items as LocalLineItem[]));
+      nextOrder += items.length;
+    }
+    handleImportItems(allItems);
+  }, [sections, markups, program.guest_count, handleImportItems]);
+
+  // Compute event duration in hours for bar package default duration input
+  const eventDurationHours = useMemo(() => {
+    if (!event?.start_time || !event?.end_time) return null;
+    const parseTime = (t: string) => { const [h, m] = t.split(':').map(Number); return h + (m ?? 0) / 60; };
+    const dur = parseTime(event.end_time) - parseTime(event.start_time);
+    return dur > 0 ? Math.round(dur * 2) / 2 : null; // round to nearest 0.5hr
+  }, [event]);
 
   // ─── Category move ────────────────────────────────────────
 
@@ -1333,7 +1360,7 @@ export default function EstimateBuilder({
                 >Clear selection</button>
               </div>
             )}
-            {vendorProfile && vendorProfile.menus.length > 0 && (
+            {vendorProfile && (vendorProfile.menus.length > 0 || vendorProfile.barOptions.length > 0) && (
               <div className="flex justify-end">
                 <button
                   type="button"
@@ -1582,11 +1609,14 @@ export default function EstimateBuilder({
         </div>
       </div>}
     </div>
-    {showMenuImport && vendorProfile && vendorProfile.menus.length > 0 && (
+    {showMenuImport && vendorProfile && (vendorProfile.menus.length > 0 || vendorProfile.barOptions.length > 0) && (
       <VendorMenuImportModal
         menus={vendorProfile.menus}
+        barOptions={vendorProfile.barOptions}
         onImport={handleAddFromVendorMenu}
+        onImportBars={handleAddBarPackages}
         onClose={() => setShowMenuImport(false)}
+        defaultBarDurationHours={eventDurationHours}
       />
     )}
   </>);
