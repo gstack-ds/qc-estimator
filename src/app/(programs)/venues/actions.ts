@@ -110,6 +110,86 @@ export async function deleteVenue(id: string): Promise<{ error?: string }> {
   return {};
 }
 
+// ─── Apply vendor extraction ─────────────────────────────
+
+export type ApplyVendorSection = 'basics' | 'spaces' | 'menus' | 'bar_options' | 'inclusions';
+
+export async function applyVendorExtraction(
+  vendorId: string,
+  profile: import('@/lib/vendors/extractedVendorTypes').ExtractedVendorProfile,
+  applySections: ApplyVendorSection[],
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const apply = new Set(applySections);
+
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
+  if (apply.has('basics')) {
+    if (profile.name)          patch.name          = profile.name;
+    if (profile.address)       patch.address       = profile.address;
+    if (profile.city)          patch.city          = profile.city;
+    if (profile.state)         patch.state         = profile.state;
+    if (profile.market)        patch.market        = profile.market;
+    if (profile.website)       patch.website       = profile.website;
+    if (profile.contact_name)  patch.contact_name  = profile.contact_name;
+    if (profile.contact_title) patch.contact_title = profile.contact_title;
+    if (profile.contact_email) patch.contact_email = profile.contact_email;
+    if (profile.contact_phone) patch.contact_phone = profile.contact_phone;
+  }
+
+  if (apply.has('menus')) {
+    const { data: current } = await supabase.from('venues').select('menus').eq('id', vendorId).single();
+    const existing: unknown[] = Array.isArray(current?.menus) ? current.menus : [];
+    patch.menus = [...existing, ...profile.menus];
+  }
+
+  if (apply.has('bar_options')) {
+    const { data: current } = await supabase.from('venues').select('bar_options').eq('id', vendorId).single();
+    const existing: unknown[] = Array.isArray(current?.bar_options) ? current.bar_options : [];
+    patch.bar_options = [...existing, ...profile.bar_options];
+  }
+
+  if (apply.has('inclusions')) {
+    // Convert plain strings to VendorInclusion objects
+    const { data: current } = await supabase.from('venues').select('inclusions').eq('id', vendorId).single();
+    const existing: unknown[] = Array.isArray(current?.inclusions) ? current.inclusions : [];
+    const newInclusions = profile.inclusions.map((text, i) => ({
+      id: `inc-extracted-${Date.now()}-${i}`,
+      text,
+    }));
+    patch.inclusions = [...existing, ...newInclusions];
+  }
+
+  if (Object.keys(patch).length > 1) {
+    const { error } = await supabase.from('venues').update(patch).eq('id', vendorId);
+    if (error) return { error: error.message };
+  }
+
+  // Spaces are always ADDed (never replacing existing), with duplicate detection
+  if (apply.has('spaces') && profile.spaces.length > 0) {
+    const { detectDuplicateSpaces } = await import('@/lib/vendors/mergeLogic');
+    const { data: existingSpaces } = await supabase
+      .from('venue_spaces').select('id, name').eq('venue_id', vendorId);
+    const existing = existingSpaces ?? [];
+    const dupes = new Set(detectDuplicateSpaces(existing, profile.spaces.map((s, i) => ({ id: `ext-${i}`, name: s.name }))).map((d) => d.loserSpaceId));
+    const toAdd = profile.spaces.filter((_, i) => !dupes.has(`ext-${i}`));
+    for (const space of toAdd) {
+      await supabase.from('venue_spaces').insert({
+        venue_id: vendorId,
+        name: space.name,
+        capacity_seated: space.capacity_seated ?? null,
+        capacity_standing: space.capacity_standing ?? null,
+        fb_minimum: space.fb_minimum ?? 0,
+        room_fee: 0,
+      });
+    }
+  }
+
+  revalidatePath('/vendors');
+  revalidatePath(`/venues/${vendorId}`);
+  return { error: null };
+}
+
 // ─── Venue Spaces ─────────────────────────────────────────
 
 export async function createVenueSpace(venueId: string, data: {
