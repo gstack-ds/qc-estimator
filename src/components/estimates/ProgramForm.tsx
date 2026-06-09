@@ -15,6 +15,7 @@ import {
   type ProgramAttachmentRecord,
 } from '@/app/(programs)/programs/actions';
 import { createClient } from '@/lib/supabase/client';
+import { createLocation } from '@/app/(admin)/admin/actions';
 
 interface Props {
   program?: DbProgramWithLocation;
@@ -34,8 +35,8 @@ interface PendingFile {
 }
 
 const SERVICE_STYLES = ['Family Style', 'Plated', 'Buffet', 'Stations', 'Cocktail Reception'];
-const ALCOHOL_TYPES = ['Full Bar', 'Beer & Wine', 'None'];
-const PROGRAM_TYPES = ['Transportation', 'Staffing', 'Entertainment/Activations', 'Restaurants', 'Venues', 'Multi Category', 'Activations'];
+const ALCOHOL_TYPES = ['Full Bar', 'Beer & Wine', 'Drink Tickets', 'On Consumption', 'None'];
+const PROGRAM_TYPES = ['Transportation', 'Staffing', 'Entertainment/Activations', 'Restaurants', 'Venues', 'Multi Category', 'Activations', 'Incentive'];
 
 function countExtractedFields(data: ExtractedProgramBrief | null): number {
   if (!data) return 0;
@@ -87,6 +88,14 @@ export default function ProgramForm({ program, locations, mode }: Props) {
   const [eventEndTime, setEventEndTime] = useState(program?.event_end_time ?? '');
   const [clientHotel, setClientHotel] = useState(program?.client_hotel ?? '');
   const [locationId, setLocationId] = useState(program?.location_id ?? '');
+  const [localLocations, setLocalLocations] = useState<DbLocation[]>(locations);
+  const [showAddLoc, setShowAddLoc] = useState(false);
+  const [newLocName, setNewLocName] = useState('');
+  const [newLocFood, setNewLocFood] = useState('');
+  const [newLocAlcohol, setNewLocAlcohol] = useState('');
+  const [newLocGeneral, setNewLocGeneral] = useState('');
+  const [addingLoc, setAddingLoc] = useState(false);
+  const [addLocError, setAddLocError] = useState<string | null>(null);
   const [ccFee, setCcFee] = useState(String(parseFloat(((program?.cc_processing_fee ?? 0.035) * 100).toFixed(4))));
   const [clientComm, setClientComm] = useState(String(parseFloat(((program?.client_commission ?? 0.05) * 100).toFixed(4))));
   const [gdpEnabled, setGdpEnabled] = useState(program?.gdp_commission_enabled ?? false);
@@ -531,16 +540,26 @@ export default function ProgramForm({ program, locations, mode }: Props) {
               <label className={labelClass}>Location</label>
               <select
                 value={locationId}
-                onChange={(e) => { setLocationId(e.target.value); save({ location_id: e.target.value || null }); }}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '__add_new__') {
+                    setShowAddLoc(true);
+                  } else {
+                    setShowAddLoc(false);
+                    setLocationId(val);
+                    save({ location_id: val || null });
+                  }
+                }}
                 className={fieldClass}
               >
                 <option value="">— Select location —</option>
-                {locations.map((loc) => (
+                {localLocations.map((loc) => (
                   <option key={loc.id} value={loc.id}>{loc.name}</option>
                 ))}
+                <option value="__add_new__">+ Add new location…</option>
               </select>
-              {locationId && (() => {
-                const loc = locations.find((l) => l.id === locationId);
+              {locationId && !showAddLoc && (() => {
+                const loc = localLocations.find((l) => l.id === locationId);
                 if (!loc) return null;
                 return (
                   <p className="text-xs text-brand-silver mt-1">
@@ -548,6 +567,73 @@ export default function ProgramForm({ program, locations, mode }: Props) {
                   </p>
                 );
               })()}
+              {showAddLoc && (
+                <div className="mt-2 border border-brand-cream rounded-lg p-3 space-y-2 bg-brand-offwhite/60">
+                  <p className="text-[10px] font-semibold text-brand-brown uppercase tracking-wide">New Location</p>
+                  <input
+                    type="text"
+                    placeholder="Name (e.g., Mecklenburg County, NC)"
+                    value={newLocName}
+                    onChange={(e) => setNewLocName(e.target.value)}
+                    className={fieldClass + ' text-sm'}
+                  />
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { label: 'Food Tax %', val: newLocFood, set: setNewLocFood },
+                      { label: 'Alcohol Tax %', val: newLocAlcohol, set: setNewLocAlcohol },
+                      { label: 'General Tax %', val: newLocGeneral, set: setNewLocGeneral },
+                    ].map(({ label, val, set: setter }) => (
+                      <div key={label}>
+                        <label className="block text-[10px] text-brand-charcoal/50 mb-0.5">{label}</label>
+                        <input
+                          type="number"
+                          step="0.001"
+                          min="0"
+                          placeholder="0.000"
+                          value={val}
+                          onChange={(e) => setter(e.target.value)}
+                          className={fieldClass + ' text-sm'}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  {addLocError && <p className="text-xs text-red-500">{addLocError}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={addingLoc || !newLocName.trim()}
+                      onClick={async () => {
+                        setAddingLoc(true);
+                        setAddLocError(null);
+                        const { location, error } = await createLocation({
+                          name: newLocName.trim(),
+                          food_tax_rate: parseFloat(newLocFood) / 100 || 0,
+                          alcohol_tax_rate: parseFloat(newLocAlcohol) / 100 || 0,
+                          general_tax_rate: parseFloat(newLocGeneral) / 100 || 0,
+                        });
+                        setAddingLoc(false);
+                        if (error || !location) { setAddLocError(error ?? 'Failed to create'); return; }
+                        const newLoc: DbLocation = { ...location, effective_date: null, updated_at: '' };
+                        setLocalLocations((prev) => [...prev, newLoc].sort((a, b) => a.name.localeCompare(b.name)));
+                        setLocationId(location.id);
+                        save({ location_id: location.id });
+                        setShowAddLoc(false);
+                        setNewLocName(''); setNewLocFood(''); setNewLocAlcohol(''); setNewLocGeneral('');
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium bg-brand-brown text-white rounded hover:bg-brand-charcoal disabled:opacity-50 transition-colors"
+                    >
+                      {addingLoc ? 'Saving…' : 'Save Location'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowAddLoc(false); setNewLocName(''); setNewLocFood(''); setNewLocAlcohol(''); setNewLocGeneral(''); setAddLocError(null); }}
+                      className="px-3 py-1.5 text-xs text-brand-charcoal/60 hover:text-brand-charcoal transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className={labelClass}>Program Type</label>
