@@ -12,6 +12,13 @@ export interface DbLocation {
   updated_at: string;
 }
 
+export async function getMarkets(): Promise<string[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from('markets').select('name').order('name');
+  if (error) return []; // graceful before migration runs
+  return (data ?? []).map((r: { name: string }) => r.name);
+}
+
 export async function getLocations(): Promise<DbLocation[]> {
   const supabase = await createClient();
   const { data, error } = await supabase

@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import {
-  getVenueWithSpaces, getEstimatesForVenue, getAttachmentsForVenue, getVendorPhotos,
+  getVenueWithSpaces, getEstimatesForVenue, getAttachmentsForVenue, getVendorPhotos, getMarkets,
 } from '@/lib/supabase/queries';
 import { parseMenus, parseBarOptions, parseInclusions } from '@/lib/vendors/profileTypes';
 import VenueForm from '@/components/venues/VenueForm';
@@ -30,11 +30,12 @@ export default async function VenueDetailPage({ params, searchParams }: Props) {
   const { view } = await searchParams;
   const isBrochure = view === 'brochure';
 
-  const [venue, estimatesResult, attachmentsResult, photos] = await Promise.all([
+  const [venue, estimatesResult, attachmentsResult, photos, markets] = await Promise.all([
     getVenueWithSpaces(id),
     getEstimatesForVenue(id),
     getAttachmentsForVenue(id),
     getVendorPhotos(id),
+    getMarkets(),
   ]);
   if (!venue) notFound();
 
@@ -112,7 +113,7 @@ export default async function VenueDetailPage({ params, searchParams }: Props) {
           {/* Venue fields */}
           <div className="bg-white border border-brand-silver/20 rounded-xl p-6">
             <h1 className="text-lg font-serif text-brand-charcoal mb-5">Vendor Details</h1>
-            <VenueForm venue={venue} />
+            <VenueForm venue={venue} markets={markets} />
           </div>
 
           {/* Spaces */}

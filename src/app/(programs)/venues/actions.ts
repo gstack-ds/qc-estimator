@@ -375,3 +375,16 @@ export async function saveEstimateAsVenue(
   revalidatePath(`/programs/${programId}/estimates/${estimateId}`);
   return { venueId: venue.id, spaceId: space.id };
 }
+
+
+// ─── Markets ──────────────────────────────────────────────
+
+export async function createMarket(name: string): Promise<{ name: string | null; error: string | null }> {
+  const supabase = await createClient();
+  const trimmed = name.trim();
+  if (!trimmed) return { name: null, error: 'Market name is required' };
+  const { error } = await supabase.from('markets').insert({ name: trimmed });
+  if (error) return { name: null, error: error.message };
+  revalidatePath('/venues');
+  return { name: trimmed, error: null };
+}

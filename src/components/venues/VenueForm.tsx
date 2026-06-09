@@ -3,11 +3,12 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { DbVenue } from '@/lib/supabase/queries';
-import { updateVenue } from '@/app/(programs)/venues/actions';
+import { updateVenue, createMarket } from '@/app/(programs)/venues/actions';
 import { VENDOR_TYPES, type VendorType } from '@/lib/vendors/constants';
 
 interface Props {
   venue: DbVenue;
+  markets?: string[];
 }
 
 const SERVICE_STYLE_OPTIONS = [
@@ -20,7 +21,7 @@ const ALL_STATES = [
   'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC',
 ];
 
-export default function VenueForm({ venue }: Props) {
+export default function VenueForm({ venue, markets: initialMarkets = [] }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
@@ -33,6 +34,10 @@ export default function VenueForm({ venue }: Props) {
   const [state, setState] = useState(venue.state ?? '');
   const [zip, setZip] = useState(venue.zip ?? '');
   const [market, setMarket] = useState(venue.market ?? '');
+  const [localMarkets, setLocalMarkets] = useState<string[]>(initialMarkets);
+  const [showAddMarket, setShowAddMarket] = useState(false);
+  const [newMarketName, setNewMarketName] = useState('');
+  const [addingMarket, setAddingMarket] = useState(false);
   const [styles, setStyles] = useState<string[]>(venue.service_styles ?? []);
   const [contactName, setContactName] = useState(venue.contact_name ?? '');
   const [contactTitle, setContactTitle] = useState(venue.contact_title ?? '');
@@ -141,12 +146,72 @@ export default function VenueForm({ venue }: Props) {
           </div>
           <div>
             <label className="block text-xs font-medium text-brand-silver uppercase tracking-wide mb-1">Market</label>
-            <input
-              value={market}
-              onChange={(e) => { setMarket(e.target.value); setSaved(false); }}
-              className="w-full border border-brand-silver/30 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
-              placeholder="Charlotte"
-            />
+            {localMarkets.length > 0 ? (
+              <>
+                <select
+                  value={showAddMarket ? '__add_new__' : market}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '__add_new__') {
+                      setShowAddMarket(true);
+                    } else {
+                      setShowAddMarket(false);
+                      setMarket(val);
+                      setSaved(false);
+                    }
+                  }}
+                  className="w-full border border-brand-silver/30 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
+                >
+                  <option value="">— Select market —</option>
+                  {localMarkets.map((m) => <option key={m} value={m}>{m}</option>)}
+                  <option value="__add_new__">+ Add new market…</option>
+                </select>
+                {showAddMarket && (
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="New market name"
+                      value={newMarketName}
+                      onChange={(e) => setNewMarketName(e.target.value)}
+                      className="flex-1 border border-brand-silver/30 rounded px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
+                    />
+                    <button
+                      type="button"
+                      disabled={addingMarket || !newMarketName.trim()}
+                      onClick={async () => {
+                        setAddingMarket(true);
+                        const { name: created, error } = await createMarket(newMarketName);
+                        setAddingMarket(false);
+                        if (!created || error) return;
+                        const next = [...localMarkets, created].sort((a, b) => a.localeCompare(b));
+                        setLocalMarkets(next);
+                        setMarket(created);
+                        setShowAddMarket(false);
+                        setNewMarketName('');
+                        setSaved(false);
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium bg-brand-brown text-white rounded hover:bg-brand-charcoal disabled:opacity-50 transition-colors whitespace-nowrap"
+                    >
+                      {addingMarket ? 'Adding…' : 'Add'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowAddMarket(false); setNewMarketName(''); }}
+                      className="px-2 py-1.5 text-xs text-brand-silver hover:text-brand-charcoal transition-colors"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <input
+                value={market}
+                onChange={(e) => { setMarket(e.target.value); setSaved(false); }}
+                className="w-full border border-brand-silver/30 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
+                placeholder="Charlotte"
+              />
+            )}
           </div>
         </div>
       </div>
