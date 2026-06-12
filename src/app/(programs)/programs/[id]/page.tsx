@@ -155,6 +155,8 @@ function buildEstimateData(
       pricePerPerson: config.guestCount > 0 ? Math.ceil(billing / config.guestCount) : 0,
       lineItemCount: 0, includeInBudget: estimate.include_in_budget,
       qcMarginPct: margin.qcMarginPct,
+      includedInProposal: estimate.included_in_proposal,
+      sortOrder: estimate.sort_order,
     };
     const pnlRow: PnLRow = {
       id: estimate.id, name: estimate.name, type: estimate.type as PnLRow['type'],
@@ -184,6 +186,8 @@ function buildEstimateData(
     total: summary.totalClient, pricePerPerson: summary.pricePerPerson,
     lineItemCount: items.length, includeInBudget: estimate.include_in_budget,
     qcMarginPct: margin.qcMarginPct,
+    includedInProposal: estimate.included_in_proposal,
+    sortOrder: estimate.sort_order,
   };
   const pnlRow: PnLRow = {
     id: estimate.id, name: estimate.name, type: estimate.type as PnLRow['type'],

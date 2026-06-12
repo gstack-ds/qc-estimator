@@ -333,8 +333,7 @@ export async function getEventsForProgram(programId: string): Promise<DbEvent[]>
     .from('events')
     .select('id, program_id, name, event_date, start_time, end_time, guest_count, event_type, description, sort_order, created_at, updated_at')
     .eq('program_id', programId)
-    .order('sort_order')
-    .order('event_date', { nullsFirst: true });
+    .order('event_date', { ascending: true, nullsFirst: true });
   if (error) throw new Error(error.message);
   return data ?? [];
 }
@@ -368,11 +367,12 @@ export interface DbEstimate {
   general_tax_override: number | null;
   slide_copy_data: Record<string, unknown> | null;
   tour_details: Record<string, unknown> | null;
+  included_in_proposal: boolean;
   created_at: string;
   updated_at: string;
 }
 
-const ESTIMATE_FIELDS = 'id, program_id, event_id, type, name, room_space, fb_minimum, is_venue_taxable, service_charge_override, gratuity_override, admin_fee_override, include_in_budget, sort_order, venue_contact, menu_notes, transport_commission, venue_id, venue_space_id, discount_type, discount_value, tax_exempt, food_tax_override, alcohol_tax_override, general_tax_override, slide_copy_data, tour_details, created_at, updated_at';
+const ESTIMATE_FIELDS = 'id, program_id, event_id, type, name, room_space, fb_minimum, is_venue_taxable, service_charge_override, gratuity_override, admin_fee_override, include_in_budget, sort_order, included_in_proposal, venue_contact, menu_notes, transport_commission, venue_id, venue_space_id, discount_type, discount_value, tax_exempt, food_tax_override, alcohol_tax_override, general_tax_override, slide_copy_data, tour_details, created_at, updated_at';
 
 export async function getEstimatesForProgram(programId: string): Promise<DbEstimate[]> {
   const supabase = await createClient();
@@ -790,6 +790,10 @@ export interface DbVenue {
   notes: string | null;
   last_used_date: string | null;
   vendor_type: 'venue' | 'restaurant' | 'tour' | 'transportation' | 'entertainment' | 'decor';
+  // Fee defaults — venue-level rates applied to all events at this vendor
+  service_charge_default: number | null;
+  gratuity_default: number | null;
+  admin_fee_default: number | null;
   // Profile content columns (JSONB) — display/brochure data, NOT pricing inputs
   menus: unknown;
   bar_options: unknown;
@@ -807,9 +811,6 @@ export interface DbVenueSpace {
   capacity_standing: number | null;
   fb_minimum: number;
   room_fee: number;
-  service_charge_default: number | null;
-  gratuity_default: number | null;
-  admin_fee_default: number | null;
   privacy_tag: 'private' | 'semi_private' | 'main_dining' | null;
   notes: string | null;
   created_at: string;
@@ -820,8 +821,8 @@ export interface DbVenueWithSpaces extends DbVenue {
   spaces: DbVenueSpace[];
 }
 
-const VENUE_FIELDS = 'id, name, address, city, state, zip, service_styles, contact_name, contact_title, contact_email, contact_phone, email_signature, website, market, notes, last_used_date, vendor_type, menus, bar_options, inclusions, profile_notes, created_at, updated_at';
-const SPACE_FIELDS = 'id, venue_id, name, capacity_seated, capacity_standing, fb_minimum, room_fee, service_charge_default, gratuity_default, admin_fee_default, privacy_tag, notes, created_at, updated_at';
+const VENUE_FIELDS = 'id, name, address, city, state, zip, service_styles, contact_name, contact_title, contact_email, contact_phone, email_signature, website, market, notes, last_used_date, vendor_type, service_charge_default, gratuity_default, admin_fee_default, menus, bar_options, inclusions, profile_notes, created_at, updated_at';
+const SPACE_FIELDS = 'id, venue_id, name, capacity_seated, capacity_standing, fb_minimum, room_fee, privacy_tag, notes, created_at, updated_at';
 
 export async function getVenues(): Promise<DbVenue[]> {
   const supabase = await createClient();

@@ -1,10 +1,25 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { updateEstimate } from '@/app/(programs)/programs/[id]/estimates/actions';
-import { deleteEvent, updateEvent, reorderEvents, updateBudgetEntry } from '@/app/(programs)/programs/actions';
+import { updateEstimate, reorderEstimates, updateEstimateProposalInclusion } from '@/app/(programs)/programs/[id]/estimates/actions';
+import { deleteEvent, updateEvent, updateBudgetEntry } from '@/app/(programs)/programs/actions';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import AddEstimateButton from './AddEstimateButton';
 import AddEventButton from './AddEventButton';
 import type { EstimateCard } from './ComparisonView';
@@ -55,7 +70,6 @@ export interface EventRow {
   guest_count: number;
   event_type: string;
   description: string | null;
-  sort_order: number;
   cards: EstimateCard[];
   budgetEntry: DbBudgetPlanEntry | null;
 }
@@ -113,14 +127,7 @@ function fmtTime(t: string | null) {
   return `${h12}:${mStr} ${ampm}`;
 }
 
-function reorderArray<T>(arr: T[], from: number, to: number): T[] {
-  const result = [...arr];
-  const [item] = result.splice(from, 1);
-  result.splice(to, 0, item);
-  return result;
-}
-
-// ─── Estimate card (mini) ─────────────────────────────────
+// ─── DeltaInfo ────────────────────────────────────────────
 
 interface DeltaInfo {
   delta: number;
@@ -130,93 +137,163 @@ interface DeltaInfo {
   pricingBasis: 'per_person' | 'flat';
 }
 
+// ─── Sortable estimate card wrapper ──────────────────────
+
+function SortableEstimateCard({ card, programId, isLowest, isBestMargin, onToggleBudget, onToggleProposal, eventGuestCount, delta }: {
+  card: EstimateCard;
+  programId: string;
+  isLowest: boolean;
+  isBestMargin: boolean;
+  onToggleBudget: (id: string, next: boolean) => void;
+  onToggleProposal: (id: string, next: boolean) => void;
+  eventGuestCount?: number;
+  delta?: DeltaInfo;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style}>
+      <EstimateCardItem
+        card={card}
+        programId={programId}
+        isLowest={isLowest}
+        isBestMargin={isBestMargin}
+        onToggleBudget={onToggleBudget}
+        onToggleProposal={onToggleProposal}
+        eventGuestCount={eventGuestCount}
+        delta={delta}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+    </div>
+  );
+}
+
+// ─── Estimate card (mini) ─────────────────────────────────
+
 function EstimateCardItem({
   card,
   programId,
   isLowest,
   isBestMargin,
-  onToggle,
+  onToggleBudget,
+  onToggleProposal,
   eventGuestCount,
   delta: deltaInfo,
+  dragHandleProps,
 }: {
   card: EstimateCard;
   programId: string;
   isLowest: boolean;
   isBestMargin: boolean;
-  onToggle: (id: string, next: boolean) => void;
+  onToggleBudget: (id: string, next: boolean) => void;
+  onToggleProposal: (id: string, next: boolean) => void;
   eventGuestCount?: number;
   delta?: DeltaInfo;
+  dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
 }) {
   const displayedPricePerPerson = eventGuestCount && eventGuestCount > 0
     ? Math.ceil(card.total / eventGuestCount)
     : card.pricePerPerson;
   return (
-    <Link
-      href={`/programs/${programId}/estimates/${card.id}`}
-      className="relative block bg-white rounded-lg border border-brand-cream p-4 flex flex-col gap-2.5 transition-all hover:shadow-md hover:border-brand-copper/50 cursor-pointer overflow-hidden"
-    >
-      {isLowest && !isBestMargin && <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500" />}
-      {!isLowest && isBestMargin && <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: '#C19C81' }} />}
-      {isLowest && isBestMargin && (
-        <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500">
-          <div className="absolute bottom-0 left-0 right-0 h-1/2" style={{ backgroundColor: '#C19C81' }} />
+    <div className="relative bg-white rounded-lg border border-brand-cream overflow-hidden">
+      {/* Drag handle */}
+      {dragHandleProps && (
+        <div
+          {...dragHandleProps}
+          className="absolute top-2 right-2 cursor-grab text-brand-silver/40 hover:text-brand-silver/80 transition-colors z-10"
+          onClick={(e) => e.preventDefault()}
+        >
+          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M7 4a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm6 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM7 10a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm6 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM7 16a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm6 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0z" />
+          </svg>
         </div>
       )}
-
-      <div className="flex items-start justify-between gap-2">
-        <span className="font-medium text-brand-charcoal text-sm leading-snug">{card.name}</span>
-        {(isLowest || isBestMargin) && (
-          <div className="flex flex-col items-end gap-1 flex-shrink-0">
-            {isLowest && (
-              <span className="text-xs bg-green-100 text-green-800 font-medium px-1.5 py-0.5 rounded">Lowest</span>
-            )}
-            {isBestMargin && (
-              <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: '#C19C81', color: 'white' }}>Best Margin</span>
-            )}
+      <Link
+        href={`/programs/${programId}/estimates/${card.id}`}
+        className="relative block p-4 flex flex-col gap-2.5 transition-all hover:shadow-md cursor-pointer"
+      >
+        {/* Accent bars */}
+        {isLowest && !isBestMargin && <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500" />}
+        {!isLowest && isBestMargin && <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: '#C19C81' }} />}
+        {isLowest && isBestMargin && (
+          <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500">
+            <div className="absolute bottom-0 left-0 right-0 h-1/2" style={{ backgroundColor: '#C19C81' }} />
           </div>
         )}
-      </div>
 
-      <div className="flex items-end gap-4">
-        <div>
-          <p className="font-serif text-lg font-medium text-brand-charcoal">{fmt(card.total)}</p>
-          <p className="text-xs text-brand-silver mt-0.5">total estimate</p>
+        {/* Name + badges */}
+        <div className="flex items-start justify-between gap-2">
+          <span className="font-medium text-brand-charcoal text-sm leading-snug">{card.name}</span>
+          {(isLowest || isBestMargin) && (
+            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+              {isLowest && (
+                <span className="text-xs bg-green-100 text-green-800 font-medium px-1.5 py-0.5 rounded">Lowest</span>
+              )}
+              {isBestMargin && (
+                <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: '#C19C81', color: 'white' }}>Best Margin</span>
+              )}
+            </div>
+          )}
         </div>
-        {displayedPricePerPerson > 0 && (
+
+        {/* Totals */}
+        <div className="flex items-end gap-4">
           <div>
-            <p className="text-sm font-medium text-brand-brown">
-              ${displayedPricePerPerson.toLocaleString('en-US')}
-              <span className="text-xs font-normal text-brand-silver">/pp</span>
-            </p>
+            <p className="font-serif text-lg font-medium text-brand-charcoal">{fmt(card.total)}</p>
+            <p className="text-xs text-brand-silver mt-0.5">total estimate</p>
+          </div>
+          {displayedPricePerPerson > 0 && (
+            <div>
+              <p className="text-sm font-medium text-brand-brown">
+                ${displayedPricePerPerson.toLocaleString('en-US')}
+                <span className="text-xs font-normal text-brand-silver">/pp</span>
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Line item count + QC Margin */}
+        <div className="space-y-0.5">
+          <p className="text-xs text-brand-silver">{card.lineItemCount} line item{card.lineItemCount !== 1 ? 's' : ''}</p>
+          {card.total > 0 && (
+            <p className="text-xs text-brand-silver/70">QC Margin: {(card.qcMarginPct * 100).toFixed(1)}%</p>
+          )}
+        </div>
+
+        {/* Budget delta badge */}
+        {deltaInfo && card.total > 0 && (
+          <div className={`text-xs font-medium px-2 py-1 rounded border ${statusColors(deltaInfo.status).bg} ${statusColors(deltaInfo.status).text} ${statusColors(deltaInfo.status).border}`}>
+            {fmtDelta(deltaInfo.delta, deltaInfo.pricingBasis)} vs budget
           </div>
         )}
-      </div>
+      </Link>
 
-      <div className="space-y-0.5">
-        <p className="text-xs text-brand-silver">{card.lineItemCount} line item{card.lineItemCount !== 1 ? 's' : ''}</p>
-        {card.total > 0 && (
-          <p className="text-xs text-brand-silver/70">QC Margin: {(card.qcMarginPct * 100).toFixed(1)}%</p>
-        )}
-      </div>
-
-      {deltaInfo && card.total > 0 && (
-        <div className={`text-xs font-medium px-2 py-1 rounded border ${statusColors(deltaInfo.status).bg} ${statusColors(deltaInfo.status).text} ${statusColors(deltaInfo.status).border}`}>
-          {fmtDelta(deltaInfo.delta, deltaInfo.pricingBasis)} vs budget
-        </div>
-      )}
-
-      <div className="border-t border-brand-cream pt-2.5 mt-auto">
+      {/* Toggles: budget + proposal */}
+      <div className="border-t border-brand-cream px-4 py-2.5 flex items-center gap-4">
         <label className="flex items-center gap-2 cursor-pointer" onClick={(e) => e.preventDefault()}>
           <div
-            onClick={(e) => { e.preventDefault(); onToggle(card.id, !card.includeInBudget); }}
+            onClick={(e) => { e.preventDefault(); onToggleBudget(card.id, !card.includeInBudget); }}
             className={`w-8 h-4 rounded-full transition-colors cursor-pointer flex-shrink-0 ${card.includeInBudget ? 'bg-brand-brown' : 'bg-brand-silver/40'}`}
           >
             <div className={`w-3 h-3 bg-white rounded-full mt-0.5 transition-transform ${card.includeInBudget ? 'translate-x-4 ml-0.5' : 'translate-x-0.5'}`} />
           </div>
-          <span className="text-xs text-brand-charcoal/70">Include in Budget</span>
+          <span className="text-xs text-brand-charcoal/70">In Budget</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer" onClick={(e) => e.preventDefault()}>
+          <div
+            onClick={(e) => { e.preventDefault(); onToggleProposal(card.id, !card.includedInProposal); }}
+            className={`w-8 h-4 rounded-full transition-colors cursor-pointer flex-shrink-0 ${card.includedInProposal ? 'bg-brand-copper' : 'bg-brand-silver/40'}`}
+          >
+            <div className={`w-3 h-3 bg-white rounded-full mt-0.5 transition-transform ${card.includedInProposal ? 'translate-x-4 ml-0.5' : 'translate-x-0.5'}`} />
+          </div>
+          <span className="text-xs text-brand-charcoal/70">In Proposal</span>
         </label>
       </div>
-    </Link>
+    </div>
   );
 }
 
@@ -226,32 +303,52 @@ function EventCard({
   event,
   programId,
   cards,
-  isDragging,
-  isDropTarget,
-  onToggle,
+  onToggleBudget,
+  onToggleProposal,
   onDelete,
   onUpdate,
-  onDragHandleMouseDown,
 }: {
   event: EventRow;
   programId: string;
   cards: EstimateCard[];
-  isDragging: boolean;
-  isDropTarget: boolean;
-  onToggle: (id: string, next: boolean) => void;
+  onToggleBudget: (id: string, next: boolean) => void;
+  onToggleProposal: (id: string, next: boolean) => void;
   onDelete: (id: string) => void;
   onUpdate: (id: string, data: Partial<EventRow>) => void;
-  onDragHandleMouseDown: () => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [expandedExcluded, setExpandedExcluded] = useState(false);
   const [comparisonMode, setComparisonMode] = useState<'compare_each' | 'combine'>(
     event.budgetEntry?.comparison_mode ?? 'compare_each'
   );
 
-  // Edit form state — re-synced from event prop each time edit is opened
+  // Maintain local display order, initialized from sortOrder
+  const [cardOrder, setCardOrder] = useState<string[]>(() =>
+    [...cards].sort((a, b) => a.sortOrder - b.sortOrder).map((c) => c.id)
+  );
+
+  // Keep order in sync when cards array changes (new cards added, existing removed)
+  useEffect(() => {
+    const cardIds = new Set(cards.map((c) => c.id));
+    setCardOrder((prev) => [
+      ...prev.filter((id) => cardIds.has(id)),
+      ...[...cards]
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((c) => c.id)
+        .filter((id) => !prev.includes(id)),
+    ]);
+  }, [cards]);
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const orderedCards = cardOrder.map((id) => cards.find((c) => c.id === id)).filter(Boolean) as EstimateCard[];
+  const includedCards = orderedCards.filter((c) => c.includedInProposal);
+  const excludedCards = orderedCards.filter((c) => !c.includedInProposal);
+
+  // Edit form state
   const [editName, setEditName] = useState('');
   const [editDate, setEditDate] = useState('');
   const [editStartTime, setEditStartTime] = useState('');
@@ -269,6 +366,14 @@ function EventCard({
   const startStr = fmtTime(event.start_time);
   const endStr = fmtTime(event.end_time);
   const timeStr = startStr && endStr ? `${startStr} – ${endStr}` : startStr ?? endStr;
+
+  const guestCount = event.guest_count > 0 ? event.guest_count : undefined;
+  const budgetTarget = event.budgetEntry
+    ? budgetTargetFromEntry(event.budgetEntry, event.guest_count > 0 ? event.guest_count : 0)
+    : null;
+  const combineResult = budgetTarget && comparisonMode === 'combine'
+    ? combineEstimatesToBudget(cards, budgetTarget)
+    : null;
 
   function handleEditClick() {
     setEditName(event.name);
@@ -304,20 +409,23 @@ function EventCard({
     onDelete(event.id);
   }
 
+  async function handleEstimateDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIdx = cardOrder.indexOf(String(active.id));
+    const newIdx = cardOrder.indexOf(String(over.id));
+    const newOrder = arrayMove(cardOrder, oldIdx, newIdx);
+    setCardOrder(newOrder);
+    await reorderEstimates(programId, newOrder.map((id, idx) => ({ id, sort_order: idx })));
+  }
+
   const editCfg = getEventTypeConfig(editEventType);
 
   return (
-    <div
-      className={`border rounded-lg overflow-hidden transition-opacity ${
-        isDragging ? 'opacity-40' : 'opacity-100'
-      } ${
-        isDropTarget ? 'border-brand-brown border-2' : 'border-brand-cream'
-      }`}
-    >
+    <div className="border rounded-lg overflow-hidden border-brand-cream">
       {/* Event header */}
       {isEditing ? (
         <div className="bg-brand-cream/40 px-4 py-3 space-y-2">
-          {/* Edit row 1: name + type */}
           <div className="flex items-center gap-2">
             <input
               type="text"
@@ -337,7 +445,6 @@ function EventCard({
               ))}
             </select>
           </div>
-          {/* Edit row 2: date, times, guest count, actions */}
           <div className="flex items-center gap-2 flex-wrap">
             <input
               type="date"
@@ -385,17 +492,6 @@ function EventCard({
         </div>
       ) : (
         <div className="bg-brand-cream/40 px-4 py-3 flex items-center gap-3">
-          {/* Drag handle */}
-          <div
-            onMouseDown={onDragHandleMouseDown}
-            className="cursor-grab text-brand-silver/40 hover:text-brand-silver/80 transition-colors flex-shrink-0 select-none"
-            title="Drag to reorder"
-          >
-            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M7 4a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm6 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM7 10a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm6 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM7 16a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm6 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0z" />
-            </svg>
-          </div>
-
           <button
             onClick={() => setExpanded((v) => !v)}
             className="text-brand-charcoal/50 hover:text-brand-charcoal transition-colors flex-shrink-0"
@@ -452,7 +548,7 @@ function EventCard({
             <p className="text-xs text-brand-silver">{event.description}</p>
           )}
 
-          {/* Comparison mode toggle — only shown when a budget entry is linked */}
+          {/* Comparison mode toggle */}
           {event.budgetEntry && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-brand-silver/60 font-medium uppercase tracking-wide">Budget mode</span>
@@ -481,81 +577,104 @@ function EventCard({
 
           {cards.length === 0 ? (
             <p className="text-sm text-brand-silver/70 py-2">No estimates yet.</p>
-          ) : (() => {
-            const guestCount = event.guest_count > 0 ? event.guest_count : undefined;
-            const budgetTarget = event.budgetEntry
-              ? budgetTargetFromEntry(event.budgetEntry, event.guest_count > 0 ? event.guest_count : 0)
-              : null;
+          ) : (
+            <>
+              {/* Included in proposal — sortable */}
+              {includedCards.length > 0 && (
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleEstimateDragEnd}>
+                  <SortableContext items={includedCards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {includedCards.map((card) => {
+                        const isLowest = groupLowest !== null && card.total === groupLowest && card.total > 0;
+                        const isBestMargin = groupBestMargin !== null && card.qcMarginPct === groupBestMargin && card.total > 0;
+                        let deltaInfo: DeltaInfo | undefined;
+                        if (budgetTarget && comparisonMode === 'compare_each' && card.includeInBudget && card.total > 0) {
+                          const result = compareEstimateToBudget(card.id, card.total, event.guest_count, budgetTarget);
+                          deltaInfo = { delta: result.delta, status: result.status, budgetLow: result.budgetLow, budgetHigh: result.budgetHigh, pricingBasis: result.pricingBasis };
+                        }
+                        return (
+                          <SortableEstimateCard
+                            key={card.id}
+                            card={card}
+                            programId={programId}
+                            isLowest={isLowest}
+                            isBestMargin={isBestMargin}
+                            onToggleBudget={onToggleBudget}
+                            onToggleProposal={onToggleProposal}
+                            eventGuestCount={guestCount}
+                            delta={deltaInfo}
+                          />
+                        );
+                      })}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              )}
 
-            // combine mode: compute combined result for the footer banner
-            const combineResult = budgetTarget && comparisonMode === 'combine'
-              ? combineEstimatesToBudget(cards, budgetTarget)
-              : null;
-
-            return (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {cards.map((card) => {
-                    const isLowest = groupLowest !== null && card.total === groupLowest && card.total > 0;
-                    const isBestMargin = groupBestMargin !== null && card.qcMarginPct === groupBestMargin && card.total > 0;
-
-                    // compare_each: compute per-card delta against budget
-                    let deltaInfo: DeltaInfo | undefined;
-                    if (budgetTarget && comparisonMode === 'compare_each' && card.includeInBudget && card.total > 0) {
-                      const result = compareEstimateToBudget(card.id, card.total, event.guest_count, budgetTarget);
-                      deltaInfo = { delta: result.delta, status: result.status, budgetLow: result.budgetLow, budgetHigh: result.budgetHigh, pricingBasis: result.pricingBasis };
-                    }
-
-                    return (
-                      <EstimateCardItem
-                        key={card.id}
-                        card={card}
-                        programId={programId}
-                        isLowest={isLowest}
-                        isBestMargin={isBestMargin}
-                        onToggle={onToggle}
-                        eventGuestCount={guestCount}
-                        delta={deltaInfo}
-                      />
-                    );
-                  })}
+              {/* Not in proposal — collapsed by default */}
+              {excludedCards.length > 0 && (
+                <div className="border border-dashed border-brand-silver/30 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setExpandedExcluded((v) => !v)}
+                    className="w-full px-3 py-2 flex items-center gap-2 text-xs text-brand-silver/60 hover:text-brand-silver/80 transition-colors"
+                  >
+                    <svg className={`w-3 h-3 transition-transform ${expandedExcluded ? '' : '-rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                    <span>{excludedCards.length} not in proposal</span>
+                  </button>
+                  {expandedExcluded && (
+                    <div className="px-3 pb-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {excludedCards.map((card) => (
+                        <EstimateCardItem
+                          key={card.id}
+                          card={card}
+                          programId={programId}
+                          isLowest={false}
+                          isBestMargin={false}
+                          onToggleBudget={onToggleBudget}
+                          onToggleProposal={onToggleProposal}
+                          eventGuestCount={guestCount}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
+              )}
 
-                {/* Combine mode: summary banner */}
-                {combineResult && (
-                  <div className={`rounded-lg border px-4 py-3 space-y-2 ${statusColors(combineResult.status).bg} ${statusColors(combineResult.status).border}`}>
-                    <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-3">
-                        <span className={`font-medium ${statusColors(combineResult.status).text}`}>
-                          Combined: ${Math.round(combineResult.combinedTotal).toLocaleString('en-US')}
-                        </span>
-                        <span className="text-brand-silver/60 text-xs">of ${Math.round(combineResult.budgetPinned).toLocaleString('en-US')} budget</span>
-                        {combineResult.budgetLow !== combineResult.budgetHigh && (
-                          <span className="text-brand-silver/50 text-xs">(range: ${Math.round(combineResult.budgetLow).toLocaleString('en-US')}–${Math.round(combineResult.budgetHigh).toLocaleString('en-US')})</span>
-                        )}
-                      </div>
-                      <span className={`text-xs font-medium ${statusColors(combineResult.status).text}`}>
-                        {combineResult.remaining >= 0
-                          ? `$${Math.round(combineResult.remaining).toLocaleString('en-US')} remaining`
-                          : `$${Math.round(Math.abs(combineResult.remaining)).toLocaleString('en-US')} over`}
+              {/* Combine mode: summary banner */}
+              {combineResult && (
+                <div className={`rounded-lg border px-4 py-3 space-y-2 ${statusColors(combineResult.status).bg} ${statusColors(combineResult.status).border}`}>
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-3">
+                      <span className={`font-medium ${statusColors(combineResult.status).text}`}>
+                        Combined: ${Math.round(combineResult.combinedTotal).toLocaleString('en-US')}
                       </span>
+                      <span className="text-brand-silver/60 text-xs">of ${Math.round(combineResult.budgetPinned).toLocaleString('en-US')} budget</span>
+                      {combineResult.budgetLow !== combineResult.budgetHigh && (
+                        <span className="text-brand-silver/50 text-xs">(range: ${Math.round(combineResult.budgetLow).toLocaleString('en-US')}–${Math.round(combineResult.budgetHigh).toLocaleString('en-US')})</span>
+                      )}
                     </div>
-                    {/* Progress bar */}
-                    <div className="h-1.5 bg-white/60 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          combineResult.status === 'over' ? 'bg-red-400' :
-                          combineResult.status === 'within_range' ? 'bg-amber-400' :
-                          'bg-green-400'
-                        }`}
-                        style={{ width: `${combineResult.pctConsumed * 100}%` }}
-                      />
-                    </div>
+                    <span className={`text-xs font-medium ${statusColors(combineResult.status).text}`}>
+                      {combineResult.remaining >= 0
+                        ? `$${Math.round(combineResult.remaining).toLocaleString('en-US')} remaining`
+                        : `$${Math.round(Math.abs(combineResult.remaining)).toLocaleString('en-US')} over`}
+                    </span>
                   </div>
-                )}
-              </>
-            );
-          })()}
+                  <div className="h-1.5 bg-white/60 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        combineResult.status === 'over' ? 'bg-red-400' :
+                        combineResult.status === 'within_range' ? 'bg-amber-400' :
+                        'bg-green-400'
+                      }`}
+                      style={{ width: `${Math.min(combineResult.pctConsumed * 100, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
 
           <div className="flex justify-end pt-1">
             <AddEstimateButton programId={programId} eventId={event.id} />
@@ -573,24 +692,14 @@ export default function EventsView({ programId, events: initialEvents, unassigne
   const [events, setEvents] = useState(initialEvents);
   const [unassignedCards, setUnassignedCards] = useState(initialUnassigned);
 
-  // Re-sync local state when the server re-renders (e.g., after router.refresh())
   useEffect(() => { setEvents(initialEvents); }, [initialEvents]);
   useEffect(() => { setUnassignedCards(initialUnassigned); }, [initialUnassigned]);
 
-  // Drag state
-  const dragIndexRef = useRef<number | null>(null);
-  const [dropIndex, setDropIndex] = useState<number | null>(null);
-  // Track which card is currently being dragged for opacity
-  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
-  // Controls whether the draggable wrapper is actually draggable (only after handle mousedown)
-  const [draggableIdx, setDraggableIdx] = useState<number | null>(null);
-
-  // Flatten all cards for budget calculation
   const allCards = [...events.flatMap((e) => e.cards), ...unassignedCards];
   const budgetTotal = allCards.filter((c) => c.includeInBudget).reduce((sum, c) => sum + c.total, 0);
   const budgetCount = allCards.filter((c) => c.includeInBudget).length;
 
-  async function handleToggle(id: string, next: boolean) {
+  async function handleToggleBudget(id: string, next: boolean) {
     setEvents((prev) =>
       prev.map((ev) => ({
         ...ev,
@@ -599,6 +708,17 @@ export default function EventsView({ programId, events: initialEvents, unassigne
     );
     setUnassignedCards((prev) => prev.map((c) => (c.id === id ? { ...c, includeInBudget: next } : c)));
     await updateEstimate(id, programId, { include_in_budget: next });
+  }
+
+  async function handleToggleProposal(id: string, next: boolean) {
+    setEvents((prev) =>
+      prev.map((ev) => ({
+        ...ev,
+        cards: ev.cards.map((c) => (c.id === id ? { ...c, includedInProposal: next } : c)),
+      }))
+    );
+    setUnassignedCards((prev) => prev.map((c) => (c.id === id ? { ...c, includedInProposal: next } : c)));
+    await updateEstimateProposalInclusion(id, programId, next);
   }
 
   async function handleDeleteEvent(id: string) {
@@ -612,46 +732,6 @@ export default function EventsView({ programId, events: initialEvents, unassigne
       prev.map((e) => (e.id === id ? { ...e, ...data } : e))
     );
   }
-
-  // Drag handlers
-  function handleDragStart(idx: number) {
-    dragIndexRef.current = idx;
-    setDraggingIndex(idx);
-  }
-
-  function handleDragOver(e: React.DragEvent, idx: number) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (dragIndexRef.current !== null && dragIndexRef.current !== idx) {
-      setDropIndex(idx);
-    }
-  }
-
-  function handleDragLeave() {
-    setDropIndex(null);
-  }
-
-  async function handleDrop(idx: number) {
-    const from = dragIndexRef.current;
-    if (from === null || from === idx) {
-      setDropIndex(null);
-      return;
-    }
-    const reordered = reorderArray(events, from, idx).map((e, i) => ({ ...e, sort_order: i }));
-    setEvents(reordered);
-    setDropIndex(null);
-    dragIndexRef.current = null;
-    await reorderEvents(programId, reordered.map((e) => ({ id: e.id, sort_order: e.sort_order })));
-  }
-
-  function handleDragEnd() {
-    dragIndexRef.current = null;
-    setDraggingIndex(null);
-    setDropIndex(null);
-    setDraggableIdx(null);
-  }
-
-  const nextSortOrder = events.length > 0 ? Math.max(...events.map((e) => e.sort_order)) + 1 : 0;
 
   return (
     <div className="space-y-4">
@@ -668,11 +748,11 @@ export default function EventsView({ programId, events: initialEvents, unassigne
         </div>
       )}
 
-      {/* Add event form */}
+      {/* Add event */}
       <AddEventButton
         programId={programId}
         defaultGuestCount={programGuestCount}
-        nextSortOrder={nextSortOrder}
+        nextSortOrder={events.length}
       />
 
       {/* Empty state */}
@@ -682,32 +762,21 @@ export default function EventsView({ programId, events: initialEvents, unassigne
         </div>
       )}
 
-      {/* Event cards — draggable */}
-      {events.map((event, idx) => (
-        <div
+      {/* Events — sorted by date from server, no manual reorder */}
+      {events.map((event) => (
+        <EventCard
           key={event.id}
-          draggable={draggableIdx === idx}
-          onDragStart={() => handleDragStart(idx)}
-          onDragOver={(e) => handleDragOver(e, idx)}
-          onDragLeave={handleDragLeave}
-          onDrop={() => handleDrop(idx)}
-          onDragEnd={handleDragEnd}
-        >
-          <EventCard
-            event={event}
-            programId={programId}
-            cards={event.cards}
-            isDragging={draggingIndex === idx}
-            isDropTarget={dropIndex === idx && draggingIndex !== null && draggingIndex !== idx}
-            onToggle={handleToggle}
-            onDelete={handleDeleteEvent}
-            onUpdate={handleUpdateEvent}
-            onDragHandleMouseDown={() => setDraggableIdx(idx)}
-          />
-        </div>
+          event={event}
+          programId={programId}
+          cards={event.cards}
+          onToggleBudget={handleToggleBudget}
+          onToggleProposal={handleToggleProposal}
+          onDelete={handleDeleteEvent}
+          onUpdate={handleUpdateEvent}
+        />
       ))}
 
-      {/* Unassigned estimates (safety net — should be empty after migration) */}
+      {/* Unassigned estimates */}
       {unassignedCards.length > 0 && (
         <div className="border border-dashed border-brand-cream rounded-lg p-4 space-y-3">
           <h3 className="text-xs font-semibold text-brand-charcoal/50 uppercase tracking-widest">Unassigned Estimates</h3>
@@ -719,7 +788,8 @@ export default function EventsView({ programId, events: initialEvents, unassigne
                 programId={programId}
                 isLowest={false}
                 isBestMargin={false}
-                onToggle={handleToggle}
+                onToggleBudget={handleToggleBudget}
+                onToggleProposal={handleToggleProposal}
               />
             ))}
           </div>

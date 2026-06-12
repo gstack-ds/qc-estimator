@@ -17,9 +17,6 @@ interface SpaceForm {
   capacity_standing: string;
   fb_minimum: string;
   room_fee: string;
-  service_charge_default: string;
-  gratuity_default: string;
-  admin_fee_default: string;
   privacy_tag: SpacePrivacyTag | '';
   notes: string;
 }
@@ -27,7 +24,6 @@ interface SpaceForm {
 const emptyForm: SpaceForm = {
   name: '', capacity_seated: '', capacity_standing: '',
   fb_minimum: '', room_fee: '',
-  service_charge_default: '', gratuity_default: '', admin_fee_default: '',
   privacy_tag: '',
   notes: '',
 };
@@ -39,9 +35,6 @@ function spaceToForm(s: DbVenueSpace): SpaceForm {
     capacity_standing: s.capacity_standing?.toString() ?? '',
     fb_minimum: s.fb_minimum.toString(),
     room_fee: s.room_fee.toString(),
-    service_charge_default: s.service_charge_default !== null ? (s.service_charge_default * 100).toFixed(1) : '',
-    gratuity_default: s.gratuity_default !== null ? (s.gratuity_default * 100).toFixed(1) : '',
-    admin_fee_default: s.admin_fee_default !== null ? (s.admin_fee_default * 100).toFixed(1) : '',
     privacy_tag: (s.privacy_tag as SpacePrivacyTag) ?? '',
     notes: s.notes ?? '',
   };
@@ -54,9 +47,6 @@ function formToPayload(f: SpaceForm) {
     capacity_standing: f.capacity_standing ? parseInt(f.capacity_standing) : null,
     fb_minimum: parseFloat(f.fb_minimum) || 0,
     room_fee: parseFloat(f.room_fee) || 0,
-    service_charge_default: f.service_charge_default ? parseFloat(f.service_charge_default) / 100 : null,
-    gratuity_default: f.gratuity_default ? parseFloat(f.gratuity_default) / 100 : null,
-    admin_fee_default: f.admin_fee_default ? parseFloat(f.admin_fee_default) / 100 : null,
     privacy_tag: f.privacy_tag || null,
     notes: f.notes.trim() || null,
   };
@@ -84,7 +74,7 @@ function SpaceFormFields({ form, onChange }: { form: SpaceForm; onChange: (f: Sp
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-6 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <div>
           <label className="block text-xs text-brand-silver mb-1">Privacy</label>
           <select value={form.privacy_tag} onChange={set('privacy_tag')} className="w-full border border-brand-silver/30 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown text-sm">
@@ -105,18 +95,6 @@ function SpaceFormFields({ form, onChange }: { form: SpaceForm; onChange: (f: Sp
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-brand-silver">$</span>
             <input type="number" value={form.room_fee} onChange={set('room_fee')} className="w-full border border-brand-silver/30 rounded px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown text-sm pl-5" placeholder="0" />
           </div>
-        </div>
-        <div>
-          <label className="block text-xs text-brand-silver mb-1">Svc Charge %</label>
-          <input type="number" value={form.service_charge_default} onChange={set('service_charge_default')} className="w-full border border-brand-silver/30 rounded px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown text-sm" placeholder="20" />
-        </div>
-        <div>
-          <label className="block text-xs text-brand-silver mb-1">Gratuity %</label>
-          <input type="number" value={form.gratuity_default} onChange={set('gratuity_default')} className="w-full border border-brand-silver/30 rounded px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown text-sm" placeholder="20" />
-        </div>
-        <div>
-          <label className="block text-xs text-brand-silver mb-1">Admin Fee %</label>
-          <input type="number" value={form.admin_fee_default} onChange={set('admin_fee_default')} className="w-full border border-brand-silver/30 rounded px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown text-sm" placeholder="5" />
         </div>
       </div>
       <div>
@@ -237,9 +215,6 @@ export default function SpacesManager({ venueId, initialSpaces }: Props) {
                       {space.capacity_standing !== null && <span>Standing: {space.capacity_standing}</span>}
                       {space.fb_minimum > 0 && <span>F&B Min: ${space.fb_minimum.toLocaleString()}</span>}
                       {space.room_fee > 0 && <span>Room Fee: ${space.room_fee.toLocaleString()}</span>}
-                      {space.service_charge_default !== null && <span>Svc: {(space.service_charge_default * 100).toFixed(1)}%</span>}
-                      {space.gratuity_default !== null && <span>Grat: {(space.gratuity_default * 100).toFixed(1)}%</span>}
-                      {space.admin_fee_default !== null && <span>Admin: {(space.admin_fee_default * 100).toFixed(1)}%</span>}
                       {space.privacy_tag && <span>{PRIVACY_TAG_OPTIONS.find((o) => o.value === space.privacy_tag)?.label ?? space.privacy_tag}</span>}
                     </div>
                     {space.notes && <div className="text-xs text-brand-silver mt-1 italic">{space.notes}</div>}

@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { DbVenue } from '@/lib/supabase/queries';
-import { createVenue, deleteVenue, mergeVendors, bulkUpdateVendors } from '@/app/(programs)/venues/actions';
+import { createVenue, deleteVenue, bulkUpdateVendors } from '@/app/(programs)/venues/actions';
 import { VENDOR_TYPES, type VendorType } from '@/lib/vendors/constants';
 
 interface VendorRow extends DbVenue {
@@ -73,171 +73,6 @@ function CopyEmailSigButton({ sig }: { sig: string }) {
   );
 }
 
-// ─── Merge modal ──────────────────────────────────────────
-
-interface MergeModalProps {
-  a: VendorRow;
-  b: VendorRow;
-  onClose: () => void;
-  onMerged: (survivorId: string) => void;
-}
-
-function MergeModal({ a, b, onClose, onMerged }: MergeModalProps) {
-  const [survivorId, setSurvivorId] = useState<string>(a.id);
-  const [confirm, setConfirm] = useState('');
-  const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ estimatesMoved: number; photosMoved: number; spacesRepointed: number; duplicateSpaces: Array<{ name: string }> } | null>(null);
-
-  const survivor = survivorId === a.id ? a : b;
-  const loser = survivorId === a.id ? b : a;
-
-  async function handleMerge() {
-    if (confirm !== 'MERGE') return;
-    setIsPending(true);
-    setError(null);
-    const res = await mergeVendors(survivorId, loser.id);
-    setIsPending(false);
-    if (res.error || !res.data) {
-      setError(res.error ?? 'Merge failed');
-      return;
-    }
-    setResult(res.data);
-    onMerged(survivorId);
-  }
-
-  if (result) {
-    return (
-      <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-          <h2 className="text-lg font-semibold text-brand-charcoal mb-4">Merge complete</h2>
-          <ul className="text-sm space-y-1 text-brand-charcoal mb-4">
-            <li>Surviving vendor: <strong>{survivor.name}</strong></li>
-            <li>{result.estimatesMoved} estimate{result.estimatesMoved !== 1 ? 's' : ''} repointed</li>
-            <li>{result.photosMoved} photo{result.photosMoved !== 1 ? 's' : ''} repointed</li>
-            <li>{result.spacesRepointed} space{result.spacesRepointed !== 1 ? 's' : ''} moved</li>
-            {result.duplicateSpaces.length > 0 && (
-              <li className="text-amber-700">
-                {result.duplicateSpaces.length} duplicate space{result.duplicateSpaces.length !== 1 ? 's' : ''} deleted:{' '}
-                {result.duplicateSpaces.map((d) => d.name).join(', ')}
-              </li>
-            )}
-          </ul>
-          <button
-            onClick={onClose}
-            className="w-full bg-brand-brown text-white rounded py-2 text-sm font-medium hover:bg-brand-brown/90"
-          >
-            Done
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  function field(label: string, vA: string | number | null, vB: string | number | null) {
-    const same = String(vA ?? '') === String(vB ?? '');
-    if (same && !vA) return null;
-    return (
-      <tr key={label} className={same ? '' : 'bg-amber-50/50'}>
-        <td className="py-1 pr-3 text-brand-silver text-xs w-24">{label}</td>
-        <td className={`py-1 pr-3 text-xs ${survivorId === a.id ? 'font-medium text-brand-charcoal' : 'text-brand-charcoal/60'}`}>{vA ?? '—'}</td>
-        <td className={`py-1 text-xs ${survivorId === b.id ? 'font-medium text-brand-charcoal' : 'text-brand-charcoal/60'}`}>{vB ?? '—'}</td>
-      </tr>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <h2 className="text-lg font-semibold text-brand-charcoal mb-1">Merge vendors</h2>
-          <p className="text-xs text-brand-silver mb-5">Choose which vendor survives. The other will be deleted after all linked data is repointed.</p>
-
-          {/* Survivor picker */}
-          <div className="grid grid-cols-2 gap-3 mb-5">
-            {[a, b].map((v) => (
-              <button
-                key={v.id}
-                onClick={() => setSurvivorId(v.id)}
-                className={`text-left rounded-lg border-2 p-3 transition-colors ${survivorId === v.id ? 'border-brand-brown bg-brand-cream/40' : 'border-brand-silver/20 hover:border-brand-silver/40'}`}
-              >
-                <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                  <span className="font-medium text-sm text-brand-charcoal">{v.name}</span>
-                  <TypeBadge type={v.vendor_type as VendorType ?? null} />
-                  {survivorId === v.id && <span className="ml-auto text-[10px] text-brand-brown font-semibold uppercase tracking-wide">Survivor</span>}
-                </div>
-                <div className="text-xs text-brand-silver space-y-0.5">
-                  {v.market && <div>{v.market}</div>}
-                  {v.city && <div>{[v.city, v.state].filter(Boolean).join(', ')}</div>}
-                  <div className="flex gap-2 mt-1">
-                    <span>{v.program_count} programs</span>
-                    <span>{v.file_count} files</span>
-                    <span>{v.space_count} spaces</span>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-
-          {/* Field comparison */}
-          <div className="border border-brand-silver/20 rounded-lg overflow-hidden mb-5">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-brand-cream/60">
-                  <th className="py-1.5 px-3 text-left text-brand-silver font-medium">Field</th>
-                  <th className={`py-1.5 px-3 text-left font-medium ${survivorId === a.id ? 'text-brand-brown' : 'text-brand-charcoal/60'}`}>{a.name}</th>
-                  <th className={`py-1.5 px-3 text-left font-medium ${survivorId === b.id ? 'text-brand-brown' : 'text-brand-charcoal/60'}`}>{b.name}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-brand-silver/10">
-                {field('Address',  a.address,      b.address)}
-                {field('City',     a.city,         b.city)}
-                {field('State',    a.state,        b.state)}
-                {field('Market',   a.market,       b.market)}
-                {field('Contact',  a.contact_name, b.contact_name)}
-                {field('Email',    a.contact_email,b.contact_email)}
-                {field('Phone',    a.contact_phone,b.contact_phone)}
-                {field('Website',  a.website,      b.website)}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Confirmation */}
-          <div className="mb-4">
-            <label className="block text-xs text-brand-silver mb-1.5">
-              Type <strong className="text-brand-charcoal">MERGE</strong> to confirm — this permanently deletes <strong className="text-red-600">{loser.name}</strong>
-            </label>
-            <input
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              placeholder="MERGE"
-              className="border border-brand-silver/30 rounded px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-1 focus:ring-red-400"
-            />
-          </div>
-
-          {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
-
-          <div className="flex gap-3">
-            <button
-              onClick={handleMerge}
-              disabled={confirm !== 'MERGE' || isPending}
-              className="flex-1 bg-red-600 text-white rounded py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {isPending ? 'Merging…' : `Merge — keep ${survivor.name}`}
-            </button>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm text-brand-silver hover:text-brand-charcoal border border-brand-silver/20 rounded hover:bg-brand-cream/40"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main component ───────────────────────────────────────
 
 export default function VendorsList({ vendors, markets = [] }: Props) {
@@ -249,7 +84,6 @@ export default function VendorsList({ vendors, markets = [] }: Props) {
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [mergeTargets, setMergeTargets] = useState<[VendorRow, VendorRow] | null>(null);
 
   // Bulk action state
   const [bulkPending, setBulkPending] = useState(false);
@@ -310,20 +144,6 @@ export default function VendorsList({ vendors, markets = [] }: Props) {
     }
   }
 
-  function openMerge() {
-    if (selectedInView.length !== 2) return;
-    const a = vendors.find((v) => v.id === selectedInView[0])!;
-    const b = vendors.find((v) => v.id === selectedInView[1])!;
-    setMergeTargets([a, b]);
-  }
-
-  function handleMerged(survivorId: string) {
-    setSelectedIds(new Set());
-    setMergeTargets(null);
-    router.refresh();
-    router.push(`/venues/${survivorId}`);
-  }
-
   async function handleBulkType(type: string) {
     if (!confirm(`Set type to "${VENDOR_TYPES.find((t) => t.value === type)?.label ?? type}" for ${selectedInView.length} vendor${selectedInView.length !== 1 ? 's' : ''}?`)) return;
     setBulkPending(true);
@@ -380,16 +200,6 @@ export default function VendorsList({ vendors, markets = [] }: Props) {
 
   return (
     <div>
-      {/* Merge modal */}
-      {mergeTargets && (
-        <MergeModal
-          a={mergeTargets[0]}
-          b={mergeTargets[1]}
-          onClose={() => setMergeTargets(null)}
-          onMerged={handleMerged}
-        />
-      )}
-
       {/* Type tabs */}
       <div className="flex flex-wrap gap-1 mb-4">
         <button
@@ -529,16 +339,6 @@ export default function VendorsList({ vendors, markets = [] }: Props) {
           <span className="text-xs font-medium text-brand-charcoal">
             {selectedInView.length} selected
           </span>
-
-          {selectedInView.length === 2 && (
-            <button
-              onClick={openMerge}
-              disabled={bulkPending}
-              className="text-xs border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded disabled:opacity-50"
-            >
-              Merge 2
-            </button>
-          )}
 
           <div className="flex items-center gap-1">
             <span className="text-xs text-brand-silver">Set type:</span>

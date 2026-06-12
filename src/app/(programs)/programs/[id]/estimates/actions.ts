@@ -42,6 +42,28 @@ export async function updateEstimate(id: string, programId: string, data: Partia
   return { error: null };
 }
 
+export async function reorderEstimates(programId: string, order: { id: string; sort_order: number }[]) {
+  const supabase = await createClient();
+  await Promise.all(
+    order.map(({ id, sort_order }) =>
+      supabase.from('estimates').update({ sort_order }).eq('id', id),
+    ),
+  );
+  revalidatePath(`/programs/${programId}`);
+  return { error: null };
+}
+
+export async function updateEstimateProposalInclusion(id: string, programId: string, includedInProposal: boolean) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('estimates')
+    .update({ included_in_proposal: includedInProposal })
+    .eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath(`/programs/${programId}`);
+  return { error: null };
+}
+
 export async function deleteEstimate(id: string, programId: string) {
   const supabase = await createClient();
   const { error } = await supabase.from('estimates').delete().eq('id', id);
@@ -130,17 +152,6 @@ export async function duplicateEstimate(sourceId: string, programId: string) {
 
   revalidatePath(`/programs/${programId}`);
   return { error: null, id: newEstimate.id as string };
-}
-
-export async function reorderEstimates(programId: string, updates: { id: string; sort_order: number }[]) {
-  const supabase = await createClient();
-  await Promise.all(
-    updates.map(({ id, sort_order }) =>
-      supabase.from('estimates').update({ sort_order }).eq('id', id)
-    )
-  );
-  revalidatePath(`/programs/${programId}`);
-  return { error: null };
 }
 
 // ─── Estimate Sections ────────────────────────────────────

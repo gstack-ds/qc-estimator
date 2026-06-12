@@ -13,6 +13,8 @@ export interface EstimateCard {
   lineItemCount: number;
   includeInBudget: boolean;
   qcMarginPct: number;
+  includedInProposal: boolean;
+  sortOrder: number;
 }
 
 interface Props {

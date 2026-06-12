@@ -38,6 +38,9 @@ export default function VenueForm({ venue, markets: initialMarkets = [] }: Props
   const [showAddMarket, setShowAddMarket] = useState(false);
   const [newMarketName, setNewMarketName] = useState('');
   const [addingMarket, setAddingMarket] = useState(false);
+  const [svcCharge, setSvcCharge] = useState(venue.service_charge_default !== null ? (venue.service_charge_default * 100).toFixed(1) : '');
+  const [gratuity, setGratuity] = useState(venue.gratuity_default !== null ? (venue.gratuity_default * 100).toFixed(1) : '');
+  const [adminFee, setAdminFee] = useState(venue.admin_fee_default !== null ? (venue.admin_fee_default * 100).toFixed(1) : '');
   const [styles, setStyles] = useState<string[]>(venue.service_styles ?? []);
   const [contactName, setContactName] = useState(venue.contact_name ?? '');
   const [contactTitle, setContactTitle] = useState(venue.contact_title ?? '');
@@ -71,6 +74,9 @@ export default function VenueForm({ venue, markets: initialMarkets = [] }: Props
         email_signature: emailSignature.trim() || null,
         website: website.trim() || null,
         notes: notes.trim() || null,
+        service_charge_default: svcCharge ? parseFloat(svcCharge) / 100 : null,
+        gratuity_default: gratuity ? parseFloat(gratuity) / 100 : null,
+        admin_fee_default: adminFee ? parseFloat(adminFee) / 100 : null,
       });
       if (result.error) { setError(result.error); return; }
       setSaved(true);
@@ -307,6 +313,43 @@ export default function VenueForm({ venue, markets: initialMarkets = [] }: Props
             rows={2}
             className="w-full border border-brand-silver/30 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown resize-none"
           />
+        </div>
+      </div>
+
+      {/* Fee Defaults */}
+      <div>
+        <label className="block text-xs font-medium text-brand-silver uppercase tracking-wide mb-2">Fee Defaults</label>
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs text-brand-silver mb-1">Service Charge %</label>
+            <input
+              type="number"
+              value={svcCharge}
+              onChange={(e) => { setSvcCharge(e.target.value); setSaved(false); }}
+              className="w-full border border-brand-silver/30 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
+              placeholder="20"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-brand-silver mb-1">Gratuity %</label>
+            <input
+              type="number"
+              value={gratuity}
+              onChange={(e) => { setGratuity(e.target.value); setSaved(false); }}
+              className="w-full border border-brand-silver/30 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
+              placeholder="20"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-brand-silver mb-1">Admin Fee %</label>
+            <input
+              type="number"
+              value={adminFee}
+              onChange={(e) => { setAdminFee(e.target.value); setSaved(false); }}
+              className="w-full border border-brand-silver/30 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
+              placeholder="5"
+            />
+          </div>
         </div>
       </div>
 

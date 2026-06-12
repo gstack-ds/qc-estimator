@@ -48,9 +48,9 @@ export default function LinkVenuePanel({
       onSpaceChange(newSpaceId, {
         roomSpace: space.name,
         fbMinimum: space.fb_minimum,
-        serviceChargeOverride: space.service_charge_default,
-        gratuityOverride: space.gratuity_default,
-        adminFeeOverride: space.admin_fee_default,
+        serviceChargeOverride: venue.service_charge_default,
+        gratuityOverride: venue.gratuity_default,
+        adminFeeOverride: venue.admin_fee_default,
       });
       startTransition(async () => {
         await linkVenueToEstimate(estimateId, programId, venue.id, newSpaceId);

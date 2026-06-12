@@ -37,7 +37,7 @@ import { mapMenuToLineItems, mapBarToLineItems } from '@/lib/vendors/menuImport'
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection, reorderSections, reorderLineItems } from '@/app/(programs)/programs/[id]/estimates/actions';
-import { linkVenueToEstimate, syncVenueSpaceDefaults, updateVenueSpace, createVenueSpace } from '@/app/(programs)/venues/actions';
+import { linkVenueToEstimate, syncVenueDefaults, updateVenueSpace, createVenueSpace } from '@/app/(programs)/venues/actions';
 import { classifySpaceSync, findMatchingSpace, isAutoFilled } from '@/lib/vendors/venueSync';
 import { updateProgram, applyBudgetPin } from '@/app/(programs)/programs/actions';
 import { effectivePrefillPP } from '@/lib/engine/budgetPlan';
@@ -336,8 +336,8 @@ export default function EstimateBuilder({
   }
 
   async function syncSpaceOnBlur() {
-    if (!linkedSpaceId || !linkedVenueId) return;
-    syncVenueSpaceDefaults(linkedSpaceId, linkedVenueId, {
+    if (!linkedVenueId) return;
+    syncVenueDefaults(linkedVenueId, linkedSpaceId, {
       fbMinimum: est.fbMinimum,
       serviceChargeDefault: est.serviceChargeOverride,
       gratuityDefault: est.gratuityOverride,
