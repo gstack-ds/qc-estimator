@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { DbVenue } from '@/lib/supabase/queries';
-import { updateVenue, createMarket } from '@/app/(programs)/venues/actions';
+import { updateVenue, createMarket, parseEmailSignature } from '@/app/(programs)/venues/actions';
 import { VENDOR_TYPES, type VendorType } from '@/lib/vendors/constants';
 
 interface Props {
@@ -48,11 +48,31 @@ export default function VenueForm({ venue, markets: initialMarkets = [] }: Props
   const [contactPhone, setContactPhone] = useState(venue.contact_phone ?? '');
   const [emailSignature, setEmailSignature] = useState(venue.email_signature ?? '');
   const [website, setWebsite] = useState(venue.website ?? '');
+  const [parsingSig, setParsingSig] = useState(false);
+  const [sigFilledFields, setSigFilledFields] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState(venue.notes ?? '');
 
   function toggleStyle(style: string) {
     setStyles((prev) => prev.includes(style) ? prev.filter((s) => s !== style) : [...prev, style]);
     setSaved(false);
+  }
+
+  async function handleSignaturePaste(pastedText: string) {
+    setParsingSig(true);
+    const parsed = await parseEmailSignature(pastedText);
+    setParsingSig(false);
+    const filled = new Set<string>();
+    if (parsed.name && !contactName.trim())   { setContactName(parsed.name);   filled.add('name'); }
+    if (parsed.title && !contactTitle.trim()) { setContactTitle(parsed.title); filled.add('title'); }
+    if (parsed.email && !contactEmail.trim()) { setContactEmail(parsed.email); filled.add('email'); }
+    if (parsed.phone && !contactPhone.trim()) { setContactPhone(parsed.phone); filled.add('phone'); }
+    if (parsed.website && !website.trim())    { setWebsite(parsed.website);    filled.add('website'); }
+    if (filled.size > 0) setSigFilledFields(filled);
+    setSaved(false);
+  }
+
+  function clearSigFilled(field: string) {
+    setSigFilledFields((prev) => { const next = new Set(prev); next.delete(field); return next; });
   }
 
   function handleSave() {
@@ -248,45 +268,60 @@ export default function VenueForm({ venue, markets: initialMarkets = [] }: Props
         <label className="block text-xs font-medium text-brand-silver uppercase tracking-wide mb-2">Contact</label>
         <div className="grid grid-cols-4 gap-3">
           <div>
-            <label className="block text-xs text-brand-silver mb-1">Name</label>
+            <label className="block text-xs text-brand-silver mb-1">
+              Name{sigFilledFields.has('name') && <span className="ml-1 text-brand-copper/70">✦ autofilled</span>}
+            </label>
             <input
               value={contactName}
-              onChange={(e) => { setContactName(e.target.value); setSaved(false); }}
+              onChange={(e) => { setContactName(e.target.value); clearSigFilled('name'); setSaved(false); }}
               className="w-full border border-brand-silver/30 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
             />
           </div>
           <div>
-            <label className="block text-xs text-brand-silver mb-1">Title</label>
+            <label className="block text-xs text-brand-silver mb-1">
+              Title{sigFilledFields.has('title') && <span className="ml-1 text-brand-copper/70">✦ autofilled</span>}
+            </label>
             <input
               value={contactTitle}
-              onChange={(e) => { setContactTitle(e.target.value); setSaved(false); }}
+              onChange={(e) => { setContactTitle(e.target.value); clearSigFilled('title'); setSaved(false); }}
               className="w-full border border-brand-silver/30 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
               placeholder="Sales Manager"
             />
           </div>
           <div>
-            <label className="block text-xs text-brand-silver mb-1">Email</label>
+            <label className="block text-xs text-brand-silver mb-1">
+              Email{sigFilledFields.has('email') && <span className="ml-1 text-brand-copper/70">✦ autofilled</span>}
+            </label>
             <input
               type="email"
               value={contactEmail}
-              onChange={(e) => { setContactEmail(e.target.value); setSaved(false); }}
+              onChange={(e) => { setContactEmail(e.target.value); clearSigFilled('email'); setSaved(false); }}
               className="w-full border border-brand-silver/30 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
             />
           </div>
           <div>
-            <label className="block text-xs text-brand-silver mb-1">Phone</label>
+            <label className="block text-xs text-brand-silver mb-1">
+              Phone{sigFilledFields.has('phone') && <span className="ml-1 text-brand-copper/70">✦ autofilled</span>}
+            </label>
             <input
               value={contactPhone}
-              onChange={(e) => { setContactPhone(e.target.value); setSaved(false); }}
+              onChange={(e) => { setContactPhone(e.target.value); clearSigFilled('phone'); setSaved(false); }}
               className="w-full border border-brand-silver/30 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
             />
           </div>
         </div>
         <div className="mt-3">
-          <label className="block text-xs text-brand-silver mb-1">Email Signature</label>
+          <label className="block text-xs text-brand-silver mb-1">
+            Email Signature
+            {parsingSig && <span className="ml-2 text-brand-silver/50">parsing…</span>}
+          </label>
           <textarea
             value={emailSignature}
             onChange={(e) => { setEmailSignature(e.target.value); setSaved(false); }}
+            onPaste={(e) => {
+              const text = e.clipboardData.getData('text');
+              if (text.trim()) handleSignaturePaste(text);
+            }}
             rows={3}
             className="w-full border border-brand-silver/30 rounded px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown resize-none font-mono"
             placeholder="Paste the vendor's email signature block here for quick copying…"
@@ -297,10 +332,12 @@ export default function VenueForm({ venue, markets: initialMarkets = [] }: Props
       {/* Website + Notes */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-medium text-brand-silver uppercase tracking-wide mb-1">Website</label>
+          <label className="block text-xs font-medium text-brand-silver uppercase tracking-wide mb-1">
+            Website{sigFilledFields.has('website') && <span className="ml-1 text-brand-copper/70 normal-case font-normal">✦ autofilled</span>}
+          </label>
           <input
             value={website}
-            onChange={(e) => { setWebsite(e.target.value); setSaved(false); }}
+            onChange={(e) => { setWebsite(e.target.value); clearSigFilled('website'); setSaved(false); }}
             className="w-full border border-brand-silver/30 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown"
             placeholder="https://"
           />

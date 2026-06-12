@@ -823,6 +823,8 @@ export async function updateEvent(id: string, programId: string, data: Partial<{
   event_type: string;
   description: string | null;
   sort_order: number;
+  budget_amount: number | null;
+  budget_basis: string | null;
 }>): Promise<{ error: string | null }> {
   const supabase = await createClient();
   const { error } = await supabase.from('events').update(data).eq('id', id);

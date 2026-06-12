@@ -410,6 +410,8 @@ export default async function ProgramPage({ params }: Props) {
     description: ev.description,
     cards: eventCardMap.get(ev.id) ?? [],
     budgetEntry: budgetEntries.find((e) => e.linked_event_id === ev.id) ?? null,
+    budget_amount: ev.budget_amount,
+    budget_basis: ev.budget_basis,
   }));
 
   return (

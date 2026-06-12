@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { normalizeAddress, normalizeName, normalizeCity } from '@/lib/venues/normalize';
 import { validateVenueInput } from '@/lib/venues/validate';
+import Anthropic from '@anthropic-ai/sdk';
 
 // ─── Venues ──────────────────────────────────────────────
 
@@ -498,4 +499,52 @@ export async function createMarket(name: string): Promise<{ name: string | null;
   if (error) return { name: null, error: error.message };
   revalidatePath('/venues');
   return { name: trimmed, error: null };
+}
+
+// ─── Email signature parser ───────────────────────────────
+
+export interface ParsedSignature {
+  name: string | null;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+}
+
+function parseSignatureWithRegex(text: string): ParsedSignature {
+  const emailMatch = text.match(/[\w.!#$%&'*+/=?^`{|}~-]+@[\w.-]+\.\w{2,}/);
+  const phoneMatch = text.match(/(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}/);
+  const websiteMatch = text.match(/https?:\/\/[\w./\-?=%&]+|www\.[\w./\-?=%&]+/i);
+  return {
+    name: null,
+    title: null,
+    email: emailMatch ? emailMatch[0] : null,
+    phone: phoneMatch ? phoneMatch[0].trim() : null,
+    website: websiteMatch ? websiteMatch[0] : null,
+  };
+}
+
+export async function parseEmailSignature(text: string): Promise<ParsedSignature> {
+  try {
+    const client = new Anthropic();
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 512,
+      messages: [{
+        role: 'user',
+        content: `Extract contact info from this email signature as JSON with keys: name, title, email, phone, website. Use null for missing fields. Return ONLY valid JSON, no other text.\n\n${text}`,
+      }],
+    });
+    const raw = response.content[0].type === 'text' ? response.content[0].text.trim() : '';
+    const parsed = JSON.parse(raw);
+    return {
+      name: typeof parsed.name === 'string' ? parsed.name : null,
+      title: typeof parsed.title === 'string' ? parsed.title : null,
+      email: typeof parsed.email === 'string' ? parsed.email : null,
+      phone: typeof parsed.phone === 'string' ? parsed.phone : null,
+      website: typeof parsed.website === 'string' ? parsed.website : null,
+    };
+  } catch {
+    return parseSignatureWithRegex(text);
+  }
 }

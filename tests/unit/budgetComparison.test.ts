@@ -286,3 +286,66 @@ describe('combineEstimatesToBudget', () => {
     expect(result.remaining).toBe(25000); // pinned midpoint
   });
 });
+
+// ─── event-level budget (single-point target from events.budget_amount) ──────
+
+describe('event-level budget — overall (flat) basis', () => {
+  function makeTarget(amount: number): BudgetTarget {
+    return { pricingBasis: 'flat', valueLow: amount, valueHigh: amount, pinnedValue: amount, guestCount: 50 };
+  }
+
+  it('under budget: total < budget_amount → status under, negative delta', () => {
+    const result = compareEstimateToBudget('est-1', 8000, 50, makeTarget(10000));
+    expect(result.status).toBe('under');
+    expect(result.delta).toBe(-2000);
+    expect(result.pricingBasis).toBe('flat');
+  });
+
+  it('at budget: total === budget_amount → status within_range, delta 0', () => {
+    const result = compareEstimateToBudget('est-1', 10000, 50, makeTarget(10000));
+    expect(result.status).toBe('within_range');
+    expect(result.delta).toBe(0);
+  });
+
+  it('over budget: total > budget_amount → status over, positive delta', () => {
+    const result = compareEstimateToBudget('est-1', 12000, 50, makeTarget(10000));
+    expect(result.status).toBe('over');
+    expect(result.delta).toBe(2000);
+  });
+});
+
+describe('event-level budget — per_person basis', () => {
+  function makeTarget(amount: number, guestCount: number): BudgetTarget {
+    return { pricingBasis: 'per_person', valueLow: amount, valueHigh: amount, pinnedValue: amount, guestCount };
+  }
+
+  it('under budget: pricePerPerson < budget_amount → status under', () => {
+    // ceil(3750/50) = 75; budget = 85; delta = -10
+    const result = compareEstimateToBudget('est-1', 3750, 50, makeTarget(85, 50));
+    expect(result.status).toBe('under');
+    expect(result.delta).toBe(-10);
+    expect(result.pricingBasis).toBe('per_person');
+  });
+
+  it('at budget: pricePerPerson === budget_amount → status within_range, delta 0', () => {
+    // ceil(4250/50) = 85; budget = 85
+    const result = compareEstimateToBudget('est-1', 4250, 50, makeTarget(85, 50));
+    expect(result.status).toBe('within_range');
+    expect(result.delta).toBe(0);
+  });
+
+  it('over budget: pricePerPerson > budget_amount → status over, positive delta', () => {
+    // ceil(4500/50) = 90; budget = 85; delta = +5
+    const result = compareEstimateToBudget('est-1', 4500, 50, makeTarget(85, 50));
+    expect(result.status).toBe('over');
+    expect(result.delta).toBe(5);
+  });
+
+  it('guestCount in target is NOT used to scale the pp budget (no pp×guests comparison)', () => {
+    // If scaling were applied: budget = 85×50 = 4250, total = 3750, delta = -500
+    // Correct: pricePerPerson = ceil(3750/50) = 75 vs budget = 85/pp, delta = -10
+    const result = compareEstimateToBudget('est-1', 3750, 50, makeTarget(85, 50));
+    expect(result.delta).toBe(-10);      // not -500
+    expect(result.budgetPinned).toBe(85); // pp pinned, not 85×50=4250
+  });
+});

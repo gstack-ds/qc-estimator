@@ -307,6 +307,8 @@ export interface DbEvent {
   name: string;
   event_date: string | null;
   start_time: string | null;
+  budget_amount: number | null;
+  budget_basis: 'overall' | 'per_person' | null;
   end_time: string | null;
   guest_count: number;
   event_type: string;
@@ -320,7 +322,7 @@ export async function getEvent(id: string): Promise<DbEvent | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('events')
-    .select('id, program_id, name, event_date, start_time, end_time, guest_count, event_type, description, sort_order, created_at, updated_at')
+    .select('id, program_id, name, event_date, start_time, end_time, guest_count, event_type, description, sort_order, budget_amount, budget_basis, created_at, updated_at')
     .eq('id', id)
     .single();
   if (error) return null;
@@ -331,7 +333,7 @@ export async function getEventsForProgram(programId: string): Promise<DbEvent[]>
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('events')
-    .select('id, program_id, name, event_date, start_time, end_time, guest_count, event_type, description, sort_order, created_at, updated_at')
+    .select('id, program_id, name, event_date, start_time, end_time, guest_count, event_type, description, sort_order, budget_amount, budget_basis, created_at, updated_at')
     .eq('program_id', programId)
     .order('event_date', { ascending: true, nullsFirst: true });
   if (error) throw new Error(error.message);

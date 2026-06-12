@@ -72,6 +72,8 @@ export interface EventRow {
   description: string | null;
   cards: EstimateCard[];
   budgetEntry: DbBudgetPlanEntry | null;
+  budget_amount: number | null;
+  budget_basis: 'overall' | 'per_person' | null;
 }
 
 interface Props {
@@ -355,6 +357,8 @@ function EventCard({
   const [editEndTime, setEditEndTime] = useState('');
   const [editGuestCount, setEditGuestCount] = useState(0);
   const [editEventType, setEditEventType] = useState('');
+  const [editBudgetAmount, setEditBudgetAmount] = useState('');
+  const [editBudgetBasis, setEditBudgetBasis] = useState<'overall' | 'per_person'>('overall');
 
   const cfg = getEventTypeConfig(event.event_type);
 
@@ -371,8 +375,22 @@ function EventCard({
   const budgetTarget = event.budgetEntry
     ? budgetTargetFromEntry(event.budgetEntry, event.guest_count > 0 ? event.guest_count : 0)
     : null;
-  const combineResult = budgetTarget && comparisonMode === 'combine'
-    ? combineEstimatesToBudget(cards, budgetTarget)
+
+  // Event-level budget takes precedence over budget plan entry for compare_each badges.
+  const eventBudgetTarget: BudgetTarget | null =
+    event.budget_amount !== null && event.budget_amount > 0
+      ? {
+          pricingBasis: event.budget_basis === 'per_person' ? 'per_person' : 'flat',
+          valueLow: event.budget_amount,
+          valueHigh: event.budget_amount,
+          pinnedValue: event.budget_amount,
+          guestCount: event.guest_count,
+        }
+      : null;
+
+  const activeBudgetTarget = eventBudgetTarget ?? budgetTarget;
+  const combineResult = activeBudgetTarget && !eventBudgetTarget && comparisonMode === 'combine'
+    ? combineEstimatesToBudget(cards, activeBudgetTarget)
     : null;
 
   function handleEditClick() {
@@ -382,6 +400,8 @@ function EventCard({
     setEditEndTime(event.end_time ?? '');
     setEditGuestCount(event.guest_count);
     setEditEventType(event.event_type);
+    setEditBudgetAmount(event.budget_amount !== null ? String(event.budget_amount) : '');
+    setEditBudgetBasis(event.budget_basis ?? 'overall');
     setIsEditing(true);
   }
 
@@ -389,6 +409,7 @@ function EventCard({
     const trimmed = editName.trim();
     if (!trimmed) return;
     setSaving(true);
+    const parsedBudget = editBudgetAmount !== '' ? parseFloat(editBudgetAmount) : null;
     const data = {
       name: trimmed,
       event_date: editDate || null,
@@ -396,6 +417,8 @@ function EventCard({
       end_time: editEndTime || null,
       guest_count: editGuestCount,
       event_type: editEventType,
+      budget_amount: parsedBudget,
+      budget_basis: parsedBudget !== null && parsedBudget > 0 ? editBudgetBasis : null,
     };
     await updateEvent(event.id, programId, data);
     onUpdate(event.id, data);
@@ -473,6 +496,29 @@ function EventCard({
               className="border border-brand-cream rounded px-2 py-1 text-xs focus:outline-none focus:border-brand-brown w-20"
               placeholder="Guests"
             />
+            <div className="flex items-center gap-1 border border-brand-cream rounded overflow-hidden flex-shrink-0">
+              <span className="text-xs text-brand-silver px-1.5">$</span>
+              <input
+                type="number"
+                min={0}
+                value={editBudgetAmount}
+                onChange={(e) => setEditBudgetAmount(e.target.value)}
+                className="py-1 text-xs focus:outline-none w-20 border-l border-brand-cream px-1.5"
+                placeholder="Budget"
+              />
+              <div className="flex border-l border-brand-cream">
+                {(['overall', 'per_person'] as const).map((basis) => (
+                  <button
+                    key={basis}
+                    type="button"
+                    onClick={() => setEditBudgetBasis(basis)}
+                    className={`text-xs px-2 py-1 transition-colors ${editBudgetBasis === basis ? 'bg-brand-brown text-white' : 'text-brand-silver hover:text-brand-charcoal'}`}
+                  >
+                    {basis === 'overall' ? 'Total' : '/pp'}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="flex items-center gap-1 ml-auto">
               <button
                 onClick={handleSave}
@@ -524,6 +570,12 @@ function EventCard({
             {event.guest_count > 0 ? `${event.guest_count.toLocaleString()} guests` : ''}
           </span>
 
+          {event.budget_amount !== null && event.budget_amount > 0 && (
+            <span className="text-xs bg-brand-charcoal/8 text-brand-charcoal/50 border border-brand-cream rounded px-1.5 py-0.5 flex-shrink-0">
+              ${event.budget_amount.toLocaleString('en-US')}{event.budget_basis === 'per_person' ? '/pp' : ''}
+            </span>
+          )}
+
           <button
             onClick={handleEditClick}
             className="text-brand-silver hover:text-brand-charcoal transition-colors flex-shrink-0 text-xs"
@@ -548,8 +600,8 @@ function EventCard({
             <p className="text-xs text-brand-silver">{event.description}</p>
           )}
 
-          {/* Comparison mode toggle */}
-          {event.budgetEntry && (
+          {/* Comparison mode toggle — hidden when event has its own budget */}
+          {event.budgetEntry && !eventBudgetTarget && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-brand-silver/60 font-medium uppercase tracking-wide">Budget mode</span>
               <div className="flex bg-brand-offwhite border border-brand-cream rounded-md p-0.5 gap-0.5">
@@ -588,8 +640,8 @@ function EventCard({
                         const isLowest = groupLowest !== null && card.total === groupLowest && card.total > 0;
                         const isBestMargin = groupBestMargin !== null && card.qcMarginPct === groupBestMargin && card.total > 0;
                         let deltaInfo: DeltaInfo | undefined;
-                        if (budgetTarget && comparisonMode === 'compare_each' && card.includeInBudget && card.total > 0) {
-                          const result = compareEstimateToBudget(card.id, card.total, event.guest_count, budgetTarget);
+                        if (activeBudgetTarget && (eventBudgetTarget || comparisonMode === 'compare_each') && card.includeInBudget && card.total > 0) {
+                          const result = compareEstimateToBudget(card.id, card.total, event.guest_count, activeBudgetTarget);
                           deltaInfo = { delta: result.delta, status: result.status, budgetLow: result.budgetLow, budgetHigh: result.budgetHigh, pricingBasis: result.pricingBasis };
                         }
                         return (
