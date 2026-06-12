@@ -348,8 +348,7 @@ export default async function ProgramPage({ params }: Props) {
     const { card, pnlRow } = buildEstimateData(est, items, markups, programConfig, tiers, transportAgg);
     cardMap.set(est.id, card);
     if (est.include_in_budget) pnlRows.push(pnlRow);
-    // Always include in budget export (all estimates, not just include_in_budget)
-    budgetEstimates.push(buildBudgetEstimate(est, items, markups, programConfig, tiers));
+    if (est.included_in_proposal) budgetEstimates.push(buildBudgetEstimate(est, items, markups, programConfig, tiers));
   }
 
   // Programme-level travel total
@@ -400,7 +399,6 @@ export default async function ProgramPage({ params }: Props) {
     }
   }
 
-  // Build EventRow[] in sort order
   const eventRows: EventRow[] = dbEvents.map((ev) => ({
     id: ev.id,
     name: ev.name,
@@ -410,7 +408,6 @@ export default async function ProgramPage({ params }: Props) {
     guest_count: ev.guest_count,
     event_type: ev.event_type,
     description: ev.description,
-    sort_order: ev.sort_order,
     cards: eventCardMap.get(ev.id) ?? [],
     budgetEntry: budgetEntries.find((e) => e.linked_event_id === ev.id) ?? null,
   }));
