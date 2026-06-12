@@ -8,6 +8,7 @@ export interface ExtractedVendorSpace {
   name: string;
   capacity_seated?: number | null;
   capacity_standing?: number | null;
+  room_fee?: number | null;
   fb_minimum?: number | null;
 }
 
@@ -85,6 +86,7 @@ function normalizeSpaces(raw: unknown): ExtractedVendorSpace[] {
       name,
       capacity_seated:   coerceNum(sr.capacity_seated),
       capacity_standing: coerceNum(sr.capacity_standing),
+      room_fee:          coerceNum(sr.room_fee),
       fb_minimum:        coerceNum(sr.fb_minimum),
     }];
   });

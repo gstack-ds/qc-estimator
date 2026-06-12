@@ -303,3 +303,90 @@ describe('mapBarToLineItems', () => {
     expect(items).toHaveLength(1);
   });
 });
+
+// ─── Price text stripping ─────────────────────────────────
+// Claude sometimes embeds price info in item/menu names.
+// Descriptions are client-facing — prices belong only in the cost field.
+
+describe('price text stripped from menu item names', () => {
+  it('strips "- $30 Per Person" suffix from course item name', () => {
+    const menu: VendorMenu = {
+      id: 'm-price-1',
+      name: 'Catering Package',
+      courses: [
+        {
+          id: 'c1',
+          name: 'Appetizers',
+          items: [{ id: 'i1', name: "Hors D'Oeuvres Display - $30 Per Person" }],
+        },
+      ],
+    };
+    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, 50, 0);
+    expect(item.name).toBe("Hors D'Oeuvres Display");
+  });
+
+  it('strips "- $95 per person" suffix from menu name (menu-level price)', () => {
+    const menu: VendorMenu = {
+      id: 'm-price-2',
+      name: 'Gold Package - $95 per person',
+      price_per_person: 95,
+      courses: [],
+    };
+    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, 80, 0);
+    expect(item.name).toBe('Gold Package');
+  });
+
+  it('strips "($45)" parenthetical price suffix', () => {
+    const menu: VendorMenu = {
+      id: 'm-price-3',
+      name: 'Chicken Dinner',
+      courses: [
+        {
+          id: 'c1',
+          name: 'Mains',
+          items: [{ id: 'i1', name: 'Filet Mignon ($85)' }],
+        },
+      ],
+    };
+    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, 50, 0);
+    expect(item.name).toBe('Filet Mignon');
+  });
+
+  it('strips "$30/pp" suffix', () => {
+    const menu: VendorMenu = {
+      id: 'm-price-4',
+      name: 'Buffet',
+      courses: [
+        {
+          id: 'c1',
+          name: 'Stations',
+          items: [{ id: 'i1', name: 'Pasta Station $30/pp' }],
+        },
+      ],
+    };
+    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, 50, 0);
+    expect(item.name).toBe('Pasta Station');
+  });
+
+  it('leaves names without price text unchanged', () => {
+    const menu: VendorMenu = {
+      id: 'm-price-5',
+      name: 'Breakfast Package',
+      price_per_person: 45,
+      courses: [],
+    };
+    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, 50, 0);
+    expect(item.name).toBe('Breakfast Package');
+  });
+
+  it('strips price from bar option name', () => {
+    const bar: BarOption = {
+      id: 'b-price-1',
+      name: 'Open Bar - $55 Per Person',
+      price_per_person: 55,
+      categories: [],
+    };
+    const [item] = mapBarToLineItems(bar, null, FB_SECTION, CATERING_MARKUP, 50, 0);
+    expect(item.name).toBe('Open Bar');
+  });
+});

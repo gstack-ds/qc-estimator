@@ -34,6 +34,13 @@ export interface MenuLineItem {
   isNew: true;
 }
 
+// Strip trailing price text from item/menu names before using them as line item names.
+// Prices belong only in the cost field, not in client-facing descriptions.
+// Handles: "- $30 Per Person", " $30/pp", " ($45)", " $25", etc.
+function stripPriceText(s: string): string {
+  return s.replace(/\s*[-–—(]?\s*\$[\d,]+(?:\.\d+)?(?:\s*(?:per\s+person?|\/pp?\b|p\.p\.|each))?\s*\)?\s*$/i, '').trim();
+}
+
 /**
  * Maps a VendorMenu to a list of line items for import into an estimate.
  *
@@ -73,20 +80,20 @@ export function mapMenuToLineItems(
   }
 
   if (menu.price_per_person != null) {
-    items.push(makeItem(menu.name, menu.price_per_person));
+    items.push(makeItem(stripPriceText(menu.name), menu.price_per_person));
     return items;
   }
 
   // No menu-level price — flatten all course items
   for (const course of menu.courses) {
     for (const item of course.items) {
-      items.push(makeItem(item.name, item.price ?? 0));
+      items.push(makeItem(stripPriceText(item.name), item.price ?? 0));
     }
   }
 
   // Fallback: no items at all
   if (items.length === 0) {
-    items.push(makeItem(menu.name, 0));
+    items.push(makeItem(stripPriceText(menu.name), 0));
   }
 
   return items;
@@ -113,7 +120,7 @@ export function mapBarToLineItems(
     sectionId: section.id,
     section: section.name,
     taxBucket: section.taxBucket,
-    name: opt.name,
+    name: stripPriceText(opt.name),
     qty: guestCount,
     unitPrice: pricePP,
     categoryId: markup.id,

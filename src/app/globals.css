@@ -4,9 +4,24 @@
 
 /* ── Brochure print styles ───────────────────────────────────────────────── */
 @media print {
-  /* Hide everything except the brochure */
-  body > * { display: none !important; }
-  body [data-brochure-page] { display: block !important; }
+  /*
+   * visibility:hidden on body makes the whole tree invisible but keeps it in
+   * layout, so descendants can override with visibility:visible.
+   * display:none on a parent prevents descendants from overriding — which is
+   * why the old "body > * { display:none } + [data-brochure-page] { display:block }"
+   * approach produced a blank page.
+   */
+  body { visibility: hidden; }
+
+  [data-brochure-page] {
+    visibility: visible;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+
+  [data-brochure-page] * { visibility: visible; }
 
   @page {
     margin: 0.6in 0.75in;
@@ -14,7 +29,6 @@
   }
 
   .brochure-root {
-    display: block !important;
     color: #464543 !important;
     background: #fff !important;
     -webkit-print-color-adjust: exact;

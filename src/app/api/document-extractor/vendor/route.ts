@@ -39,6 +39,7 @@ Return this exact JSON shape:
         "name": "space/room name (required)",
         "capacity_seated": 200,
         "capacity_standing": 350,
+        "room_fee": 3500,
         "fb_minimum": 15000
       }
     ],
@@ -93,7 +94,7 @@ Notes:
 - dietary_tags: only use these exact values: V (Vegetarian), VG (Vegan), GF (Gluten-Free), DF (Dairy-Free), NF (Nut-Free). Omit the field if none apply.
 - price fields: use numbers, not strings. Use null if no price listed.
 - capacities: use integers. Use null if not stated.
-- spaces: include all rooms/event spaces found.
+- spaces: include all rooms/event spaces found. Use room_fee for a flat rental charge to hire the space (e.g. "Full Rental $3,500"). Use fb_minimum for a minimum food-and-beverage spend requirement (e.g. "Food and Beverage Minimum: $2,000"). These are often listed separately — keep them in their respective fields.
 - menus: include all menus/packages found, even if they share the same items. Extract ALL items in each menu.
 - inclusions: short plain-English strings only.
 - Do NOT include fields with null or empty values unless the field is required.`;
