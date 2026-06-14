@@ -44,8 +44,87 @@ qc-estimator/
 ├── .gitignore
 ├── CLAUDE.md                   # This file
 ├── PRD.md                      # Product requirements
-└── README.md
+├── README.md
+└── mcp-server/                 # Standalone MCP server (read-only Claude integration)
+    ├── package.json
+    ├── tsconfig.json
+    ├── vitest.config.ts
+    ├── .env.example            # Copy to .env — needs SUPABASE_SERVICE_ROLE_KEY
+    └── src/
+        ├── index.ts            # Server entry (stdio transport)
+        ├── db.ts               # Supabase service-role client factory
+        └── tools/              # One file per tool group
+            ├── programs.ts     # list_programs, get_program
+            ├── estimates.ts    # list_estimates, get_estimate
+            ├── venues.ts       # search_venues, get_venue
+            └── pipeline.ts     # get_pipeline
 ```
+
+## MCP Server (Claude Desktop Integration)
+
+`mcp-server/` is a standalone Node.js process that exposes QC Estimator data to Claude via the Model Context Protocol. It is **read-only** — no mutations, no auth tokens in the browser, service role key server-side only.
+
+### Architecture
+- **Transport:** stdio (local Claude Desktop). Swap to HTTP/SSE transport in `index.ts` for remote access.
+- **DB access:** `@supabase/supabase-js` with `SUPABASE_SERVICE_ROLE_KEY` — bypasses RLS, so this server must only run locally.
+- **Shared contract:** `src/lib/contracts/deckContract.ts` — pure TypeScript, no Next.js imports. The `DeckContract` type and `buildDeckContract()` function are imported by the MCP server and can also be imported by the PDF generator. The builder calls `calculateVenueEstimate` + `calculateMarginAnalysis` internally; never hand-rolls math.
+- **Never imports:** `src/lib/supabase/queries.ts` (uses `next/headers`) or any `'use server'` file.
+
+### Tools
+| Tool | Description |
+|------|-------------|
+| `list_programs` | Filter by status, client name, date range |
+| `get_program` | Full program with events, estimates summary, staffing, linked lead |
+| `list_estimates` | Filter by program_id, estimate_type, included_in_proposal |
+| `get_estimate` | Full `DeckContract` with engine-computed totals + margin analysis (transportation → `TransportSummary`) |
+| `search_venues` | Text search by name/city, filter by vendor_type and market |
+| `get_venue` | Full venue profile with spaces, capacities, fee defaults |
+| `get_pipeline` | Leads grouped into Kanban lanes by status (open/closed/all) |
+
+### Setup
+```bash
+# 1. Install dependencies
+cd mcp-server && npm install
+
+# 2. Create env file
+cp mcp-server/.env.example mcp-server/.env
+# Edit mcp-server/.env — add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
+
+# 3. Test locally
+cd mcp-server && npm test
+
+# 4. Run (for manual testing)
+npx tsx mcp-server/src/index.ts
+```
+
+### Claude Desktop Configuration
+Add to `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+```json
+{
+  "mcpServers": {
+    "qc-estimator": {
+      "command": "npx",
+      "args": ["tsx", "C:\\Users\\garys\\Documents\\QC Event Design\\qc estimator\\mcp-server\\src\\index.ts"],
+      "env": {
+        "SUPABASE_URL": "https://your-project.supabase.co",
+        "SUPABASE_SERVICE_ROLE_KEY": "your-service-role-key"
+      }
+    }
+  }
+}
+```
+Restart Claude Desktop after editing the config.
+
+### Tests
+- `npm test` (root) — runs both main app tests and MCP server tests (778 total)
+- `cd mcp-server && npm test` — runs only MCP server tests (36 tests)
+- `tests/unit/deckContract.test.ts` — 12 tests covering the shared contract builder
+
+### Adding a new tool
+1. Add handler + Zod schema to the appropriate file in `mcp-server/src/tools/`
+2. Import and register in `mcp-server/src/index.ts` via `server.tool(...)`
+3. Add tests in `mcp-server/src/__tests__/tools/`
+4. The handler receives `db: SupabaseClient` as its first arg for testability
 
 ## Critical Business Logic
 
@@ -413,9 +492,11 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Migrations 045 + 046 run in production.
 
 - [x] /vendors → /venues permanent redirect in next.config.js (fbc4128) — QA surfaced the mismatch between nav label "Vendors" and the actual /venues route.
+- [x] MCP server Phase 1 (read-only Claude integration): mcp-server/ standalone Node.js process; 7 tools (list_programs, get_program, list_estimates, get_estimate, search_venues, get_venue, get_pipeline); shared DeckContract type + buildDeckContract() in src/lib/contracts/deckContract.ts (calls pricing engine, never hand-rolls math); 49 new tests (778 total, 36 in standalone mcp-server suite). See CLAUDE.md MCP Server section for Claude Desktop setup.
 
 ### Next Session Start
-- 729 tests passing. Migrations 045 + 046 both in production.
+- 778 tests passing. Migrations 045 + 046 both in production.
+- MCP server: copy mcp-server/.env.example to mcp-server/.env and add Supabase creds, then add to Claude Desktop config (see CLAUDE.md → MCP Server section).
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in Slide Copy preview; she swaps in Canva).
 - Venue profile attachment downloads: signed URL generation is the next small task.
 - Proposal validation against Excel is the next quality check — enter the 3 scenarios from proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values.
