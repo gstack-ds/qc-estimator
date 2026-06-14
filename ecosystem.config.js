@@ -18,6 +18,18 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
     },
     {
+      name: 'qc-cloudflared',
+      script: 'scripts/run-cloudflared.js',
+      cwd: __dirname,
+      watch: false,
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 5000,
+      error_file: 'logs/cloudflared-error.log',
+      out_file: 'logs/cloudflared-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+    },
+    {
       name: 'qc-lead-scanner',
       script: 'scripts/run-scanner.js',
       cwd: __dirname,
