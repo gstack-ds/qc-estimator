@@ -412,6 +412,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Email signature autofill on vendor form: parseEmailSignature server action (claude-haiku-4-5-20251001 → regex fallback); paste into Email Signature textarea triggers parse; fills only empty contact fields (name/title/email/phone/website); ✦ autofilled indicator on labels, clears on manual edit; parsingSig state shows "parsing…" during API call.
 - [x] Migrations 045 + 046 run in production.
 
+- [x] /vendors → /venues permanent redirect in next.config.js (fbc4128) — QA surfaced the mismatch between nav label "Vendors" and the actual /venues route.
+
 ### Next Session Start
 - 729 tests passing. Migrations 045 + 046 both in production.
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in Slide Copy preview; she swaps in Canva).
