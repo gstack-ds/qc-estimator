@@ -1,3 +1,7 @@
+import path from 'path';
+import dotenv from 'dotenv';
+dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env') });
+
 import express from 'express';
 import { renderPdf } from './render';
 import type { DeckRenderRequest } from '../../src/lib/deck/types';
@@ -40,6 +44,6 @@ app.post('/render', async (req, res) => {
   }
 });
 
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`[deck-renderer] listening on 127.0.0.1:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[deck-renderer] listening on 0.0.0.0:${PORT}`);
 });

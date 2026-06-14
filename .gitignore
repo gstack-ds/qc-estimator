@@ -37,3 +37,7 @@ next-env.d.ts
 data/processed-ids.json
 logs/
 scripts/run-scanner.js
+
+# Deck renderer build artifact
+deck-renderer/dist/
+deck-renderer/package-lock.json
