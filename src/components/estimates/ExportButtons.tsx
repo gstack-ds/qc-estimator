@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import GenerateDeckButton from '@/components/deck/GenerateDeckButton';
 import type { EstimateSummary, Location } from '@/types';
 import {
   buildDetailedCopyText,
@@ -35,7 +36,7 @@ interface Props {
 // ─── Component ────────────────────────────────────────────
 
 export default function ExportButtons({
-  programId: _programId,
+  programId,
   programName,
   estimateId,
   estimateName,
@@ -175,6 +176,11 @@ export default function ExportButtons({
       <button onClick={handleExportPdf} disabled={pdfExporting} className={btnClass + (pdfExporting ? ' opacity-50' : '')}>
         {pdfExporting ? 'Generating PDF…' : 'Export Proposal PDF'}
       </button>
+      <GenerateDeckButton
+        mode="estimate"
+        estimateId={estimateId}
+        filename={estimateName || programName}
+      />
     </div>
   );
 }

@@ -34,6 +34,7 @@ import { type EstimateCard } from '@/components/estimates/ComparisonView';
 import DeleteProgramButton from '@/components/estimates/DeleteProgramButton';
 import ProgramPnLPanel, { type PnLRow } from '@/components/estimates/ProgramPnLPanel';
 import ProgramStatusDropdown from '@/components/programs/ProgramStatusDropdown';
+import GenerateDeckButton from '@/components/deck/GenerateDeckButton';
 import StaffingSection from '@/components/programs/StaffingSection';
 import BudgetPlanSection from '@/components/programs/BudgetPlanSection';
 import type { ProgramStatus } from '@/lib/programs/constants';
@@ -438,6 +439,7 @@ export default async function ProgramPage({ params }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          <GenerateDeckButton mode="program" programId={id} filename={program.name} />
           <BudgetExportButton data={budgetExportData} />
           <DeleteProgramButton programId={id} />
         </div>
