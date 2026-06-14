@@ -45,19 +45,25 @@ qc-estimator/
 ├── CLAUDE.md                   # This file
 ├── PRD.md                      # Product requirements
 ├── README.md
-└── mcp-server/                 # Standalone MCP server (read-only Claude integration)
+├── mcp-server/                 # Standalone MCP server (read-only Claude integration)
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── vitest.config.ts
+│   ├── .env.example            # Copy to .env — needs SUPABASE_SERVICE_ROLE_KEY
+│   └── src/
+│       ├── index.ts            # Server entry (stdio transport)
+│       ├── db.ts               # Supabase service-role client factory
+│       └── tools/              # One file per tool group
+│           ├── programs.ts     # list_programs, get_program
+│           ├── estimates.ts    # list_estimates, get_estimate
+│           ├── venues.ts       # search_venues, get_venue
+│           └── pipeline.ts     # get_pipeline
+└── deck-renderer/              # Standalone Puppeteer PDF renderer (PM2, not Vercel)
     ├── package.json
     ├── tsconfig.json
-    ├── vitest.config.ts
-    ├── .env.example            # Copy to .env — needs SUPABASE_SERVICE_ROLE_KEY
     └── src/
-        ├── index.ts            # Server entry (stdio transport)
-        ├── db.ts               # Supabase service-role client factory
-        └── tools/              # One file per tool group
-            ├── programs.ts     # list_programs, get_program
-            ├── estimates.ts    # list_estimates, get_estimate
-            ├── venues.ts       # search_venues, get_venue
-            └── pipeline.ts     # get_pipeline
+        ├── index.ts            # Express server — POST /render, X-Renderer-Secret auth
+        └── render.ts           # renderPdf() — Puppeteer wrapper around buildDeckHtml
 ```
 
 ## MCP Server (Claude Desktop Integration)
@@ -125,6 +131,44 @@ Restart Claude Desktop after editing the config.
 2. Import and register in `mcp-server/src/index.ts` via `server.tool(...)`
 3. Add tests in `mcp-server/src/__tests__/tools/`
 4. The handler receives `db: SupabaseClient` as its first arg for testability
+
+## Generate Deck (Branded PDF Proposals)
+
+`Generate Deck` turns an estimate or program into a branded PDF proposal via three layers:
+
+**Layer 1 — DeckContract** (`src/lib/contracts/deckContract.ts`): already exists. `buildDeckContract()` calls the pricing engine and returns a fully-typed `DeckContract`. Never modified by this feature.
+
+**Layer 2 — Narrative** (server-side, no prices ever):
+- `src/lib/deck/types.ts` — server-free shared types: `NarrativeOutputSchema` (Zod, all string fields, zero numeric), `defaultNarrative()` fallback, `DeckRenderSlide`, `DeckRenderRequest/Response`
+- `src/lib/deck/renderer.ts` — `buildDeckHtml(slides)` pure function (no Puppeteer); testable in Vitest
+- `src/app/(programs)/deck/actions.ts` — `generateDeckForEstimate` + `generateDeckForProgram` server actions; calls claude-sonnet-4-6 with descriptive-only context (no dollar figures); retries once then degrades to `defaultNarrative`
+- `src/components/deck/GenerateDeckButton.tsx` — client button on estimate + program pages; base64 PDF → download
+
+**Layer 3 — Renderer** (`deck-renderer/`):
+- Standalone Express service; auth via `X-Renderer-Secret` header
+- Full `puppeteer` (not puppeteer-core)
+- Imports `buildDeckHtml` from `../../src/lib/deck/renderer`
+- Runs on PM2 box (same machine as Gmail scanner); accessible over Tailscale
+
+### Setup
+```bash
+# 1. Install renderer dependencies and compile
+cd deck-renderer && npm install && npm run build
+
+# 2. Set environment variables
+#    On PM2 box: RENDERER_SECRET=<secret>  (and optionally RENDERER_PORT=3001)
+#    On Vercel:  RENDERER_URL=http://<tailscale-ip>:3001  RENDERER_SECRET=<same secret>
+
+# 3. Start via PM2
+pm2 start ecosystem.config.js --only qc-deck-renderer
+```
+
+### Key invariants
+- `RENDERER_URL` / `RENDERER_SECRET` missing → button shows error, no crash
+- Narrative failure → retries once → falls back to `defaultNarrative` — PDF always renders
+- Grand total in PDF == `contract.summary.totalClient` (enforced by `data-deck-total` attribute + tests)
+- All sections including `__orphan__` (rendered as "Uncategorized") always appear
+- `NarrativeOutputSchema` has zero numeric fields — structural guarantee; tested
 
 ## Critical Business Logic
 
@@ -326,6 +370,8 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-06-07 | mathRates tax rate fields follow effectiveLocation pattern (override ?? locationDefault) | mathRates drives Show Math formula display; if it diverges from the engine's effectiveConfig, the formula shows a rate inconsistent with the computed dollar amount. The fix mirrors the effectiveLocation useMemo pattern already present in EstimateBuilder. | Use programConfig.location.* directly (shows wrong rate when override is set) |
 | 2026-06-09 | Two-way venue sync: loop guard via spaceAutoFilledRef | Part 1 (space → estimate auto-fill) and Part 2 (estimate → vendor write-back) must not cycle. Stamping spaceAutoFilledRef.current.fbMinimum inside handleVenueAutoFill; handleFbMinimumWriteBack bails when isAutoFilled() returns true. Scenario A1 auto-saves when vendor is blank; A2 prompts when differing. Scenario B (no space selected, typed name) offers inline "Add space" card with capacity inputs. | No guard (infinite loop); always prompt (noisy for normal space selections) |
 | 2026-06-09 | Budget compare_each per_person: compareEstimateToBudget branched on pricingBasis | compare_each with per_person basis should compare $/pp against the pp budget range, not total vs budget×guestCount. Added pricingBasis to EstimateVsBudget; per_person path uses pricePerPerson vs valueLow/valueHigh directly. combine mode unchanged (totals vs scaled budget is correct for a progress bar). | Keep single effectiveBudgetFlat path (wrong for per_person compare_each — confirmed by 6 failing tests) |
+| 2026-06-14 | Generate Deck: narrative types in server-free src/lib/deck/types.ts; HTML builder in src/lib/deck/renderer.ts (testable without Puppeteer); Puppeteer in standalone deck-renderer/ service | Client components import from types.ts (no next/headers). renderer.ts is imported by both Vitest tests AND the deck-renderer service (same pattern as mcp-server importing deckContract). Excluded deck-renderer/ from root tsconfig.json. | All in one file (next/headers boundary violation); skip buildDeckHtml test (untestable = no fidelity guarantee) |
+| 2026-06-14 | Generate Deck: narrative uses Zod schema with zero numeric fields as structural guarantee | The AI cannot emit a price into the proposal copy. All schema fields are ZodString or ZodRecord(string). Validated by test: all shape values instanceof ZodString / ZodRecord with ZodString values. | TypeScript interface only (no runtime validation — model could still emit numbers); reject numeric responses (would break on any unexpected field) |
 
 ## Gotchas Log
 
@@ -494,8 +540,11 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] /vendors → /venues permanent redirect in next.config.js (fbc4128) — QA surfaced the mismatch between nav label "Vendors" and the actual /venues route.
 - [x] MCP server Phase 1 (read-only Claude integration): mcp-server/ standalone Node.js process; 7 tools (list_programs, get_program, list_estimates, get_estimate, search_venues, get_venue, get_pipeline); shared DeckContract type + buildDeckContract() in src/lib/contracts/deckContract.ts (calls pricing engine, never hand-rolls math); 49 new tests (778 total, 36 in standalone mcp-server suite at time of writing). See CLAUDE.md MCP Server section for Claude Desktop setup.
 
+- [x] Generate Deck feature: Layers 1+2+3 — DeckContract (existing), narrative (claude-sonnet-4-6, Zod schema, retry+degrade), renderer service (Express + Puppeteer on PM2 box, Tailscale access); GenerateDeckButton on estimate + program pages; 19 new tests (800 total). Branch: deck-generator.
+
 ### Next Session Start
-- 781 tests passing (38 in standalone mcp-server suite). Migrations 045 + 046 both in production.
+- 800 tests passing (38 in standalone mcp-server suite). Branch: deck-generator (not yet merged to main).
+- **Generate Deck next steps:** (1) `cd deck-renderer && npm install && npm run build`, then `pm2 start ecosystem.config.js --only qc-deck-renderer` on the PM2 box; (2) set `RENDERER_SECRET=<secret>` in PM2 env and `RENDERER_URL=http://<tailscale-ip>:3001` + `RENDERER_SECRET=<same>` in Vercel env; (3) test end-to-end by clicking "Generate Deck" on an estimate.
 - MCP server: copy mcp-server/.env.example to mcp-server/.env and add Supabase creds, then add to Claude Desktop config (see CLAUDE.md → MCP Server section).
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in Slide Copy preview; she swaps in Canva).
 - Venue profile attachment downloads: signed URL generation is the next small task.
