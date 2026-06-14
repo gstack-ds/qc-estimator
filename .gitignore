@@ -38,6 +38,5 @@ data/processed-ids.json
 logs/
 scripts/run-scanner.js
 
-# Deck renderer build artifact
-deck-renderer/dist/
-deck-renderer/package-lock.json
+# Deck renderer — removed; directory may linger on disk if Windows locks prevented deletion
+deck-renderer/

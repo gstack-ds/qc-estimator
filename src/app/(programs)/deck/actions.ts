@@ -233,25 +233,21 @@ async function fetchSlide(estimateId: string) {
 }
 
 async function callRenderer(request: DeckRenderRequest): Promise<{ pdf: string } | { error: string }> {
-  const rendererUrl = process.env.RENDERER_URL;
-  const rendererSecret = process.env.RENDERER_SECRET;
-  if (!rendererUrl || !rendererSecret) {
-    return { error: 'Deck renderer is not configured. Set RENDERER_URL and RENDERER_SECRET environment variables.' };
-  }
+  // VERCEL_URL is injected per-deployment (no https:// prefix); fall back to local dev URL.
+  const baseUrl = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : (process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000');
 
-  const res = await fetch(`${rendererUrl}/render`, {
+  const res = await fetch(`${baseUrl}/api/render-deck`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Renderer-Secret': rendererSecret,
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
-    signal: AbortSignal.timeout(90000),
+    signal: AbortSignal.timeout(90_000),
   });
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    return { error: `Renderer error ${res.status}: ${text}` };
+    return { error: `Render failed ${res.status}: ${text}` };
   }
 
   const data = (await res.json()) as { pdf: string };
