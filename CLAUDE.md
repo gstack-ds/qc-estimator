@@ -58,12 +58,6 @@ qc-estimator/
 │           ├── estimates.ts    # list_estimates, get_estimate
 │           ├── venues.ts       # search_venues, get_venue
 │           └── pipeline.ts     # get_pipeline
-└── deck-renderer/              # Standalone Puppeteer PDF renderer (PM2, not Vercel)
-    ├── package.json
-    ├── tsconfig.json
-    └── src/
-        ├── index.ts            # Express server — POST /render, X-Renderer-Secret auth
-        └── render.ts           # renderPdf() — Puppeteer wrapper around buildDeckHtml
 ```
 
 ## MCP Server (Claude Desktop Integration)
@@ -144,31 +138,25 @@ Restart Claude Desktop after editing the config.
 - `src/app/(programs)/deck/actions.ts` — `generateDeckForEstimate` + `generateDeckForProgram` server actions; calls claude-sonnet-4-6 with descriptive-only context (no dollar figures); retries once then degrades to `defaultNarrative`
 - `src/components/deck/GenerateDeckButton.tsx` — client button on estimate + program pages; base64 PDF → download
 
-**Layer 3 — Renderer** (`deck-renderer/`):
-- Standalone Express service; auth via `X-Renderer-Secret` header
-- Full `puppeteer` (not puppeteer-core)
-- Imports `buildDeckHtml` from `../../src/lib/deck/renderer`
-- Runs on PM2 box (same machine as Gmail scanner); accessible over Tailscale
+**Layer 3 — Renderer** (`src/app/api/render-deck/route.ts` + `src/lib/deck/renderPdf.ts`):
+- Vercel serverless function (Node runtime, maxDuration=60, memory=3009MB via vercel.json)
+- `@sparticuz/chromium-min@149.0.0` + `puppeteer-core@25.1.0` (pinned — update together)
+- Chromium binary downloaded from GitHub releases on cold start, cached in /tmp for warm starts
+- Auth: `x-render-secret` header checked against `RENDER_DECK_SECRET` env var (set in Vercel)
+- `callRenderer()` in actions.ts sends the header; uses `VERCEL_URL` (injected per-deployment) as base URL; falls back to `NEXT_PUBLIC_APP_URL` for local dev
+- No PM2 box, no Tailscale, no external infrastructure
 
 ### Setup
-```bash
-# 1. Install renderer dependencies and compile
-cd deck-renderer && npm install && npm run build
-
-# 2. Set environment variables
-#    On PM2 box: RENDERER_SECRET=<secret>  (and optionally RENDERER_PORT=3001)
-#    On Vercel:  RENDERER_URL=http://<tailscale-ip>:3001  RENDERER_SECRET=<same secret>
-
-# 3. Start via PM2
-pm2 start ecosystem.config.js --only qc-deck-renderer
-```
+Set `RENDER_DECK_SECRET` in Vercel env vars (all environments) to match the value in `.env`.
+No other setup needed — renderer runs inside the Vercel deployment.
 
 ### Key invariants
-- `RENDERER_URL` / `RENDERER_SECRET` missing → button shows error, no crash
+- `RENDER_DECK_SECRET` missing → route returns 401, button shows error, no crash
 - Narrative failure → retries once → falls back to `defaultNarrative` — PDF always renders
 - Grand total in PDF == `contract.summary.totalClient` (enforced by `data-deck-total` attribute + tests)
 - All sections including `__orphan__` (rendered as "Uncategorized") always appear
 - `NarrativeOutputSchema` has zero numeric fields — structural guarantee; tested
+- vercel.json path key `"src/app/api/render-deck/route.ts"` — if memory config silently misses, function defaults to 1024MB and may OOM; verify in `.vercel/output/functions` after build
 
 ## Critical Business Logic
 
@@ -372,11 +360,15 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 | 2026-06-09 | Budget compare_each per_person: compareEstimateToBudget branched on pricingBasis | compare_each with per_person basis should compare $/pp against the pp budget range, not total vs budget×guestCount. Added pricingBasis to EstimateVsBudget; per_person path uses pricePerPerson vs valueLow/valueHigh directly. combine mode unchanged (totals vs scaled budget is correct for a progress bar). | Keep single effectiveBudgetFlat path (wrong for per_person compare_each — confirmed by 6 failing tests) |
 | 2026-06-14 | Generate Deck: narrative types in server-free src/lib/deck/types.ts; HTML builder in src/lib/deck/renderer.ts (testable without Puppeteer); Puppeteer in standalone deck-renderer/ service | Client components import from types.ts (no next/headers). renderer.ts is imported by both Vitest tests AND the deck-renderer service (same pattern as mcp-server importing deckContract). Excluded deck-renderer/ from root tsconfig.json. | All in one file (next/headers boundary violation); skip buildDeckHtml test (untestable = no fidelity guarantee) |
 | 2026-06-14 | Generate Deck: narrative uses Zod schema with zero numeric fields as structural guarantee | The AI cannot emit a price into the proposal copy. All schema fields are ZodString or ZodRecord(string). Validated by test: all shape values instanceof ZodString / ZodRecord with ZodString values. | TypeScript interface only (no runtime validation — model could still emit numbers); reject numeric responses (would break on any unexpected field) |
+| 2026-06-14 | Generate Deck renderer moved from PM2 service to Vercel serverless function | Eliminates all external infrastructure (PM2 box, Tailscale, Cloudflare Tunnel). chromium-min downloads the binary at runtime so the Vercel bundle stays under 50MB. Auth via RENDER_DECK_SECRET header (internal, not user-facing). | PM2/Tailscale/Cloudflare (operational overhead, rejected); full puppeteer bundle (too large for Vercel 50MB limit) |
 
 ## Gotchas Log
 
 | Date | Issue | Resolution |
 |------|-------|------------|
+| 2026-06-14 | puppeteer-core v25 removed networkidle2 from setContent — use waitForNetworkIdle() instead | page.setContent() in v25 only accepts 'load' or 'domcontentloaded' for waitUntil. Separate network idle check via page.waitForNetworkIdle({ timeout }).catch(() => {}) after setContent. |
+| 2026-06-14 | deck-renderer/ directory locked by Windows process on deletion attempt | PM2 must be stopped first (pm2 delete qc-deck-renderer) before the directory can be deleted. If still locked, delete via Windows Explorer after stopping PM2. git rm --cached works regardless of file lock. |
+| 2026-06-14 | @sparticuz/chromium-min v149 has no chromium.headless property | Use headless: 'shell' literal directly in puppeteer.launch(). The chromium.headless property existed in older versions but was removed. The args array already contains --headless='shell'. |
 | 2026-04-03 | QC monogram PNG is dark — invisible on dark charcoal nav | Added `brightness-0 invert` Tailwind filter classes to the Image in both layouts. No separate white asset needed. |
 | 2026-04-03 | Supabase password reset requires /reset-password in Redirect URLs allowlist | Must add the URL in Supabase dashboard → Auth → URL Configuration, otherwise the reset link is blocked. |
 | 2026-04-26 | JS falsy `\|\|` trap with numeric 0: `parseFloat('0') / 100 \|\| 0.05` evaluates to `0.05` because `0` is falsy | Use `isNaN(v) ? fallback : v / 100` pattern wherever a numeric field has a meaningful zero value (client commission, CC fee, etc.) |
@@ -540,11 +532,13 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] /vendors → /venues permanent redirect in next.config.js (fbc4128) — QA surfaced the mismatch between nav label "Vendors" and the actual /venues route.
 - [x] MCP server Phase 1 (read-only Claude integration): mcp-server/ standalone Node.js process; 7 tools (list_programs, get_program, list_estimates, get_estimate, search_venues, get_venue, get_pipeline); shared DeckContract type + buildDeckContract() in src/lib/contracts/deckContract.ts (calls pricing engine, never hand-rolls math); 49 new tests (778 total, 36 in standalone mcp-server suite at time of writing). See CLAUDE.md MCP Server section for Claude Desktop setup.
 
-- [x] Generate Deck feature: Layers 1+2+3 — DeckContract (existing), narrative (claude-sonnet-4-6, Zod schema, retry+degrade), renderer service (Express + Puppeteer on PM2 box, Tailscale access); GenerateDeckButton on estimate + program pages; 19 new tests (800 total). Branch: deck-generator.
+- [x] Generate Deck feature: Layers 1+2+3 — DeckContract (existing), narrative (claude-sonnet-4-6, Zod schema, retry+degrade), renderer as Vercel serverless function (@sparticuz/chromium-min + puppeteer-core, maxDuration=60, 3009MB); GenerateDeckButton on estimate + program pages; 19 new tests (800 total). Branch: deck-generator.
 
 ### Next Session Start
-- 800 tests passing (38 in standalone mcp-server suite). Branch: deck-generator (not yet merged to main).
-- **Generate Deck next steps:** (1) `cd deck-renderer && npm install && npm run build`, then `pm2 start ecosystem.config.js --only qc-deck-renderer` on the PM2 box; (2) set `RENDERER_SECRET=<secret>` in PM2 env and `RENDERER_URL=http://<tailscale-ip>:3001` + `RENDERER_SECRET=<same>` in Vercel env; (3) test end-to-end by clicking "Generate Deck" on an estimate.
+- 800 tests passing. Branch: deck-generator (not yet merged to main).
+- **Generate Deck: set RENDER_DECK_SECRET in Vercel env vars (all environments)** — value is in `.env`. Then wait for the preview deployment of deck-generator branch to build and test end-to-end by clicking "Generate Deck" on an estimate.
+- **Verify vercel.json memory key** — after preview deploys, check `.vercel/output/functions` to confirm `src/app/api/render-deck/route.ts` matches a function entry. If not, try the key without `src/` prefix.
+- **Manually delete deck-renderer/ folder** from disk via Windows Explorer (was locked by a process during session; git already removed it from tracking).
 - MCP server: copy mcp-server/.env.example to mcp-server/.env and add Supabase creds, then add to Claude Desktop config (see CLAUDE.md → MCP Server section).
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in Slide Copy preview; she swaps in Canva).
 - Venue profile attachment downloads: signed URL generation is the next small task.

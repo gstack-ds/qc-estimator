@@ -240,9 +240,12 @@ async function callRenderer(request: DeckRenderRequest): Promise<{ pdf: string }
 
   const res = await fetch(`${baseUrl}/api/render-deck`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-render-secret': process.env.RENDER_DECK_SECRET ?? '',
+    },
     body: JSON.stringify(request),
-    signal: AbortSignal.timeout(90_000),
+    signal: AbortSignal.timeout(55_000), // fires before Vercel's 60s hard kill
   });
 
   if (!res.ok) {
