@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  async redirects() {
+    return [
+      { source: '/vendors', destination: '/venues', permanent: true },
+    ];
+  },
   experimental: {
     serverActions: {
       allowedOrigins: ['localhost:3000'],
