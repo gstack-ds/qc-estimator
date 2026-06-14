@@ -117,7 +117,7 @@ Restart Claude Desktop after editing the config.
 
 ### Tests
 - `npm test` (root) — runs both main app tests and MCP server tests (778 total)
-- `cd mcp-server && npm test` — runs only MCP server tests (36 tests)
+- `cd mcp-server && npm test` — runs only MCP server tests (38 tests)
 - `tests/unit/deckContract.test.ts` — 12 tests covering the shared contract builder
 
 ### Adding a new tool
@@ -492,12 +492,14 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Migrations 045 + 046 run in production.
 
 - [x] /vendors → /venues permanent redirect in next.config.js (fbc4128) — QA surfaced the mismatch between nav label "Vendors" and the actual /venues route.
-- [x] MCP server Phase 1 (read-only Claude integration): mcp-server/ standalone Node.js process; 7 tools (list_programs, get_program, list_estimates, get_estimate, search_venues, get_venue, get_pipeline); shared DeckContract type + buildDeckContract() in src/lib/contracts/deckContract.ts (calls pricing engine, never hand-rolls math); 49 new tests (778 total, 36 in standalone mcp-server suite). See CLAUDE.md MCP Server section for Claude Desktop setup.
+- [x] MCP server Phase 1 (read-only Claude integration): mcp-server/ standalone Node.js process; 7 tools (list_programs, get_program, list_estimates, get_estimate, search_venues, get_venue, get_pipeline); shared DeckContract type + buildDeckContract() in src/lib/contracts/deckContract.ts (calls pricing engine, never hand-rolls math); 49 new tests (778 total, 36 in standalone mcp-server suite at time of writing). See CLAUDE.md MCP Server section for Claude Desktop setup.
 
 ### Next Session Start
-- 778 tests passing. Migrations 045 + 046 both in production.
+- 781 tests passing (38 in standalone mcp-server suite). Migrations 045 + 046 both in production.
 - MCP server: copy mcp-server/.env.example to mcp-server/.env and add Supabase creds, then add to Claude Desktop config (see CLAUDE.md → MCP Server section).
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in Slide Copy preview; she swaps in Canva).
 - Venue profile attachment downloads: signed URL generation is the next small task.
 - Proposal validation against Excel is the next quality check — enter the 3 scenarios from proposal-validation.test.ts into QC_Estimate_Template_2026.xlsx and compare EXPECTED_* values.
 - Export filtering: proposal generation and all exports should skip estimates where included_in_proposal = false — data model is ready, implementation pending.
+- **MCP perf (deferred):** `get_pipeline` leads query has no pagination — all leads in the status group are fetched. Fine for QC's current volume; add a `limit` param (default 200) + `has_more` flag once the closed pipeline grows large.
+- **MCP perf (deferred):** `get_pipeline` linked-programs fetch is unbounded — `programs.not('lead_id', 'is', null)` fetches every converted program. Fine for now; narrow to lead IDs in the current result set once the program count grows.

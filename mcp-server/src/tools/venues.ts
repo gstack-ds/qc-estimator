@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -89,14 +89,16 @@ export async function handleGetVenue(
     if (venueResult.error.code === 'PGRST116') return null;
     throw new Error(`get_venue: ${venueResult.error.message}`);
   }
+  if (spacesResult.error) throw new Error(`get_venue spaces: ${spacesResult.error.message}`);
   const venue = venueResult.data;
   if (!venue) return null;
 
-  // Fetch estimate count for this venue (how many programs have used it)
-  const { count: estimateCount } = await db
+  // Fetch estimate count for this venue (how many programs have used it) — enrichment, degrade gracefully
+  const { count: estimateCount, error: countErr } = await db
     .from('estimates')
     .select('id', { count: 'exact', head: true })
     .eq('venue_id', args.id);
+  if (countErr) console.error(`get_venue estimate_count: ${countErr.message}`);
 
   return {
     id: venue.id,
@@ -134,7 +136,7 @@ export async function handleGetVenue(
       privacy_tag: s.privacy_tag,
       notes: s.notes,
     })),
-    estimate_count: estimateCount ?? 0,
+    estimate_count: countErr ? null : (estimateCount ?? 0),
     last_used_date: venue.last_used_date,
     created_at: venue.created_at,
     updated_at: venue.updated_at,

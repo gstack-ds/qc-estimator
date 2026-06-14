@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { handleListPrograms, handleGetProgram } from '../../tools/programs';
-import { createMockDb, ok, notFound } from '../helpers/mockDb';
+import { createMockDb, ok, notFound, dbError } from '../helpers/mockDb';
 
 const PROG = {
   id: 'prog-1',
@@ -147,6 +147,16 @@ describe('handleGetProgram', () => {
 
     expect(result!.events).toHaveLength(1);
     expect(result!.events[0].name).toBe('Dinner');
+  });
+
+  it('throws when estimates query fails — surfaces as isError via wrap()', async () => {
+    const db = createMockDb({
+      programs: ok(FULL_PROG),
+      events: ok([]),
+      program_staffing: ok([]),
+      estimates: dbError('permission denied'),
+    });
+    await expect(handleGetProgram(db as never, { id: 'prog-1' })).rejects.toThrow('permission denied');
   });
 
   it('fetches linked lead when lead_id is set', async () => {

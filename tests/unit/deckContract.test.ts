@@ -308,4 +308,41 @@ describe('buildDeckContract', () => {
 
     expect(contract.serviceCharge).toBe(0.215);
   });
+
+  it('orphan item (null section_id) appears in Uncategorized section and is counted in summary', () => {
+    const avSection: RawSection = {
+      id: 'sec-av', name: 'AV', tax_bucket: 'equipment', markup_pct: 0.65, sort_order: 0,
+    };
+    const avItem: RawLineItem = {
+      ...lineItem, id: 'li-av', section_id: 'sec-av', section: 'AV',
+      category_id: 'cat-av', tax_type: 'general',
+    };
+    const orphanItem: RawLineItem = {
+      ...lineItem, id: 'li-orphan', section_id: null, section: 'Deleted Section',
+      unit_price: 50, qty: 10,
+    };
+
+    const contract = buildDeckContract(
+      estimate, [avSection], [avItem, orphanItem], program, location, tiers, categoryMarkups,
+    );
+
+    // Orphan section must be present and contain the item
+    const orphanSection = contract.sections.find((s) => s.id === '__orphan__');
+    expect(orphanSection).toBeDefined();
+    expect(orphanSection!.name).toBe('Uncategorized');
+    expect(orphanSection!.lineItems).toHaveLength(1);
+    expect(orphanSection!.lineItems[0].id).toBe('li-orphan');
+
+    // summary == sum of section subtotals: orphan clientCost included in equipmentSubtotalClient
+    // because the engine received it with taxBucket 'equipment' (the null-section fallback).
+    const sectionClientTotal = contract.sections
+      .flatMap((s) => s.lineItems)
+      .reduce((sum, li) => sum + li.clientCost, 0);
+    const engineBucketTotal =
+      contract.summary.fbSubtotalClient +
+      contract.summary.equipmentSubtotalClient +
+      contract.summary.venueSubtotalClient +
+      contract.summary.qcStaffingSubtotalClient;
+    expect(sectionClientTotal).toBeCloseTo(engineBucketTotal, 1);
+  });
 });

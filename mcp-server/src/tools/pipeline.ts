@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // Imported from a side-effect-free module (no next/headers)
@@ -39,11 +39,13 @@ export async function handleGetPipeline(
 ) {
   const group = args.status_group ?? 'open';
 
-  // Determine which statuses to include
+  // Use lane-order arrays directly — they contain only live statuses.
+  // OPEN_STATUSES includes legacy values (halted, planning, planning_not_started) that were
+  // migrated away in migration 035; querying for them returns no rows and pollutes the IN clause.
   let targetStatuses: string[];
-  if (group === 'open') targetStatuses = OPEN_STATUSES;
-  else if (group === 'closed') targetStatuses = CLOSED_STATUSES;
-  else targetStatuses = [...OPEN_STATUSES, ...CLOSED_STATUSES];
+  if (group === 'open') targetStatuses = OPEN_LANE_ORDER as string[];
+  else if (group === 'closed') targetStatuses = CLOSED_LANE_ORDER as string[];
+  else targetStatuses = [...OPEN_LANE_ORDER, ...CLOSED_LANE_ORDER] as string[];
 
   const { data: leads, error } = await db
     .from('leads')
@@ -55,11 +57,12 @@ export async function handleGetPipeline(
 
   if (error) throw new Error(`get_pipeline: ${error.message}`);
 
-  // Fetch team members to resolve assigned_to names
-  const { data: teamMembers } = await db
+  // Fetch team members to resolve assigned_to names — enrichment, degrade gracefully
+  const { data: teamMembers, error: teamErr } = await db
     .from('team_members')
     .select('id, first_name, last_name')
     .eq('is_active', true);
+  if (teamErr) console.error(`get_pipeline team_members: ${teamErr.message}`);
 
   const memberById = new Map(
     (teamMembers ?? []).map((m: { id: number; first_name: string; last_name: string }) => [
@@ -68,11 +71,12 @@ export async function handleGetPipeline(
     ])
   );
 
-  // Fetch linked programs (converted leads) for banner display
-  const { data: linkedPrograms } = await db
+  // Fetch linked programs (converted leads) for banner display — enrichment, degrade gracefully
+  const { data: linkedPrograms, error: linkedErr } = await db
     .from('programs')
     .select('id, name, lead_id, status')
     .not('lead_id', 'is', null);
+  if (linkedErr) console.error(`get_pipeline linked_programs: ${linkedErr.message}`);
 
   const programByLeadId = new Map(
     (linkedPrograms ?? []).map((p: { id: string; name: string; lead_id: string; status: string }) => [

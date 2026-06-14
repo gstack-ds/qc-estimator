@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { handleListEstimates, handleGetEstimate } from '../../tools/estimates';
-import { createMockDb, ok, notFound } from '../helpers/mockDb';
+import { createMockDb, ok, notFound, dbError } from '../helpers/mockDb';
 
 const ESTIMATE_ROW = {
   id: 'est-1',
@@ -199,6 +199,20 @@ describe('handleGetEstimate', () => {
     expect(sections[0].line_items[0].name).toBe('Plated Dinner');
     expect(sections[0].line_items[0].our_cost).toBeCloseTo(8000, 0);
     expect(sections[0].line_items[0].client_cost).toBeCloseTo(12400, 0);
+  });
+
+  it('throws when a required parallel query fails — surfaces as isError via wrap()', async () => {
+    const db = createMockDb({
+      estimates: ok(FULL_ESTIMATE),
+      estimate_sections: dbError('connection refused'),
+      estimate_line_items: ok([LINE_ITEM]),
+      programs: ok(PROGRAM),
+      category_markups: ok([CATEGORY_MARKUP]),
+      team_hours_tiers: ok([TIER]),
+      program_travel_items: ok([]),
+      locations: ok(LOCATION),
+    });
+    await expect(handleGetEstimate(db as never, { id: 'est-1' })).rejects.toThrow('connection refused');
   });
 
   it('returns transport_summary for transportation estimate', async () => {

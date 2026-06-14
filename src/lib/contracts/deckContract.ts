@@ -324,6 +324,47 @@ export function buildDeckContract(
     };
   });
 
+  // Items with a null or stale section_id are never lost — they surface in a synthetic
+  // "Uncategorized" section so the summary always equals the sum of section subtotals.
+  const orphanRaw = (itemsBySectionId.get('__orphan__') ?? [])
+    .sort((a, b) => a.sort_order - b.sort_order);
+  if (orphanRaw.length > 0) {
+    const orphanItems: DeckLineItem[] = orphanRaw.map((raw) => {
+      const calc = calculatedById.get(raw.id);
+      const taxAmount = estimate.tax_exempt ? 0 : (calc?.taxAmount ?? 0);
+      return {
+        id: raw.id,
+        name: raw.name,
+        label: raw.label,
+        qty: raw.qty,
+        unitPrice: raw.unit_price,
+        markupPct: calc ? (raw.custom_client_unit_price !== null ? 0
+          : (raw.markup_override ?? markupById.get(raw.category_id ?? '') ?? 0.5)) : 0,
+        taxType: raw.tax_type as TaxType,
+        taxBucket: 'equipment' as TaxBucket,
+        ourCost: calc?.ourCost ?? 0,
+        clientCost: calc?.clientCost ?? 0,
+        taxRate: calc?.taxRate ?? 0,
+        taxAmount,
+        isRevenueItem: raw.is_revenue_item,
+        notes: raw.notes,
+        thumbnailUrl: raw.thumbnail_url,
+        thumbnailIcon: raw.thumbnail_icon,
+        packageOptions: raw.package_options,
+        selectedPackageId: raw.selected_package_id,
+        sortOrder: raw.sort_order,
+      };
+    });
+    deckSections.push({
+      id: '__orphan__',
+      name: 'Uncategorized',
+      taxBucket: 'equipment',
+      markupPct: 0.5,
+      sortOrder: Number.MAX_SAFE_INTEGER,
+      lineItems: orphanItems,
+    });
+  }
+
   return {
     estimateId: estimate.id,
     estimateName: estimate.name,

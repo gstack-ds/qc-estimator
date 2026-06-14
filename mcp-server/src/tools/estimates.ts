@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildDeckContract, type RawEstimate } from '../../../src/lib/contracts/deckContract';
 import { calcTransportSummary } from '../../../src/lib/engine/transportation';
@@ -22,10 +22,11 @@ export const getEstimateSchema = {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function fetchTiers(db: SupabaseClient): Promise<TeamHoursTier[]> {
-  const { data } = await db
+  const { data, error } = await db
     .from('team_hours_tiers')
     .select('revenue_threshold, base_hours, tier_name')
     .order('revenue_threshold');
+  if (error) throw new Error(`get_estimate tiers: ${error.message}`);
   return (data ?? []).map((t: { revenue_threshold: number; base_hours: number; tier_name: string | null }) => ({
     revenueThreshold: t.revenue_threshold,
     baseHours: t.base_hours,
@@ -120,17 +121,24 @@ export async function handleGetEstimate(
         .eq('program_id', estimate.program_id),
     ]);
 
+  if (sectionsResult.error) throw new Error(`get_estimate sections: ${sectionsResult.error.message}`);
+  if (lineItemsResult.error) throw new Error(`get_estimate line_items: ${lineItemsResult.error.message}`);
   if (programResult.error) throw new Error(`get_estimate program: ${programResult.error.message}`);
+  if (categoryMarkupsResult.error) throw new Error(`get_estimate markups: ${categoryMarkupsResult.error.message}`);
+  if (travelItemsResult.error) throw new Error(`get_estimate travel: ${travelItemsResult.error.message}`);
   const program = programResult.data;
 
-  // Fetch location
+  // Fetch location — throws if location_id is set but the row is missing or query fails,
+  // because a zero-tax result on a taxable estimate is a confident wrong answer.
+  // Zero-tax default when location_id is null is correct (no location selected on program).
   let location = { id: '', name: '', food_tax_rate: 0, alcohol_tax_rate: 0, general_tax_rate: 0 };
   if (program.location_id) {
-    const { data: loc } = await db
+    const { data: loc, error: locErr } = await db
       .from('locations')
       .select('id, name, food_tax_rate, alcohol_tax_rate, general_tax_rate')
       .eq('id', program.location_id)
       .single();
+    if (locErr) throw new Error(`get_estimate location: ${locErr.message}`);
     if (loc) location = loc;
   }
 
@@ -288,16 +296,20 @@ async function handleGetTransportEstimate(db: SupabaseClient, estimate: Record<s
       .single(),
   ]);
 
+  if (scheduleResult.error) throw new Error(`transport schedule: ${scheduleResult.error.message}`);
   if (programResult.error) throw new Error(`transport program: ${programResult.error.message}`);
   const prog = programResult.data;
 
+  // Same rule as the main path: zero tax when location_id is null is correct;
+  // a failed fetch when location_id is set would produce wrong transport tax → throw.
   let generalTaxRate = 0;
   if (prog.location_id) {
-    const { data: loc } = await db
+    const { data: loc, error: locErr } = await db
       .from('locations')
       .select('general_tax_rate')
       .eq('id', prog.location_id)
       .single();
+    if (locErr) throw new Error(`transport location: ${locErr.message}`);
     if (loc) generalTaxRate = loc.general_tax_rate;
   }
 

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -94,15 +94,18 @@ export async function handleGetProgram(
     if (programResult.error.code === 'PGRST116') return null;
     throw new Error(`get_program: ${programResult.error.message}`);
   }
+  if (eventsResult.error) throw new Error(`get_program events: ${eventsResult.error.message}`);
+  if (staffingResult.error) throw new Error(`get_program staffing: ${staffingResult.error.message}`);
   const prog = programResult.data;
   if (!prog) return null;
 
   // Fetch estimates grouped by event
-  const { data: estimates } = await db
+  const { data: estimates, error: estimatesErr } = await db
     .from('estimates')
     .select('id, name, type, event_id, included_in_proposal, include_in_budget, sort_order, venue_id')
     .eq('program_id', args.id)
     .order('sort_order');
+  if (estimatesErr) throw new Error(`get_program estimates: ${estimatesErr.message}`);
 
   // Fetch linked lead basics if present
   let lead = null;
@@ -136,7 +139,7 @@ export async function handleGetProgram(
       })),
   }));
 
-  const loc = prog.location as { id: string; name: string; food_tax_rate: number; alcohol_tax_rate: number; general_tax_rate: number } | null;
+  const loc = prog.location as unknown as { id: string; name: string; food_tax_rate: number; alcohol_tax_rate: number; general_tax_rate: number } | null;
 
   return {
     id: prog.id,
