@@ -861,7 +861,8 @@ export async function autoCreateEvents(
     const { count, error: countErr } = await supabase
       .from('events')
       .select('id', { count: 'exact', head: true })
-      .eq('program_id', programId);
+      .eq('program_id', programId)
+      .neq('name', 'Program Events');
     if (countErr) return { created: 0, failed: 0, skipped: false, error: countErr.message };
     if ((count ?? 0) > 0) return { created: 0, failed: 0, skipped: true, error: null };
   }

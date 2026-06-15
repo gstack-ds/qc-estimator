@@ -153,7 +153,10 @@ describe('normalizeDetectedEvent', () => {
 // ─── hasExistingEvents ────────────────────────────────────────────────────────
 
 describe('hasExistingEvents', () => {
-  it('returns false when program has no events', () => {
+  it('returns false for count 0 — autoCreateEvents passes 0 when only the backfill "Program Events" row exists', () => {
+    // The DB query in autoCreateEvents uses .neq('name', 'Program Events') so a program
+    // with only that backfill row produces count=0, which hasExistingEvents correctly maps to false.
+    // (The query itself is integration-level; this verifies the pure-function side.)
     expect(hasExistingEvents(0)).toBe(false);
   });
 
@@ -216,5 +219,72 @@ describe('normalizeDetectedEvent — fixture briefs', () => {
     expect(results[2].event_type).toBe('formal_dinner'); // 'gala' → formal_dinner
     expect(results[3].event_type).toBe('excursion');    // 'tour' → excursion
     expect(results.every((r) => r.guest_count === 30)).toBe(true);
+  });
+});
+
+// ─── Meridian RFP fixture ─────────────────────────────────────────────────────
+// Simulates the 7-event response Claude haiku produces from Meridian_RFP_Test.pdf
+// (President's Club Incentive Retreat, Charleston SC, Oct 14-16 2026, 120 guests)
+
+describe('normalizeDetectedEvent — Meridian RFP fixture', () => {
+  const raw = [
+    { name: 'Welcome Reception', event_date: '2026-10-14', start_time: '18:00', end_time: '20:00', guest_count: 120, event_type: 'cocktail reception', description: 'Opening networking reception for all attendees.' },
+    { name: 'General Session', event_date: '2026-10-15', start_time: '09:00', end_time: '12:00', guest_count: 120, event_type: 'general session', description: 'Full morning keynote and company presentations.' },
+    { name: 'Awards Gala Option A — Hotel Ballroom', event_date: '2026-10-15', start_time: '19:00', end_time: '23:00', guest_count: 120, event_type: 'dinner', description: 'Black tie awards dinner in the hotel ballroom.' },
+    { name: 'Awards Gala Option B — Historic Restaurant', event_date: '2026-10-15', start_time: '19:00', end_time: '23:00', guest_count: 120, event_type: 'gala', description: 'Black tie awards dinner at a Charleston historic venue.' },
+    { name: 'Charleston Harbor Cruise', event_date: '2026-10-16', start_time: '10:00', end_time: '13:00', guest_count: 80, event_type: 'excursion', description: 'Private harbor cruise for a portion of attendees.' },
+    { name: 'Culinary Walking Tour', event_date: '2026-10-16', start_time: '10:00', end_time: '13:00', guest_count: 40, event_type: 'tour', description: 'Guided culinary walking tour of downtown Charleston.' },
+    { name: 'Farewell Brunch', event_date: '2026-10-16', start_time: '11:00', end_time: '13:00', guest_count: 120, event_type: 'brunch', description: 'Closing farewell brunch before departure.' },
+  ];
+
+  const results = raw.map(normalizeDetectedEvent);
+
+  it('normalizes all 7 events without error', () => {
+    expect(results).toHaveLength(7);
+  });
+
+  it('maps event types correctly', () => {
+    expect(results[0].event_type).toBe('cocktail_reception'); // 'cocktail reception'
+    expect(results[1].event_type).toBe('general_session');   // 'general session'
+    expect(results[2].event_type).toBe('formal_dinner');     // 'dinner'
+    expect(results[3].event_type).toBe('formal_dinner');     // 'gala'
+    expect(results[4].event_type).toBe('excursion');         // 'excursion'
+    expect(results[5].event_type).toBe('excursion');         // 'tour'
+    expect(results[6].event_type).toBe('breakfast');         // 'brunch'
+  });
+
+  it('preserves all event dates in YYYY-MM-DD format', () => {
+    expect(results[0].event_date).toBe('2026-10-14');
+    results.slice(1, 4).forEach((r) => expect(r.event_date).toBe('2026-10-15'));
+    results.slice(4).forEach((r) => expect(r.event_date).toBe('2026-10-16'));
+  });
+
+  it('preserves guest counts (including split group sizes)', () => {
+    expect(results[0].guest_count).toBe(120);
+    expect(results[1].guest_count).toBe(120);
+    expect(results[2].guest_count).toBe(120);
+    expect(results[3].guest_count).toBe(120);
+    expect(results[4].guest_count).toBe(80);
+    expect(results[5].guest_count).toBe(40);
+    expect(results[6].guest_count).toBe(120);
+  });
+
+  it('preserves event names', () => {
+    expect(results[0].name).toBe('Welcome Reception');
+    expect(results[2].name).toBe('Awards Gala Option A — Hotel Ballroom');
+    expect(results[3].name).toBe('Awards Gala Option B — Historic Restaurant');
+    expect(results[6].name).toBe('Farewell Brunch');
+  });
+
+  it('preserves descriptions', () => {
+    results.forEach((r) => expect(r.description).not.toBeNull());
+    expect(results[4].description).toBe('Private harbor cruise for a portion of attendees.');
+  });
+
+  it('preserves start and end times', () => {
+    expect(results[0].start_time).toBe('18:00');
+    expect(results[0].end_time).toBe('20:00');
+    expect(results[6].start_time).toBe('11:00');
+    expect(results[6].end_time).toBe('13:00');
   });
 });

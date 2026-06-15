@@ -9,6 +9,7 @@ import {
   updateProgramType,
   extractProgramBriefFromPath,
   detectEventsFromBrief,
+  autoCreateEvents,
   registerProgramAttachment,
   getProgramAttachments,
   deleteProgramAttachment,
@@ -113,6 +114,7 @@ export default function ProgramForm({ program, locations, mode }: Props) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const briefFileRef = useRef<HTMLInputElement>(null);
+  const selectedDetectedEventsRef = useRef<DetectedEvent[]>([]);
 
   useEffect(() => {
     if (mode === 'edit' && program?.id) {
@@ -301,6 +303,17 @@ export default function ProgramForm({ program, locations, mode }: Props) {
         extractedData: pf.extracted ?? null,
       }))
     );
+    const selectedEvents = selectedDetectedEventsRef.current;
+    if (selectedEvents.length > 0) {
+      const { error: evErr, failed: evFailed } = await autoCreateEvents(
+        result.id!, selectedEvents, { skipDuplicateCheck: true }
+      );
+      if (evErr) {
+        setSaveState('error');
+        setSaveError(`Program created but events could not be added: ${evErr}`);
+        return;
+      }
+    }
     router.push(`/programs/${result.id}`);
   }
 
@@ -437,6 +450,7 @@ export default function ProgramForm({ program, locations, mode }: Props) {
               <DetectedEventsPanel
                 programId={mode === 'edit' && program?.id ? program.id : null}
                 detectedEvents={allDetected}
+                onSelectionChange={(sel) => { selectedDetectedEventsRef.current = sel; }}
               />
             );
           })()}
