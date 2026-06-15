@@ -341,6 +341,21 @@ describe('buildDeckHtml', () => {
     expect(html).toContain('Food &amp; Beverage');
   });
 
+  it('upcharge annotations are stripped from estimate name in rendered HTML', () => {
+    const upchargeEstimate: RawEstimate = { ...estimate, name: 'The Nook on Piedmont - DR (upcharged at 40%)' };
+    const upchargeEstimate2: RawEstimate = { ...estimate, name: 'Wicked Wolf - DR (upcharge at 45%)' };
+    const contract1 = buildDeckContract(upchargeEstimate, [fbSection], [lineItem], program, location, tiers, categoryMarkups);
+    const contract2 = buildDeckContract(upchargeEstimate2, [fbSection], [lineItem], program, location, tiers, categoryMarkups);
+    const html = buildDeckHtml([
+      { contract: contract1, narrative: defaultNarrative({ ...narrativeInput, estimateName: upchargeEstimate.name }) },
+      { contract: contract2, narrative: defaultNarrative({ ...narrativeInput, estimateName: upchargeEstimate2.name }) },
+    ]);
+    expect(html).not.toContain('upcharged at 40%');
+    expect(html).not.toContain('upcharge at 45%');
+    expect(html).toContain('The Nook on Piedmont');
+    expect(html).toContain('Wicked Wolf');
+  });
+
   it('internal margin fields are absent from rendered HTML', () => {
     const html = buildDeckHtml([{ contract, narrative }]);
     // These are MarginAnalysis-only fields — they must never leak into a client PDF.

@@ -44,6 +44,16 @@ function fmtPct(n: number): string {
   return `${(n * 100).toFixed(1)}%`;
 }
 
+// Strip internal upcharge annotations before displaying to clients.
+// Matches: "(upcharged at 40%)", "(upcharge at 45%)", etc.
+// The raw estimate name is preserved in the DB — this only affects PDF output.
+function sanitizeEstimateName(name: string): string {
+  return name
+    .replace(/\s*\(\s*upcharg\w*\s+at\s+[\d.]+%\s*\)/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 // ─── Cover page ───────────────────────────────────────────────────────────────
 
 function buildCoverPage(
@@ -66,7 +76,7 @@ function buildCoverPage(
     <div class="cover-top">
       <div class="cover-logo-wrap">${logoHtml}</div>
       <div class="cover-rule"></div>
-      <h1 class="cover-headline">${esc(narrative.headline)}</h1>
+      <h1 class="cover-headline">${esc(sanitizeEstimateName(narrative.headline))}</h1>
       ${narrative.intro ? `<p class="cover-intro">${esc(narrative.intro)}</p>` : ''}
       ${narrative.venueSummary ? `<p class="cover-venue">${esc(narrative.venueSummary)}</p>` : ''}
       ${narrative.experienceSummary ? `<p class="cover-experience">${esc(narrative.experienceSummary)}</p>` : ''}
@@ -147,7 +157,7 @@ function buildPricingPage(
   return `
   <div class="page pricing-page">
     <div class="page-header">
-      <div class="page-title">${esc(contract.estimateName)}</div>
+      <div class="page-title">${esc(sanitizeEstimateName(contract.estimateName))}</div>
       ${badgeHtml}
     </div>
     <div class="page-rule"></div>
