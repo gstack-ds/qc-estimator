@@ -341,7 +341,7 @@ describe('buildDeckHtml', () => {
     expect(html).toContain('Food &amp; Beverage');
   });
 
-  it('upcharge annotations are stripped from estimate name in rendered HTML', () => {
+  it('upcharge annotations and internal DR suffix are stripped from estimate name in rendered HTML', () => {
     const upchargeEstimate: RawEstimate = { ...estimate, name: 'The Nook on Piedmont - DR (upcharged at 40%)' };
     const upchargeEstimate2: RawEstimate = { ...estimate, name: 'Wicked Wolf - DR (upcharge at 45%)' };
     const contract1 = buildDeckContract(upchargeEstimate, [fbSection], [lineItem], program, location, tiers, categoryMarkups);
@@ -352,8 +352,31 @@ describe('buildDeckHtml', () => {
     ]);
     expect(html).not.toContain('upcharged at 40%');
     expect(html).not.toContain('upcharge at 45%');
+    // " - DR" suffix must also be stripped (internal room code)
+    expect(html).not.toContain('- DR');
     expect(html).toContain('The Nook on Piedmont');
     expect(html).toContain('Wicked Wolf');
+  });
+
+  it('all-caps internal suffixes are stripped from estimate name in rendered HTML', () => {
+    const doneAqs: RawEstimate = { ...estimate, name: "Marlow's Tavern - DONE AQS" };
+    const aqsOnly: RawEstimate = { ...estimate, name: 'Ecco Midtown - AQS DONE' };
+    const mixedCase: RawEstimate = { ...estimate, name: 'Old Vinings Inn - KP Pending' };
+    const contracts = [doneAqs, aqsOnly, mixedCase].map((e) =>
+      buildDeckContract(e, [fbSection], [lineItem], program, location, tiers, categoryMarkups)
+    );
+    const narratives = [doneAqs, aqsOnly, mixedCase].map((e) =>
+      defaultNarrative({ ...narrativeInput, estimateName: e.name })
+    );
+    const html = buildDeckHtml(contracts.map((c, i) => ({ contract: c, narrative: narratives[i] })));
+    // All-caps suffixes must be gone
+    expect(html).not.toContain('DONE AQS');
+    expect(html).not.toContain('AQS DONE');
+    // Venue names must remain
+    expect(html).toContain("Marlow's Tavern");
+    expect(html).toContain('Ecco Midtown');
+    // Mixed-case suffix (" - KP Pending") must NOT be stripped
+    expect(html).toContain('KP Pending');
   });
 
   it('internal margin fields are absent from rendered HTML', () => {

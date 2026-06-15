@@ -113,13 +113,15 @@ async function fetchSlide(estimateId: string, shared: Awaited<ReturnType<typeof 
   ]);
   if (e.error) throw new Error(e.error.message);
   const est = e.data;
-  let venueName = null, venueCity = null, eventType = null;
+  let venueName = null, venueCity = null, eventType = null, eventGuestCount: number | null = null;
   if (est.venue_id) { const { data: v } = await db.from('venues').select('name,city').eq('id', est.venue_id).single(); venueName = v?.name ?? null; venueCity = v?.city ?? null; }
-  if (est.event_id) { const { data: ev } = await db.from('events').select('event_type').eq('id', est.event_id).single(); eventType = ev?.event_type ?? null; }
+  if (est.event_id) { const { data: ev } = await db.from('events').select('event_type,guest_count').eq('id', est.event_id).single(); eventType = ev?.event_type ?? null; eventGuestCount = ev?.guest_count ?? null; }
+  // Prefer event-level guest count so per-person math reflects this specific event.
+  const effectiveGuestCount = eventGuestCount ?? shared.rawProgram.guest_count;
   const travelTotal = (tr.data ?? []).reduce((s: number, it: {qty:number;unit_price:number}) => s + it.qty * it.unit_price, 0);
   const raw: RawEstimate = { id: est.id, program_id: est.program_id, event_id: est.event_id, type: est.type, name: est.name, fb_minimum: est.fb_minimum ?? 0, is_venue_taxable: est.is_venue_taxable ?? false, service_charge_override: est.service_charge_override, gratuity_override: est.gratuity_override, admin_fee_override: est.admin_fee_override, discount_type: est.discount_type, discount_value: est.discount_value ?? 0, tax_exempt: est.tax_exempt ?? false, food_tax_override: est.food_tax_override, alcohol_tax_override: est.alcohol_tax_override, general_tax_override: est.general_tax_override, included_in_proposal: est.included_in_proposal ?? false, include_in_budget: est.include_in_budget ?? false, venue_id: est.venue_id, venue_space_id: est.venue_space_id };
-  const contract = buildDeckContract(raw, (sec.data ?? []) as RawSection[], (li.data ?? []) as RawLineItem[], shared.rawProgram, shared.location, shared.tiers as TeamHoursTier[], shared.rawMarkups, travelTotal);
-  const narrativeInput: NarrativeInput = { estimateType: est.type, estimateName: est.name, programName: shared.programName, clientName: shared.clientName, venueName, venueCity, eventType, guestCount: shared.rawProgram.guest_count, sectionNames: contract.sections.map(s => s.name) };
+  const contract = buildDeckContract(raw, (sec.data ?? []) as RawSection[], (li.data ?? []) as RawLineItem[], { ...shared.rawProgram, guest_count: effectiveGuestCount }, shared.location, shared.tiers as TeamHoursTier[], shared.rawMarkups, travelTotal);
+  const narrativeInput: NarrativeInput = { estimateType: est.type, estimateName: est.name, programName: shared.programName, clientName: shared.clientName, venueName, venueCity, eventType, guestCount: effectiveGuestCount, sectionNames: contract.sections.map(s => s.name) };
   return { contract, narrative: defaultNarrative(narrativeInput) };
 }
 

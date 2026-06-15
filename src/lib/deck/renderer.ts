@@ -44,12 +44,17 @@ function fmtPct(n: number): string {
   return `${(n * 100).toFixed(1)}%`;
 }
 
-// Strip internal upcharge annotations before displaying to clients.
-// Matches: "(upcharged at 40%)", "(upcharge at 45%)", etc.
-// The raw estimate name is preserved in the DB — this only affects PDF output.
+// Strip internal annotations before displaying to clients.
+// Pass 1 — upcharge annotations: "(upcharged at 40%)", "(upcharge at 45%)", etc.
+// Pass 2 — all-caps internal suffixes: " - DR", " - DONE AQS", " - AQS ADDED", etc.
+//   Strips " - [A-Z ]+" at end of string (all uppercase letters/spaces after the dash).
+//   Known risk: short all-caps location codes like " - NYC" or " - VIP" would also be
+//   stripped. None are in the current dataset; add a negative lookahead if they appear.
+// Raw estimate name is preserved in the DB — this only affects PDF output.
 function sanitizeEstimateName(name: string): string {
   return name
     .replace(/\s*\(\s*upcharg\w*\s+at\s+[\d.]+%\s*\)/gi, '')
+    .replace(/\s*-\s+[A-Z][A-Z ]*$/, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
