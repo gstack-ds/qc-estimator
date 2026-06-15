@@ -1,0 +1,292 @@
+﻿commit 8d0bb8e9c250e1f8c9fdd01c2d158ae0bd5d4c04
+Author: Gary Stack <garystack13@gmail.com>
+Date:   Fri Jun 12 16:02:34 2026 -0400
+
+    feat: migration 045 — fee defaults to vendors, estimate sort/proposal flag, events by date
+    
+    - Move service_charge_default/gratuity_default/admin_fee_default from
+      venue_spaces to vendors table; backfill from first space with values;
+      update VenueForm, SpacesManager, LinkVenuePanel, syncVenueDefaults,
+      saveEstimateAsVenue to read/write new location
+    - Remove Merge Vendors feature (MergeModal, mergeVendors action,
+      mergeLogic.ts, vendorMerge tests); duplicate detection remains at create time
+    - Add sort_order + included_in_proposal to estimates (migration 045);
+      drag-to-reorder estimate cards within each event (dnd-kit); per-estimate
+      proposal toggle; excluded estimates collapse into Not in proposal section
+    - Events always sorted by event_date ascending; remove HTML5 event drag UI
+    
+    Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+diff --git a/src/app/(programs)/venues/actions.ts b/src/app/(programs)/venues/actions.ts
+index e43ae4e..305538b 100644
+--- a/src/app/(programs)/venues/actions.ts
++++ b/src/app/(programs)/venues/actions.ts
+@@ -89,6 +89,9 @@ export async function updateVenue(id: string, data: {
+   notes?: string | null;
+   last_used_date?: string | null;
+   vendor_type?: 'venue' | 'restaurant' | 'tour' | 'transportation' | 'entertainment' | 'decor';
++  service_charge_default?: number | null;
++  gratuity_default?: number | null;
++  admin_fee_default?: number | null;
+ }): Promise<{ error?: string }> {
+   const supabase = await createClient();
+   const patch = data.city ? { ...data, city: normalizeCity(data.city) } : data;
+@@ -167,12 +170,11 @@ export async function applyVendorExtraction(
+ 
+   // Spaces are always ADDed (never replacing existing), with duplicate detection
+   if (apply.has('spaces') && profile.spaces.length > 0) {
+-    const { detectDuplicateSpaces } = await import('@/lib/vendors/mergeLogic');
+     const { data: existingSpaces } = await supabase
+       .from('venue_spaces').select('id, name').eq('venue_id', vendorId);
+     const existing = existingSpaces ?? [];
+-    const dupes = new Set(detectDuplicateSpaces(existing, profile.spaces.map((s, i) => ({ id: `ext-${i}`, name: s.name }))).map((d) => d.loserSpaceId));
+-    const toAdd = profile.spaces.filter((_, i) => !dupes.has(`ext-${i}`));
++    const existingNames = new Set(existing.map((s) => s.name.toLowerCase().trim()));
++    const toAdd = profile.spaces.filter((s) => !existingNames.has(s.name.toLowerCase().trim()));
+     for (const space of toAdd) {
+       await supabase.from('venue_spaces').insert({
+         venue_id: vendorId,
+@@ -198,9 +200,6 @@ export async function createVenueSpace(venueId: string, data: {
+   capacity_standing?: number | null;
+   fb_minimum?: number;
+   room_fee?: number;
+-  service_charge_default?: number | null;
+-  gratuity_default?: number | null;
+-  admin_fee_default?: number | null;
+   privacy_tag?: 'private' | 'semi_private' | 'main_dining' | null;
+   notes?: string | null;
+ }): Promise<{ id: string } | { error: string }> {
+@@ -221,9 +220,6 @@ export async function updateVenueSpace(id: string, venueId: string, data: {
+   capacity_standing?: number | null;
+   fb_minimum?: number;
+   room_fee?: number;
+-  service_charge_default?: number | null;
+-  gratuity_default?: number | null;
+-  admin_fee_default?: number | null;
+   privacy_tag?: 'private' | 'semi_private' | 'main_dining' | null;
+   notes?: string | null;
+ }): Promise<{ error?: string }> {
+@@ -285,9 +281,9 @@ export async function autoLinkOrCreateVenue(
+   spaceData: {
+     spaceName: string;
+     fbMinimum: number;
+-    serviceChargeDefault: number | null;
+-    gratuityDefault: number | null;
+-    adminFeeDefault: number | null;
++    serviceChargeDefault?: number | null;
++    gratuityDefault?: number | null;
++    adminFeeDefault?: number | null;
+   },
+ ): Promise<{ action: 'linked' | 'created' | 'skipped'; venueId: string | null; venueSpaceId: string | null; error?: string }> {
+   const supabase = await createClient();
+@@ -339,7 +335,14 @@ export async function autoLinkOrCreateVenue(
+   // Create venue + space
+   const { data: venue, error: ve } = await supabase
+     .from('venues')
+-    .insert({ name, service_styles: [], last_used_date: new Date().toISOString().slice(0, 10) })
++    .insert({
++      name,
++      service_styles: [],
++      last_used_date: new Date().toISOString().slice(0, 10),
++      service_charge_default: spaceData.serviceChargeDefault ?? null,
++      gratuity_default: spaceData.gratuityDefault ?? null,
++      admin_fee_default: spaceData.adminFeeDefault ?? null,
++    })
+     .select('id')
+     .single();
+   if (ve || !venue) return { action: 'skipped', venueId: null, venueSpaceId: null, error: ve?.message };
+@@ -351,9 +354,6 @@ export async function autoLinkOrCreateVenue(
+       venue_id: venueId,
+       name: spaceData.spaceName || name,
+       fb_minimum: spaceData.fbMinimum,
+-      service_charge_default: spaceData.serviceChargeDefault,
+-      gratuity_default: spaceData.gratuityDefault,
+-      admin_fee_default: spaceData.adminFeeDefault,
+     })
+     .select('id')
+     .single();
+@@ -371,9 +371,9 @@ export async function autoLinkOrCreateVenue(
+ 
+ // ─── Sync venue space defaults from estimate ──────────────
+ 
+-export async function syncVenueSpaceDefaults(
+-  venueSpaceId: string,
++export async function syncVenueDefaults(
+   venueId: string,
++  spaceId: string | null,
+   data: {
+     fbMinimum: number;
+     serviceChargeDefault: number | null;
+@@ -382,17 +382,22 @@ export async function syncVenueSpaceDefaults(
+   },
+ ): Promise<{ error?: string }> {
+   const supabase = await createClient();
+-  const { error } = await supabase
+-    .from('venue_spaces')
++  const { error: ve } = await supabase
++    .from('venues')
+     .update({
+-      fb_minimum: data.fbMinimum,
+       service_charge_default: data.serviceChargeDefault,
+       gratuity_default: data.gratuityDefault,
+       admin_fee_default: data.adminFeeDefault,
+       updated_at: new Date().toISOString(),
+     })
+-    .eq('id', venueSpaceId);
+-  if (error) return { error: error.message };
++    .eq('id', venueId);
++  if (ve) return { error: ve.message };
++  if (spaceId) {
++    await supabase
++      .from('venue_spaces')
++      .update({ fb_minimum: data.fbMinimum, updated_at: new Date().toISOString() })
++      .eq('id', spaceId);
++  }
+   revalidatePath(`/venues/${venueId}`);
+   return {};
+ }
+@@ -431,16 +436,24 @@ export async function saveEstimateAsVenue(
+   }
+   const supabase = await createClient();
+ 
++  const { service_charge_default, gratuity_default, admin_fee_default, ...spaceDataRest } = spaceData;
+   const { data: venue, error: ve } = await supabase
+     .from('venues')
+-    .insert({ ...venueData, service_styles: venueData.service_styles ?? [], last_used_date: new Date().toISOString().slice(0, 10) })
++    .insert({
++      ...venueData,
++      service_styles: venueData.service_styles ?? [],
++      last_used_date: new Date().toISOString().slice(0, 10),
++      service_charge_default: service_charge_default ?? null,
++      gratuity_default: gratuity_default ?? null,
++      admin_fee_default: admin_fee_default ?? null,
++    })
+     .select('id')
+     .single();
+   if (ve) return { error: ve.message };
+ 
+   const { data: space, error: se } = await supabase
+     .from('venue_spaces')
+-    .insert({ venue_id: venue.id, ...spaceData })
++    .insert({ venue_id: venue.id, ...spaceDataRest })
+     .select('id')
+     .single();
+   if (se) return { error: se.message };
+@@ -457,117 +470,6 @@ export async function saveEstimateAsVenue(
+ }
+ 
+ 
+-// ─── Merge vendors ────────────────────────────────────────
+-
+-export interface MergeVendorsResult {
+-  survivorId: string;
+-  estimatesMoved: number;
+-  photosMoved: number;
+-  spacesRepointed: number;
+-  duplicateSpaces: Array<{ survivorSpaceId: string; loserSpaceId: string; name: string }>;
+-}
+-
+-export async function mergeVendors(survivorId: string, loserId: string): Promise<{ data: MergeVendorsResult | null; error: string | null }> {
+-  if (survivorId === loserId) return { data: null, error: 'Survivor and loser must be different vendors.' };
+-
+-  const supabase = await createClient();
+-
+-  // Load both vendors and their spaces
+-  const [{ data: survivor, error: e1 }, { data: loser, error: e2 }] = await Promise.all([
+-    supabase.from('venues').select('*').eq('id', survivorId).single(),
+-    supabase.from('venues').select('*').eq('id', loserId).single(),
+-  ]);
+-  if (e1 || !survivor) return { data: null, error: e1?.message ?? 'Survivor not found' };
+-  if (e2 || !loser) return { data: null, error: e2?.message ?? 'Loser not found' };
+-
+-  const [{ data: survivorSpaces }, { data: loserSpaces }] = await Promise.all([
+-    supabase.from('venue_spaces').select('id, name').eq('venue_id', survivorId),
+-    supabase.from('venue_spaces').select('id, name').eq('venue_id', loserId),
+-  ]);
+-
+-  // Detect duplicate spaces before repointing
+-  const { detectDuplicateSpaces, mergeJsonb, mergeText } = await import('@/lib/vendors/mergeLogic');
+-  const sSpaces = survivorSpaces ?? [];
+-  const lSpaces = loserSpaces ?? [];
+-  const duplicateSpaces = detectDuplicateSpaces(sSpaces, lSpaces);
+-  const duplicateLoserIds = new Set(duplicateSpaces.map((d) => d.loserSpaceId));
+-
+-  // Repoint estimates
+-  const { data: estimatesData } = await supabase
+-    .from('estimates').update({ venue_id: survivorId }).eq('venue_id', loserId).select('id');
+-  const estimatesMoved = estimatesData?.length ?? 0;
+-
+-  // Repoint vendor_photos
+-  const { data: photosData } = await supabase
+-    .from('vendor_photos').update({ vendor_id: survivorId }).eq('vendor_id', loserId).select('id');
+-  const photosMoved = photosData?.length ?? 0;
+-
+-  // Repoint non-duplicate spaces; delete duplicate loser spaces
+-  let spacesRepointed = 0;
+-  const spacesToRepoint = lSpaces.filter((s) => !duplicateLoserIds.has(s.id));
+-  if (spacesToRepoint.length > 0) {
+-    const { data: repointed } = await supabase
+-      .from('venue_spaces').update({ venue_id: survivorId }).in('id', spacesToRepoint.map((s) => s.id)).select('id');
+-    spacesRepointed = repointed?.length ?? 0;
+-  }
+-  if (duplicateLoserIds.size > 0) {
+-    await supabase.from('venue_spaces').delete().in('id', [...duplicateLoserIds]);
+-  }
+-
+-  // Merge JSONB profile fields (survivor wins unless empty)
+-  const mergedMenus = mergeJsonb(survivor.menus, loser.menus);
+-  const mergedBarOptions = mergeJsonb(survivor.bar_options, loser.bar_options);
+-  const mergedInclusions = mergeJsonb(survivor.inclusions, loser.inclusions);
+-
+-  // Merge nullable text fields
+-  const mergedAddress     = mergeText(survivor.address,      loser.address);
+-  const mergedCity        = mergeText(survivor.city,         loser.city);
+-  const mergedState       = mergeText(survivor.state,        loser.state);
+-  const mergedZip         = mergeText(survivor.zip,          loser.zip);
+-  const mergedMarket      = mergeText(survivor.market,       loser.market);
+-  const mergedContactName = mergeText(survivor.contact_name, loser.contact_name);
+-  const mergedContactTitle= mergeText(survivor.contact_title,loser.contact_title);
+-  const mergedContactEmail= mergeText(survivor.contact_email,loser.contact_email);
+-  const mergedContactPhone= mergeText(survivor.contact_phone,loser.contact_phone);
+-  const mergedEmailSig    = mergeText(survivor.email_signature, loser.email_signature);
+-  const mergedWebsite     = mergeText(survivor.website,      loser.website);
+-  const mergedNotes       = mergeText(survivor.notes,        loser.notes);
+-  const mergedProfileNotes= mergeText(survivor.profile_notes,loser.profile_notes);
+-
+-  // Update survivor with merged fields
+-  const { error: updateErr } = await supabase.from('venues').update({
+-    address:       mergedAddress,
+-    city:          mergedCity,
+-    state:         mergedState,
+-    zip:           mergedZip,
+-    market:        mergedMarket,
+-    contact_name:  mergedContactName,
+-    contact_title: mergedContactTitle,
+-    contact_email: mergedContactEmail,
+-    contact_phone: mergedContactPhone,
+-    email_signature: mergedEmailSig,
+-    website:       mergedWebsite,
+-    notes:         mergedNotes,
+-    profile_notes: mergedProfileNotes,
+-    menus:         mergedMenus,
+-    bar_options:   mergedBarOptions,
+-    inclusions:    mergedInclusions,
+-  }).eq('id', survivorId);
+-  if (updateErr) return { data: null, error: updateErr.message };
+-
+-  // Delete loser (cascades vendor_photos, remaining venue_spaces via ON DELETE CASCADE)
+-  const { error: deleteErr } = await supabase.from('venues').delete().eq('id', loserId);
+-  if (deleteErr) return { data: null, error: deleteErr.message };
+-
+-  revalidatePath('/vendors');
+-  revalidatePath(`/venues/${survivorId}`);
+-
+-  return {
+-    data: { survivorId, estimatesMoved, photosMoved, spacesRepointed, duplicateSpaces },
+-    error: null,
+-  };
+-}
+-
+ // ─── Bulk update vendors ──────────────────────────────────
+ 
+ export async function bulkUpdateVendors(

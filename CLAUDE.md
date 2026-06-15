@@ -540,8 +540,18 @@ This is the heart of the application. The pricing engine must produce IDENTICAL 
 - [x] Generate Deck feature: Layers 1+2+3 — DeckContract (existing), narrative (claude-sonnet-4-6, Zod schema, retry+degrade), renderer as Vercel serverless function (@sparticuz/chromium-min + puppeteer-core, maxDuration=60); GenerateDeckButton on estimate + program pages; 19 new tests (800 total). Merged to main, deployed to production.
 - [x] Restore Merge Vendors: mergeLogic.ts + vendorMerge.test.ts (22 tests) + mergeVendors action + MergeModal — all restored; typed "MERGE" confirmation replaced with checkbox. 822 tests passing.
 
+- [x] Event detection Phase 1 (feat/event-detection-phase1, merged + deployed 2026-06-15):
+  - Second-pass Claude haiku extraction (`detectEventsFromBrief`) runs in parallel with primary extraction on RFP/brief upload
+  - `src/lib/programs/eventDetection.ts` — server-free pure functions: `normalizeEventType`, `normalizeDetectedEvent`, `hasExistingEvents`, `buildDetectEventsPrompt`
+  - `DetectedEventsPanel` — per-event checkboxes (all checked by default); create mode shows note "N events will be created when you save"; edit mode shows "Create selected (N)" button with duplicate guard + force-confirm flow
+  - `autoCreateEvents` wired into `handleCreate()`: after program saves, selected detected events are created automatically (`skipDuplicateCheck: true`); hard DB errors block redirect and surface via `saveError`
+  - Duplicate guard fix: `.neq('name', 'Program Events')` excludes migration-014 backfill row so guard no longer fires on every existing program in edit mode
+  - 33 unit tests in `tests/unit/eventDetection.test.ts`; Meridian RFP fixture PDFs in `tests/fixtures/`
+  - 855 tests passing; merged to main; pushed; deployed to production; end-to-end confirmed by Gary
+
 ### Next Session Start
-- 822 tests passing. On main, deployed to production.
+- 855 tests passing. On main, deployed to production.
+- **Market data cleanup needed:** venues.market has typos and variants ("Washingon" vs "Washington, DC", "New York" vs "New York City") that appear as separate rows in the markets table. See current session diagnosis — run `SELECT name FROM markets ORDER BY name;` in Supabase to see all variants, then UPDATE both `markets` and `venues` to canonical names. Prevention option: add a SQL migration to normalize markets + optionally add a FK from venues.market → markets.name. See current-session diagnosis for full SQL plan.
 - **Generate Deck PDF needs visual polish** — it works end-to-end but Gary noted the layout/styling needs improvement. Start by reviewing `src/lib/deck/renderer.ts` (the `buildDeckHtml()` function) — that's where all the HTML/CSS lives.
 - MCP server: copy mcp-server/.env.example to mcp-server/.env and add Supabase creds, then add to Claude Desktop config (see CLAUDE.md → MCP Server section).
 - Tell Alex about the Bright Darling substitute (Cormorant Garamond in Slide Copy preview; she swaps in Canva).
