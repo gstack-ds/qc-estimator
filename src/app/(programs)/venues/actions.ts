@@ -471,6 +471,110 @@ export async function saveEstimateAsVenue(
 }
 
 
+// ─── Merge vendors ────────────────────────────────────────
+
+export interface MergeVendorsResult {
+  survivorId: string;
+  estimatesMoved: number;
+  photosMoved: number;
+  spacesRepointed: number;
+  duplicateSpaces: Array<{ survivorSpaceId: string; loserSpaceId: string; name: string }>;
+}
+
+export async function mergeVendors(
+  survivorId: string,
+  loserId: string
+): Promise<{ data: MergeVendorsResult | null; error: string | null }> {
+  if (survivorId === loserId) return { data: null, error: 'Survivor and loser must be different vendors.' };
+
+  const supabase = await createClient();
+
+  const [{ data: survivor, error: e1 }, { data: loser, error: e2 }] = await Promise.all([
+    supabase.from('venues').select('*').eq('id', survivorId).single(),
+    supabase.from('venues').select('*').eq('id', loserId).single(),
+  ]);
+  if (e1 || !survivor) return { data: null, error: e1?.message ?? 'Survivor not found' };
+  if (e2 || !loser) return { data: null, error: e2?.message ?? 'Loser not found' };
+
+  const [{ data: survivorSpaces }, { data: loserSpaces }] = await Promise.all([
+    supabase.from('venue_spaces').select('id, name').eq('venue_id', survivorId),
+    supabase.from('venue_spaces').select('id, name').eq('venue_id', loserId),
+  ]);
+
+  const { detectDuplicateSpaces, mergeJsonb, mergeText } = await import('@/lib/vendors/mergeLogic');
+  const sSpaces = survivorSpaces ?? [];
+  const lSpaces = loserSpaces ?? [];
+  const duplicateSpaces = detectDuplicateSpaces(sSpaces, lSpaces);
+  const duplicateLoserIds = new Set(duplicateSpaces.map((d) => d.loserSpaceId));
+
+  const { data: estimatesData } = await supabase
+    .from('estimates').update({ venue_id: survivorId }).eq('venue_id', loserId).select('id');
+  const estimatesMoved = estimatesData?.length ?? 0;
+
+  const { data: photosData } = await supabase
+    .from('vendor_photos').update({ vendor_id: survivorId }).eq('vendor_id', loserId).select('id');
+  const photosMoved = photosData?.length ?? 0;
+
+  let spacesRepointed = 0;
+  const spacesToRepoint = lSpaces.filter((s) => !duplicateLoserIds.has(s.id));
+  if (spacesToRepoint.length > 0) {
+    const { data: repointed } = await supabase
+      .from('venue_spaces').update({ venue_id: survivorId }).in('id', spacesToRepoint.map((s) => s.id)).select('id');
+    spacesRepointed = repointed?.length ?? 0;
+  }
+  if (duplicateLoserIds.size > 0) {
+    await supabase.from('venue_spaces').delete().in('id', [...duplicateLoserIds]);
+  }
+
+  const mergedMenus        = mergeJsonb(survivor.menus,         loser.menus);
+  const mergedBarOptions   = mergeJsonb(survivor.bar_options,   loser.bar_options);
+  const mergedInclusions   = mergeJsonb(survivor.inclusions,    loser.inclusions);
+  const mergedAddress      = mergeText(survivor.address,        loser.address);
+  const mergedCity         = mergeText(survivor.city,           loser.city);
+  const mergedState        = mergeText(survivor.state,          loser.state);
+  const mergedZip          = mergeText(survivor.zip,            loser.zip);
+  const mergedMarket       = mergeText(survivor.market,         loser.market);
+  const mergedContactName  = mergeText(survivor.contact_name,   loser.contact_name);
+  const mergedContactTitle = mergeText(survivor.contact_title,  loser.contact_title);
+  const mergedContactEmail = mergeText(survivor.contact_email,  loser.contact_email);
+  const mergedContactPhone = mergeText(survivor.contact_phone,  loser.contact_phone);
+  const mergedEmailSig     = mergeText(survivor.email_signature,loser.email_signature);
+  const mergedWebsite      = mergeText(survivor.website,        loser.website);
+  const mergedNotes        = mergeText(survivor.notes,          loser.notes);
+  const mergedProfileNotes = mergeText(survivor.profile_notes,  loser.profile_notes);
+
+  const { error: updateErr } = await supabase.from('venues').update({
+    address:         mergedAddress,
+    city:            mergedCity,
+    state:           mergedState,
+    zip:             mergedZip,
+    market:          mergedMarket,
+    contact_name:    mergedContactName,
+    contact_title:   mergedContactTitle,
+    contact_email:   mergedContactEmail,
+    contact_phone:   mergedContactPhone,
+    email_signature: mergedEmailSig,
+    website:         mergedWebsite,
+    notes:           mergedNotes,
+    profile_notes:   mergedProfileNotes,
+    menus:           mergedMenus,
+    bar_options:     mergedBarOptions,
+    inclusions:      mergedInclusions,
+  }).eq('id', survivorId);
+  if (updateErr) return { data: null, error: updateErr.message };
+
+  const { error: deleteErr } = await supabase.from('venues').delete().eq('id', loserId);
+  if (deleteErr) return { data: null, error: deleteErr.message };
+
+  revalidatePath('/vendors');
+  revalidatePath(`/venues/${survivorId}`);
+
+  return {
+    data: { survivorId, estimatesMoved, photosMoved, spacesRepointed, duplicateSpaces },
+    error: null,
+  };
+}
+
 // ─── Bulk update vendors ──────────────────────────────────
 
 export async function bulkUpdateVendors(
