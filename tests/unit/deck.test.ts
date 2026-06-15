@@ -379,6 +379,15 @@ describe('buildDeckHtml', () => {
     expect(html).toContain('KP Pending');
   });
 
+  it('chained all-caps suffixes are fully stripped in one pass', () => {
+    const chained: RawEstimate = { ...estimate, name: 'The Grand Venue - DR - DONE AQS' };
+    const contract1 = buildDeckContract(chained, [fbSection], [lineItem], program, location, tiers, categoryMarkups);
+    const html = buildDeckHtml([{ contract: contract1, narrative: defaultNarrative({ ...narrativeInput, estimateName: chained.name }) }]);
+    expect(html).not.toContain('- DR');
+    expect(html).not.toContain('DONE AQS');
+    expect(html).toContain('The Grand Venue');
+  });
+
   it('internal margin fields are absent from rendered HTML', () => {
     const html = buildDeckHtml([{ contract, narrative }]);
     // These are MarginAnalysis-only fields — they must never leak into a client PDF.

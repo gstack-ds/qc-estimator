@@ -206,14 +206,18 @@ async function fetchEstimateSlide(
   }
 
   let eventType: string | null = null;
+  let eventGuestCount: number | null = null;
   if (est.event_id) {
     const { data: ev } = await db
       .from('events')
-      .select('event_type')
+      .select('event_type, guest_count')
       .eq('id', est.event_id)
       .single();
     eventType = ev?.event_type ?? null;
+    eventGuestCount = ev?.guest_count ?? null;
   }
+
+  const effectiveGuestCount = eventGuestCount ?? shared.rawProgram.guest_count;
 
   const travelTotal = (travelResult.data ?? []).reduce(
     (s: number, it: { qty: number; unit_price: number }) => s + it.qty * it.unit_price,
@@ -247,7 +251,7 @@ async function fetchEstimateSlide(
     rawEstimate,
     (sectionsResult.data ?? []) as RawSection[],
     (itemsResult.data ?? []) as RawLineItem[],
-    shared.rawProgram,
+    { ...shared.rawProgram, guest_count: effectiveGuestCount },
     shared.location,
     shared.tiers as TeamHoursTier[],
     shared.rawMarkups,
@@ -262,7 +266,7 @@ async function fetchEstimateSlide(
     venueName,
     venueCity,
     eventType,
-    guestCount: shared.rawProgram.guest_count,
+    guestCount: effectiveGuestCount,
     sectionNames: contract.sections.map((s) => s.name),
   };
 

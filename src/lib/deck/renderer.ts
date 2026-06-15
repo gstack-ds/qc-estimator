@@ -54,7 +54,7 @@ function fmtPct(n: number): string {
 function sanitizeEstimateName(name: string): string {
   return name
     .replace(/\s*\(\s*upcharg\w*\s+at\s+[\d.]+%\s*\)/gi, '')
-    .replace(/\s*-\s+[A-Z][A-Z ]*$/, '')
+    .replace(/(\s*-\s+[A-Z][A-Z ]*)+$/, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
