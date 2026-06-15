@@ -145,13 +145,15 @@ async function fetchSlide(estimateId: string) {
   }
 
   let eventType: string | null = null;
+  let eventGuestCount: number | null = null;
   if (estimate.event_id) {
     const { data: ev } = await supabase
       .from('events')
-      .select('event_type')
+      .select('event_type, guest_count')
       .eq('id', estimate.event_id)
       .single();
     eventType = ev?.event_type ?? null;
+    eventGuestCount = ev?.guest_count ?? null;
   }
 
   const travelTotal = (travelItemsResult.data ?? []).reduce(
@@ -182,9 +184,13 @@ async function fetchSlide(estimateId: string) {
     venue_space_id: estimate.venue_space_id,
   };
 
+  // Prefer event-level guest count so per-person math reflects this specific event,
+  // not the aggregate program headcount.
+  const effectiveGuestCount = eventGuestCount ?? prog.guest_count;
+
   const rawProgram: RawProgram = {
     id: prog.id,
-    guest_count: prog.guest_count,
+    guest_count: effectiveGuestCount,
     cc_processing_fee: prog.cc_processing_fee,
     client_commission: prog.client_commission,
     gdp_commission_enabled: prog.gdp_commission_enabled,
@@ -225,7 +231,7 @@ async function fetchSlide(estimateId: string) {
     venueName,
     venueCity,
     eventType,
-    guestCount: prog.guest_count,
+    guestCount: effectiveGuestCount,
     sectionNames: contract.sections.map((s) => s.name),
   };
 

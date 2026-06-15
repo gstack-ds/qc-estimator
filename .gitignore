@@ -1,3 +1,6 @@
+# Local preview output
+tmp/
+
 # Dependencies
 node_modules/
 .pnp

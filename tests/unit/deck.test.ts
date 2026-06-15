@@ -315,4 +315,90 @@ describe('buildDeckHtml', () => {
     expect(html.startsWith('<!DOCTYPE html>')).toBe(true);
     expect(html).toContain('</html>');
   });
+
+  it('empty sections (zero line items) produce no section header in rendered HTML', () => {
+    const emptySection: RawSection = {
+      id: 'sec-empty',
+      name: 'Empty Placeholder Section',
+      tax_bucket: 'equipment',
+      markup_pct: 0.65,
+      sort_order: 1,
+    };
+    // fbSection has one line item; emptySection has none
+    const contractWithEmpty = buildDeckContract(
+      estimate,
+      [fbSection, emptySection],
+      [lineItem],
+      program,
+      location,
+      tiers,
+      categoryMarkups,
+    );
+    const html = buildDeckHtml([{ contract: contractWithEmpty, narrative }]);
+    // Empty section header must not appear
+    expect(html).not.toContain('Empty Placeholder Section');
+    // Non-empty section still renders
+    expect(html).toContain('Food &amp; Beverage');
+  });
+
+  it('upcharge annotations and internal DR suffix are stripped from estimate name in rendered HTML', () => {
+    const upchargeEstimate: RawEstimate = { ...estimate, name: 'The Nook on Piedmont - DR (upcharged at 40%)' };
+    const upchargeEstimate2: RawEstimate = { ...estimate, name: 'Wicked Wolf - DR (upcharge at 45%)' };
+    const contract1 = buildDeckContract(upchargeEstimate, [fbSection], [lineItem], program, location, tiers, categoryMarkups);
+    const contract2 = buildDeckContract(upchargeEstimate2, [fbSection], [lineItem], program, location, tiers, categoryMarkups);
+    const html = buildDeckHtml([
+      { contract: contract1, narrative: defaultNarrative({ ...narrativeInput, estimateName: upchargeEstimate.name }) },
+      { contract: contract2, narrative: defaultNarrative({ ...narrativeInput, estimateName: upchargeEstimate2.name }) },
+    ]);
+    expect(html).not.toContain('upcharged at 40%');
+    expect(html).not.toContain('upcharge at 45%');
+    // " - DR" suffix must also be stripped (internal room code)
+    expect(html).not.toContain('- DR');
+    expect(html).toContain('The Nook on Piedmont');
+    expect(html).toContain('Wicked Wolf');
+  });
+
+  it('all-caps internal suffixes are stripped from estimate name in rendered HTML', () => {
+    const doneAqs: RawEstimate = { ...estimate, name: "Marlow's Tavern - DONE AQS" };
+    const aqsOnly: RawEstimate = { ...estimate, name: 'Ecco Midtown - AQS DONE' };
+    const mixedCase: RawEstimate = { ...estimate, name: 'Old Vinings Inn - KP Pending' };
+    const contracts = [doneAqs, aqsOnly, mixedCase].map((e) =>
+      buildDeckContract(e, [fbSection], [lineItem], program, location, tiers, categoryMarkups)
+    );
+    const narratives = [doneAqs, aqsOnly, mixedCase].map((e) =>
+      defaultNarrative({ ...narrativeInput, estimateName: e.name })
+    );
+    const html = buildDeckHtml(contracts.map((c, i) => ({ contract: c, narrative: narratives[i] })));
+    // All-caps suffixes must be gone
+    expect(html).not.toContain('DONE AQS');
+    expect(html).not.toContain('AQS DONE');
+    // Venue names must remain
+    expect(html).toContain("Marlow's Tavern");
+    expect(html).toContain('Ecco Midtown');
+    // Mixed-case suffix (" - KP Pending") must NOT be stripped
+    expect(html).toContain('KP Pending');
+  });
+
+  it('chained all-caps suffixes are fully stripped in one pass', () => {
+    const chained: RawEstimate = { ...estimate, name: 'The Grand Venue - DR - DONE AQS' };
+    const contract1 = buildDeckContract(chained, [fbSection], [lineItem], program, location, tiers, categoryMarkups);
+    const html = buildDeckHtml([{ contract: contract1, narrative: defaultNarrative({ ...narrativeInput, estimateName: chained.name }) }]);
+    expect(html).not.toContain('- DR');
+    expect(html).not.toContain('DONE AQS');
+    expect(html).toContain('The Grand Venue');
+  });
+
+  it('internal margin fields are absent from rendered HTML', () => {
+    const html = buildDeckHtml([{ contract, narrative }]);
+    // These are MarginAnalysis-only fields — they must never leak into a client PDF.
+    const internalFields = [
+      'qcMargin', 'marginPct', 'trueNetMargin', 'trueNetPct',
+      'opExHours', 'opExCost', 'totalOur', 'vendorCostsBase',
+      'ccProcessingAmount', 'gdpCommission', 'thirdPartyTotal',
+      'revenueItemsClientTotal', 'vendorTaxesTotal',
+    ];
+    for (const field of internalFields) {
+      expect(html, `"${field}" must not appear in client PDF HTML`).not.toContain(field);
+    }
+  });
 });
