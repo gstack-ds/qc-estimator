@@ -8,6 +8,7 @@ import {
   updateProgram,
   updateProgramType,
   extractProgramBriefFromPath,
+  detectEventsFromBrief,
   registerProgramAttachment,
   getProgramAttachments,
   deleteProgramAttachment,
@@ -16,6 +17,8 @@ import {
 } from '@/app/(programs)/programs/actions';
 import { createClient } from '@/lib/supabase/client';
 import { createLocation } from '@/app/(admin)/admin/actions';
+import DetectedEventsPanel from '@/components/programs/DetectedEventsPanel';
+import type { DetectedEvent } from '@/lib/programs/eventDetection';
 
 interface Props {
   program?: DbProgramWithLocation;
@@ -156,9 +159,15 @@ export default function ProgramForm({ program, locations, mode }: Props) {
         return;
       }
 
-      const { error, data } = await extractProgramBriefFromPath(storagePath);
+      const [{ error, data }, { events: detectedEvents }] = await Promise.all([
+        extractProgramBriefFromPath(storagePath),
+        detectEventsFromBrief(storagePath),
+      ]);
+      const merged: ExtractedProgramBrief | null = data
+        ? { ...data, detectedEvents: detectedEvents.length > 0 ? detectedEvents : undefined }
+        : detectedEvents.length > 0 ? { detectedEvents } : null;
       setPendingFiles((prev) => prev.map((p) =>
-        p.key === key ? { ...p, extracting: false, extracted: data, extractError: error ?? null } : p
+        p.key === key ? { ...p, extracting: false, extracted: merged, extractError: error ?? null } : p
       ));
     } else {
       // Edit mode: upload immediately, show in attachments list
@@ -182,14 +191,20 @@ export default function ProgramForm({ program, locations, mode }: Props) {
         return;
       }
 
-      const { error: extractErr, data } = await extractProgramBriefFromPath(storagePath);
+      const [{ error: extractErr, data }, { events: detectedEvents }] = await Promise.all([
+        extractProgramBriefFromPath(storagePath),
+        detectEventsFromBrief(storagePath),
+      ]);
+      const mergedEdit: ExtractedProgramBrief | null = data
+        ? { ...data, detectedEvents: detectedEvents.length > 0 ? detectedEvents : undefined }
+        : detectedEvents.length > 0 ? { detectedEvents } : null;
       const { record, error: regErr } = await registerProgramAttachment({
         programId: program!.id,
         storagePath,
         fileName: file.name,
         fileSize: file.size,
         mimeType: file.type,
-        extractedData: data ?? null,
+        extractedData: mergedEdit,
       });
 
       if (regErr || extractErr) {
@@ -379,6 +394,7 @@ export default function ProgramForm({ program, locations, mode }: Props) {
         {uploadError && <p className="text-xs text-red-500 mt-2">{uploadError}</p>}
 
         {hasDocs && (
+          <>
           <ul className="mt-3">
             {mode === 'create' && pendingFiles.map((pf) => (
               <AttachmentRow
@@ -412,6 +428,19 @@ export default function ProgramForm({ program, locations, mode }: Props) {
               />
             ))}
           </ul>
+          {(() => {
+            const allDetected: DetectedEvent[] = mode === 'create'
+              ? pendingFiles.flatMap((pf) => pf.extracted?.detectedEvents ?? [])
+              : attachments.flatMap((att) => (att.extracted_data as ExtractedProgramBrief | null)?.detectedEvents ?? []);
+            if (allDetected.length === 0) return null;
+            return (
+              <DetectedEventsPanel
+                programId={mode === 'edit' && program?.id ? program.id : null}
+                detectedEvents={allDetected}
+              />
+            );
+          })()}
+          </>
         )}
       </div>
 

@@ -4,6 +4,11 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import Anthropic from '@anthropic-ai/sdk';
 import { programStatusToLeadStatus, type ProgramStatus } from '@/lib/programs/constants';
+import {
+  normalizeDetectedEvent,
+  buildDetectEventsPrompt,
+  type DetectedEvent,
+} from '@/lib/programs/eventDetection';
 import type { DocumentBlockParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
 
 // ─── Programs ────────────────────────────────────────────
@@ -613,6 +618,8 @@ export interface ExtractedProgramBrief {
   venueName?: string;
   roomSpace?: string;
   notes?: string;
+  // Second-pass event detection — stored alongside flat fields in extracted_data JSONB
+  detectedEvents?: DetectedEvent[];
 }
 
 export interface ProgramAttachmentRecord {
@@ -789,6 +796,95 @@ export async function deleteProgramAttachment(id: string, storagePath: string): 
   const { error } = await supabase.from('program_attachments').delete().eq('id', id);
   if (error) return { error: error.message };
   return { error: null };
+}
+
+// ─── Event Detection (second-pass) ───────────────────────────────────────────
+
+// Downloads a stored PDF and runs a second Claude pass to detect distinct events.
+// Uses claude-haiku (fast + cheap) since this is structural extraction, not analysis.
+// Degrades silently — a failed detection never blocks the primary extraction flow.
+export async function detectEventsFromBrief(
+  storagePath: string,
+): Promise<{ events: DetectedEvent[]; error: string | null }> {
+  const supabase = await createClient();
+  const { data: fileBlob, error: downloadErr } = await supabase.storage
+    .from('estimate-attachments')
+    .download(storagePath);
+  if (downloadErr || !fileBlob) return { events: [], error: downloadErr?.message ?? 'Download failed' };
+
+  const base64 = Buffer.from(await fileBlob.arrayBuffer()).toString('base64');
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  let text: string;
+  try {
+    const docBlock: DocumentBlockParam = {
+      type: 'document',
+      source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+    };
+    const textBlock: TextBlockParam = { type: 'text', text: buildDetectEventsPrompt() };
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2048,
+      messages: [{ role: 'user', content: [docBlock, textBlock] }],
+    });
+    text =
+      (response.content.find((c) => c.type === 'text') as
+        | { type: 'text'; text: string }
+        | undefined)?.text ?? '';
+  } catch (e) {
+    return { events: [], error: e instanceof Error ? e.message : 'API call failed' };
+  }
+
+  try {
+    const stripped = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    const jsonMatch = stripped.match(/\[[\s\S]*\]/);
+    const raw = JSON.parse(jsonMatch?.[0] ?? stripped) as unknown[];
+    if (!Array.isArray(raw)) return { events: [], error: null };
+    return { events: raw.map(normalizeDetectedEvent), error: null };
+  } catch {
+    return { events: [], error: null };
+  }
+}
+
+// Creates events from detected list. Returns { skipped: true } if the program already
+// has events and skipDuplicateCheck is false — caller decides whether to force-create.
+export async function autoCreateEvents(
+  programId: string,
+  events: DetectedEvent[],
+  opts?: { skipDuplicateCheck?: boolean },
+): Promise<{ created: number; failed: number; skipped: boolean; error: string | null }> {
+  if (!events.length) return { created: 0, failed: 0, skipped: false, error: null };
+
+  const supabase = await createClient();
+
+  if (!opts?.skipDuplicateCheck) {
+    const { count, error: countErr } = await supabase
+      .from('events')
+      .select('id', { count: 'exact', head: true })
+      .eq('program_id', programId);
+    if (countErr) return { created: 0, failed: 0, skipped: false, error: countErr.message };
+    if ((count ?? 0) > 0) return { created: 0, failed: 0, skipped: true, error: null };
+  }
+
+  let created = 0;
+  let failed = 0;
+  for (let i = 0; i < events.length; i++) {
+    const ev = events[i];
+    const { error } = await createEvent(programId, {
+      name: ev.name,
+      event_date: ev.event_date ?? null,
+      start_time: ev.start_time ?? null,
+      end_time: ev.end_time ?? null,
+      guest_count: ev.guest_count,
+      event_type: ev.event_type,
+      description: ev.description ?? null,
+      sort_order: i,
+    });
+    if (!error) created++; else failed++;
+  }
+
+  revalidatePath(`/programs/${programId}`);
+  return { created, failed, skipped: false, error: null };
 }
 
 // ─── Events ───────────────────────────────────────────────
