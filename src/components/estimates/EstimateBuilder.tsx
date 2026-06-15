@@ -279,6 +279,8 @@ export default function EstimateBuilder({
   );
   const [locationSuggestion, setLocationSuggestion] = useState<{ locationId: string; locationName: string } | null>(null);
   const [showMenuImport, setShowMenuImport] = useState(false);
+  const [showVendorMenus, setShowVendorMenus] = useState(false);
+  const [expandedMenuId, setExpandedMenuId] = useState<string | null>(null);
 
   // ─── Venue ↔ estimate sync ────────────────────────────────
   // Records the fbMinimum value last auto-filled from a vendor space selection.
@@ -1500,14 +1502,84 @@ export default function EstimateBuilder({
               </div>
             )}
             {vendorProfile && (vendorProfile.menus.length > 0 || vendorProfile.barOptions.length > 0) && (
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setShowMenuImport(true)}
-                  className="text-xs text-brand-brown hover:text-brand-charcoal border border-brand-copper/30 rounded px-3 py-1.5 hover:bg-brand-cream/40 transition-colors"
-                >
-                  Add from vendor menu
-                </button>
+              <div className="border border-brand-brown/20 rounded-lg overflow-hidden">
+                <div className="flex items-center">
+                  {vendorProfile.menus.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowVendorMenus(o => !o)}
+                      className="flex-1 flex items-center gap-1.5 px-3 py-2 text-xs text-brand-brown hover:bg-brand-offwhite transition-colors text-left"
+                    >
+                      <span className="font-medium">Vendor menus ({vendorProfile.menus.length})</span>
+                      <span className="text-brand-silver ml-auto">{showVendorMenus ? '▲' : '▼'}</span>
+                    </button>
+                  )}
+                  {vendorProfile.barOptions.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowMenuImport(true)}
+                      className={`px-3 py-2 text-xs text-brand-brown hover:bg-brand-offwhite transition-colors whitespace-nowrap${vendorProfile.menus.length > 0 ? ' border-l border-brand-brown/20' : ' flex-1 text-left'}`}
+                    >
+                      + Bar packages
+                    </button>
+                  )}
+                </div>
+
+                {showVendorMenus && vendorProfile.menus.length > 0 && (
+                  <div className="border-t border-brand-brown/10 divide-y divide-brand-cream/60">
+                    {vendorProfile.menus.map((menu) => (
+                      <div key={menu.id} className="bg-white">
+                        <div className="flex items-center gap-2 px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedMenuId((id) => (id === menu.id ? null : menu.id))}
+                            className="flex-1 flex items-baseline gap-2 text-left min-w-0"
+                          >
+                            <span className="text-sm font-medium text-brand-charcoal truncate">{menu.name}</span>
+                            {menu.price_per_person != null && (
+                              <span className="text-xs text-brand-silver shrink-0">${menu.price_per_person}/pp</span>
+                            )}
+                            {menu.courses.length > 0 && (
+                              <span className="text-xs text-brand-silver shrink-0">{expandedMenuId === menu.id ? '▲' : '▼'}</span>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAddFromVendorMenu(menu)}
+                            className="shrink-0 text-xs px-2 py-1 rounded border border-brand-brown/30 text-brand-brown hover:bg-brand-cream transition-colors"
+                          >
+                            Import
+                          </button>
+                        </div>
+                        {expandedMenuId === menu.id && menu.courses.length > 0 && (
+                          <div className="px-3 pb-3 space-y-2">
+                            {menu.courses.map((course) => (
+                              <div key={course.id}>
+                                <p className="text-[11px] font-semibold text-brand-charcoal/60 uppercase tracking-wide">
+                                  {course.name}{course.selection_rule ? ` — ${course.selection_rule}` : ''}
+                                </p>
+                                <div className="mt-0.5 space-y-0.5 pl-2">
+                                  {course.items.map((item) => (
+                                    <div key={item.id} className="flex items-baseline gap-1.5 text-xs text-brand-charcoal">
+                                      <span>{item.name}</span>
+                                      {item.price != null && <span className="text-brand-silver">${item.price}</span>}
+                                      {item.dietary_tags?.map((t) => (
+                                        <span key={t} className="text-[10px] text-emerald-700 border border-emerald-200 bg-emerald-50 rounded px-0.5">{t}</span>
+                                      ))}
+                                    </div>
+                                  ))}
+                                  {course.items.length === 0 && (
+                                    <span className="text-xs text-brand-silver">No items listed</span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             <DndContext sensors={sectionSensors} collisionDetection={closestCenter} onDragEnd={handleSectionDragEnd}>
@@ -1754,9 +1826,9 @@ export default function EstimateBuilder({
         {syncToast}
       </div>
     )}
-    {showMenuImport && vendorProfile && (vendorProfile.menus.length > 0 || vendorProfile.barOptions.length > 0) && (
+    {showMenuImport && vendorProfile && vendorProfile.barOptions.length > 0 && (
       <VendorMenuImportModal
-        menus={vendorProfile.menus}
+        menus={[]}
         barOptions={vendorProfile.barOptions}
         onImport={handleAddFromVendorMenu}
         onImportBars={handleAddBarPackages}
