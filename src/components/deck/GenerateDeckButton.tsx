@@ -59,7 +59,7 @@ export default function GenerateDeckButton(props: Props) {
       <button
         onClick={handleGenerate}
         disabled={generating}
-        className="flex items-center gap-1.5 text-xs bg-brand-charcoal text-white rounded px-3 py-1.5 hover:bg-brand-brown transition-colors disabled:opacity-50"
+        className="flex items-center gap-1.5 text-xs bg-brand-charcoal text-white rounded px-3 py-1.5 hover:bg-brand-brown transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         title={props.mode === 'program' ? 'Generate PDF deck for all proposal estimates' : 'Generate PDF deck for this estimate'}
       >
         <Layers size={12} />
