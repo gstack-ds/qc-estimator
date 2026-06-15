@@ -238,8 +238,6 @@ const CSS = `
     max-width: 100%;
     height: auto;
     display: block;
-    /* mix-blend-mode: multiply makes white logo backgrounds transparent on light pages */
-    mix-blend-mode: multiply;
   }
 
   .cover-logo-fallback {
@@ -332,7 +330,6 @@ const CSS = `
     height: auto;
     margin-top: 4pt;
     opacity: 0.65;
-    mix-blend-mode: multiply;
   }
 
   .page-rule {
