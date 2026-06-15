@@ -315,4 +315,43 @@ describe('buildDeckHtml', () => {
     expect(html.startsWith('<!DOCTYPE html>')).toBe(true);
     expect(html).toContain('</html>');
   });
+
+  it('empty sections (zero line items) produce no section header in rendered HTML', () => {
+    const emptySection: RawSection = {
+      id: 'sec-empty',
+      name: 'Empty Placeholder Section',
+      tax_bucket: 'equipment',
+      markup_pct: 0.65,
+      sort_order: 1,
+    };
+    // fbSection has one line item; emptySection has none
+    const contractWithEmpty = buildDeckContract(
+      estimate,
+      [fbSection, emptySection],
+      [lineItem],
+      program,
+      location,
+      tiers,
+      categoryMarkups,
+    );
+    const html = buildDeckHtml([{ contract: contractWithEmpty, narrative }]);
+    // Empty section header must not appear
+    expect(html).not.toContain('Empty Placeholder Section');
+    // Non-empty section still renders
+    expect(html).toContain('Food &amp; Beverage');
+  });
+
+  it('internal margin fields are absent from rendered HTML', () => {
+    const html = buildDeckHtml([{ contract, narrative }]);
+    // These are MarginAnalysis-only fields — they must never leak into a client PDF.
+    const internalFields = [
+      'qcMargin', 'marginPct', 'trueNetMargin', 'trueNetPct',
+      'opExHours', 'opExCost', 'totalOur', 'vendorCostsBase',
+      'ccProcessingAmount', 'gdpCommission', 'thirdPartyTotal',
+      'revenueItemsClientTotal', 'vendorTaxesTotal',
+    ];
+    for (const field of internalFields) {
+      expect(html, `"${field}" must not appear in client PDF HTML`).not.toContain(field);
+    }
+  });
 });
