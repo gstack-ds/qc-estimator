@@ -5,6 +5,7 @@ import type { EstimateSummary, Location } from '@/types';
 import type { LineItemForExport } from '@/lib/utils/export';
 import { itemClientCost } from '@/lib/utils/export';
 import type { TourDetails } from '@/lib/tours/types';
+import { sanitizeLineItemName } from '@/lib/deck/renderer';
 
 function shortLocationName(name: string): string {
   return name.replace(/\s*\([^)]*\)/, '').replace(/\s+(NC|SC|GA|VA|PA|MD|NY|NJ|DC)$/, '').trim();
@@ -249,14 +250,14 @@ export default function ProposalDocument({
                         <View style={{ width: 18, height: 18, borderRadius: 3, backgroundColor: '#E8E0D5', flexShrink: 0 }} />
                       ) : null}
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.cell}>{item.name}</Text>
+                        <Text style={styles.cell}>{sanitizeLineItemName(item.name)}</Text>
                         {(() => {
                           if (!item.packageOptions || !item.selectedPackageId) return null;
                           const pkg = item.packageOptions.options.find((o) => o.id === item.selectedPackageId);
                           if (!pkg) return null;
                           return (
                             <View style={{ marginTop: 2 }}>
-                              <Text style={{ fontSize: 8, color: BRAND_BROWN, fontWeight: 'bold' }}>{pkg.name}</Text>
+                              <Text style={{ fontSize: 8, color: BRAND_BROWN, fontWeight: 'bold' }}>{sanitizeLineItemName(pkg.name)}</Text>
                               {pkg.items.length > 0 && (
                                 <Text style={{ fontSize: 7.5, color: BRAND_SILVER, marginTop: 1 }}>
                                   {pkg.items.join(' · ')}

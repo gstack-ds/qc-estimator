@@ -59,6 +59,18 @@ function sanitizeEstimateName(name: string): string {
     .trim();
 }
 
+// Strip leading per-person price-tier prefixes from vendor menu names.
+// Vendor menus are often named by price tier: "$70 Per Person Prefixed Seated Plated
+// Dinner Menu" — that cost must never appear on a client proposal.
+// Handles: "$70 Per Person ...", "$85/pp ...", "$85 / pp ...", "$1,200/person ..."
+// Safe to apply to all line item names — no match leaves the string unchanged.
+export function sanitizeLineItemName(name: string): string {
+  return name
+    .replace(/^\$[\d,]+(?:\s*\/\s*(?:pp|person)|\s+per\s+person)\s+/i, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 // ─── Cover page ───────────────────────────────────────────────────────────────
 
 function buildCoverPage(
@@ -118,7 +130,7 @@ function buildPricingPage(
         .map(
           (item) => `
         <tr>
-          <td class="item-name">${esc(item.name)}${item.notes ? `<span class="item-notes"> — ${esc(item.notes)}</span>` : ''}</td>
+          <td class="item-name">${esc(sanitizeLineItemName(item.name))}${item.notes ? `<span class="item-notes"> — ${esc(item.notes)}</span>` : ''}</td>
           <td class="item-qty">${item.qty}</td>
           <td class="item-cost">${fmtMoney(item.clientCost)}</td>
         </tr>`,

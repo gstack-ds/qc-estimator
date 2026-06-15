@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { NarrativeOutputSchema, defaultNarrative } from '../../src/lib/deck/types';
 import type { NarrativeInput } from '../../src/lib/deck/types';
-import { buildDeckHtml } from '../../src/lib/deck/renderer';
+import { buildDeckHtml, sanitizeLineItemName } from '../../src/lib/deck/renderer';
 import {
   buildDeckContract,
   type RawEstimate,
@@ -400,5 +400,84 @@ describe('buildDeckHtml', () => {
     for (const field of internalFields) {
       expect(html, `"${field}" must not appear in client PDF HTML`).not.toContain(field);
     }
+  });
+
+  it('per-person price prefix in line item name is stripped before rendering to client HTML', () => {
+    const pricedItem: RawLineItem = {
+      ...lineItem,
+      name: '$70 Per Person Prefixed Seated Plated Dinner Menu',
+    };
+    const pricedContract = buildDeckContract(estimate, [fbSection], [pricedItem], program, location, tiers, categoryMarkups);
+    const html = buildDeckHtml([{ contract: pricedContract, narrative }]);
+    // Client must never see our per-person cost in the menu label
+    expect(html).not.toContain('$70 Per Person');
+    // Clean portion of the name must remain
+    expect(html).toContain('Prefixed Seated Plated Dinner Menu');
+  });
+
+  it('per-person price prefix variants are all stripped before rendering', () => {
+    const ppItem: RawLineItem = { ...lineItem, name: '$85/pp Premium Dinner Package' };
+    const personItem: RawLineItem = { ...lineItem, id: 'li-2', name: '$1,200/person Grand Ballroom Package' };
+    const noPrefix: RawLineItem = { ...lineItem, id: 'li-3', name: 'Standard Lunch Buffet' };
+
+    const mixedContract = buildDeckContract(estimate, [fbSection], [ppItem, personItem, noPrefix], program, location, tiers, categoryMarkups);
+    const html = buildDeckHtml([{ contract: mixedContract, narrative }]);
+
+    expect(html).not.toContain('$85/pp');
+    expect(html).toContain('Premium Dinner Package');
+
+    expect(html).not.toContain('$1,200/person');
+    expect(html).toContain('Grand Ballroom Package');
+
+    // Names without a price prefix must be unchanged
+    expect(html).toContain('Standard Lunch Buffet');
+  });
+});
+
+// ─── sanitizeLineItemName ─────────────────────────────────────────────────────
+
+describe('sanitizeLineItemName', () => {
+  it('strips "$N Per Person" prefix', () => {
+    expect(sanitizeLineItemName('$70 Per Person Prefixed Seated Plated Dinner Menu'))
+      .toBe('Prefixed Seated Plated Dinner Menu');
+  });
+
+  it('strips "$N/pp" prefix (no space)', () => {
+    expect(sanitizeLineItemName('$85/pp Premium Dinner Package')).toBe('Premium Dinner Package');
+  });
+
+  it('strips "$N / pp" prefix (spaces around slash)', () => {
+    expect(sanitizeLineItemName('$85 / pp Premium Dinner Package')).toBe('Premium Dinner Package');
+  });
+
+  it('strips "$N/person" prefix', () => {
+    expect(sanitizeLineItemName('$1,200/person Grand Ballroom Package')).toBe('Grand Ballroom Package');
+  });
+
+  it('strips "$N/PP" prefix (uppercase PP)', () => {
+    expect(sanitizeLineItemName('$95/PP Deluxe Buffet')).toBe('Deluxe Buffet');
+  });
+
+  it('strips "$N per person" prefix (all lowercase)', () => {
+    expect(sanitizeLineItemName('$50 per person breakfast buffet')).toBe('breakfast buffet');
+  });
+
+  it('leaves names without a price prefix unchanged', () => {
+    expect(sanitizeLineItemName('Plated Dinner')).toBe('Plated Dinner');
+    expect(sanitizeLineItemName('Standard Lunch Buffet')).toBe('Standard Lunch Buffet');
+    expect(sanitizeLineItemName('AV Equipment Package')).toBe('AV Equipment Package');
+  });
+
+  it('does not strip a bare dollar amount that is not a per-person prefix', () => {
+    // "$50 Centerpiece" has no /pp or "per person" — must not be stripped
+    expect(sanitizeLineItemName('$50 Centerpiece')).toBe('$50 Centerpiece');
+  });
+
+  it('handles commas in price', () => {
+    expect(sanitizeLineItemName('$1,500/pp Platinum Experience')).toBe('Platinum Experience');
+  });
+
+  it('returns empty string unchanged', () => {
+    expect(sanitizeLineItemName('')).toBe('');
   });
 });
