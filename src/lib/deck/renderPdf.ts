@@ -6,7 +6,7 @@ import type { DeckRenderSlide } from './types';
 // Pinned to match @sparticuz/chromium-min@149.0.0 — update both together.
 // Verify the release exists at https://github.com/Sparticuz/chromium/releases
 const CHROMIUM_PACK_URL =
-  'https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.tar';
+  'https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.x64.tar';
 
 export async function renderPdf(slides: DeckRenderSlide[]): Promise<Buffer> {
   const html = buildDeckHtml(slides);
