@@ -34,6 +34,7 @@ import type { VendorMenu } from '@/lib/vendors/profileTypes';
 import VendorMenuImportModal from './VendorMenuImportModal';
 import type { BarSelection } from './VendorMenuImportModal';
 import { mapMenuToLineItems, mapBarToLineItems } from '@/lib/vendors/menuImport';
+import { vendorMenuToMenuCourses } from '@/lib/slideCopy/vendorProfileMapping';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection, reorderSections, reorderLineItems } from '@/app/(programs)/programs/[id]/estimates/actions';
@@ -274,6 +275,10 @@ export default function EstimateBuilder({
   const [applyError, setApplyError] = useState<string | null>(null);
 
   const [pendingSlideMenuData, setPendingSlideMenuData] = useState<import('@/types/slideCopy').MenuCourse[] | null>(null);
+  const [pendingSlideMenuSource, setPendingSlideMenuSource] = useState<'vendor_library' | 'attachment' | null>(null);
+  // After a vendor menu is attached for PRICING, this offers the explicit (post-pricing) step to
+  // also bring its client-facing detail into the proposal. Detail is never auto-populated at attach.
+  const [attachedMenuForDetail, setAttachedMenuForDetail] = useState<VendorMenu | null>(null);
   const slideCopyRef = useRef<HTMLDivElement | null>(null);
   const [linkedVenueId, setLinkedVenueId] = useState<string | null>(estimate.venue_id);
   const [linkedSpaceId, setLinkedSpaceId] = useState<string | null>(estimate.venue_space_id);
@@ -695,6 +700,9 @@ export default function EstimateBuilder({
       startOrder
     );
     handleImportItems(items as LocalLineItem[]);
+    // Pricing line created. Offer the explicit "add menu detail to the proposal" step (Option B) —
+    // detail is populated only when the user clicks, downstream of finalizing pricing.
+    setAttachedMenuForDetail(menu);
   }, [sections, markups, program.guest_count, handleImportItems]);
 
   const handleAddBarPackages = useCallback((selections: BarSelection[]) => {
@@ -1548,6 +1556,33 @@ export default function EstimateBuilder({
                   )}
                 </div>
 
+                {attachedMenuForDetail && (
+                  <div className="border-t border-brand-brown/10 bg-brand-copper/5 px-3 py-2 flex items-center gap-2 text-xs">
+                    <span className="text-brand-charcoal/80 flex-1 min-w-0 truncate">
+                      ✓ &ldquo;{attachedMenuForDetail.name}&rdquo; added to pricing. Add its menu detail (dishes, dietary tags) to the proposal once pricing is final.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPendingSlideMenuData(vendorMenuToMenuCourses(attachedMenuForDetail));
+                        setPendingSlideMenuSource('vendor_library');
+                        setAttachedMenuForDetail(null);
+                        slideCopyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }}
+                      className="shrink-0 px-2 py-1 rounded bg-brand-brown text-white hover:bg-brand-brown/90 transition-colors"
+                    >
+                      + Add menu detail to proposal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAttachedMenuForDetail(null)}
+                      className="shrink-0 text-brand-silver hover:text-brand-charcoal"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                )}
+
                 {showVendorMenus && vendorProfile.menus.length > 0 && (
                   <div className="border-t border-brand-brown/10 divide-y divide-brand-cream/60">
                     {vendorProfile.menus.map((menu) => (
@@ -1817,7 +1852,8 @@ export default function EstimateBuilder({
               venueSpaceName={venueSpaceName}
               venueAddress={venueAddress}
               pendingMenuData={pendingSlideMenuData}
-              onPendingMenuConsumed={() => setPendingSlideMenuData(null)}
+              pendingMenuSource={pendingSlideMenuSource}
+              onPendingMenuConsumed={() => { setPendingSlideMenuData(null); setPendingSlideMenuSource(null); }}
               vendorProfile={vendorProfile}
             />
           </div>

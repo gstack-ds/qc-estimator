@@ -46,6 +46,9 @@ export interface SlideCopyData {
   barNotes?: string;        // free-text bar menu for Slide 2 (manual entry or paste)
   inclusions: InclusionToggles;
   menuSelections?: MenuCourse[];
+  // Which source the current menu detail came from. One source at a time per estimate;
+  // re-importing from a different source replaces (with confirm), never merges/stacks.
+  menuSource?: 'vendor_library' | 'attachment';
   travelResult?: TravelResult;
   travelOrigin?: string;  // free-form "From" address (overrides client_hotel)
   travelDest?: string;    // free-form "To" address (overrides linked venue address)
