@@ -23,7 +23,11 @@ interface Props {
 export default function CalloutThread({ estimateId, programId, eventId, callouts, teamMembers, defaultOwner }: Props) {
   const router = useRouter();
   const actors = filterToolUsers(teamMembers);
-  const [actingAs, setActingAs] = useState<number | null>(defaultOwner ?? actors[0]?.id ?? null);
+  // Default to the estimate's assignee ONLY if they're a selectable tool user; otherwise the
+  // first actor — never an id the dropdown can't show (which would mis-attribute a callout).
+  const [actingAs, setActingAs] = useState<number | null>(
+    actors.find((a) => a.id === defaultOwner)?.id ?? actors[0]?.id ?? null,
+  );
   const [text, setText] = useState('');
   const [category, setCategory] = useState<string>('Other');
   const [busy, startTransition] = useTransition();

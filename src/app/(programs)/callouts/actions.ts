@@ -71,8 +71,13 @@ export async function addCalloutReply(input: {
     .single();
 
   if (error) return { id: null, error: error.message };
-  // Bump the parent callout's updated_at so "recently active" ordering reflects the reply.
-  await supabase.from('callouts').update({ updated_at: new Date().toISOString() }).eq('id', input.calloutId);
+  // Best-effort: bump the parent callout's updated_at so "recently active" ordering reflects the
+  // reply. The reply already succeeded; a failure here (e.g. callout deleted) is intentionally ignored.
+  await supabase
+    .from('callouts')
+    .update({ updated_at: new Date().toISOString() })
+    .eq('id', input.calloutId)
+    .then(() => {}, () => {});
   revalidateCallouts(input.programId);
   return { id: data.id as string, error: null };
 }
