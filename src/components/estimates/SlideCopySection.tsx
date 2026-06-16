@@ -47,7 +47,7 @@ interface Props {
   venueAddress?: string;
   pendingMenuData?: MenuCourse[] | null;
   pendingMenuSource?: 'vendor_library' | 'attachment' | null;
-  onPendingMenuConsumed?: () => void;
+  onPendingMenuConsumed?: (applied: boolean) => void;
   vendorProfile?: VendorProfileForSlide | null;
 }
 
@@ -162,7 +162,8 @@ export default function SlideCopySection({
 
   // One source of truth per estimate: replacing existing menu detail always confirms first
   // (never silently clobbers a hand-curated menu), and records which source it now came from.
-  function applyMenuCourses(courses: MenuCourse[], source: 'vendor_library' | 'attachment'): boolean {
+  // Returns true if applied, false if there was nothing to apply or the user cancelled.
+  const applyMenuCourses = useCallback((courses: MenuCourse[], source: 'vendor_library' | 'attachment'): boolean => {
     if (courses.length === 0) return false;
     if (menuCourses.length > 0) {
       const from = menuSource === 'vendor_library' ? ' (from the vendor library)'
@@ -172,16 +173,16 @@ export default function SlideCopySection({
     setMenuCourses(courses);
     setMenuSource(source);
     return true;
-  }
+  }, [menuCourses.length, menuSource]);
 
   // Consume an attached vendor menu (explicit "add detail" CTA) or a Copy-to-Canva push.
+  // Re-runs are safe: pendingMenuData is cleared by onPendingMenuConsumed, so the guard no-ops.
   useEffect(() => {
     if (pendingMenuData && pendingMenuData.length > 0) {
-      applyMenuCourses(pendingMenuData, pendingMenuSource ?? 'attachment');
-      onPendingMenuConsumed?.();
+      const applied = applyMenuCourses(pendingMenuData, pendingMenuSource ?? 'attachment');
+      onPendingMenuConsumed?.(applied);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingMenuData]);
+  }, [pendingMenuData, pendingMenuSource, applyMenuCourses, onPendingMenuConsumed]);
 
   const handleLoadMenuFromPdfs = useCallback(async () => {
     setMenuLoading(true);
@@ -192,8 +193,7 @@ export default function SlideCopySection({
     if (allMenuItems.length > 0) {
       applyMenuCourses(extractedMenuToMenuCourses(allMenuItems), 'attachment');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estimate.id, menuCourses.length, menuSource]);
+  }, [estimate.id, applyMenuCourses]);
 
   // Debounced auto-save — skip the very first render
   useEffect(() => {

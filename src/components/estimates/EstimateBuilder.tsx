@@ -1564,9 +1564,10 @@ export default function EstimateBuilder({
                     <button
                       type="button"
                       onClick={() => {
+                        // Don't clear the CTA here — it clears only on a successful apply
+                        // (see onPendingMenuConsumed), so cancelling the replace-confirm keeps the retry path.
                         setPendingSlideMenuData(vendorMenuToMenuCourses(attachedMenuForDetail));
                         setPendingSlideMenuSource('vendor_library');
-                        setAttachedMenuForDetail(null);
                         slideCopyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                       }}
                       className="shrink-0 px-2 py-1 rounded bg-brand-brown text-white hover:bg-brand-brown/90 transition-colors"
@@ -1853,7 +1854,11 @@ export default function EstimateBuilder({
               venueAddress={venueAddress}
               pendingMenuData={pendingSlideMenuData}
               pendingMenuSource={pendingSlideMenuSource}
-              onPendingMenuConsumed={() => { setPendingSlideMenuData(null); setPendingSlideMenuSource(null); }}
+              onPendingMenuConsumed={(applied) => {
+                setPendingSlideMenuData(null);
+                setPendingSlideMenuSource(null);
+                if (applied) setAttachedMenuForDetail(null); // keep the CTA if the user cancelled the replace-confirm
+              }}
               vendorProfile={vendorProfile}
             />
           </div>
