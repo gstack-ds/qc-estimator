@@ -44,17 +44,45 @@ function fmtPct(n: number): string {
   return `${(n * 100).toFixed(1)}%`;
 }
 
+// Internal sign-off initials the team appends to estimate-name notes.
+// Seeded from the current roster (migration 019): two-letter codes are first+last
+// initials; "AQS" is Alex's personal sign-off (not first+last, so it's listed
+// explicitly — and his first+last "AS" is intentionally OMITTED because it is a
+// risky 2-letter token that never appears in the data). When the roster changes,
+// add the new member's initials here.
+//   AQS = Alex · DR = Danielle Rose · KP = Khloe Parker · AB = Abbie Blair
+//   LC = Lindsey Correa · LD = Lydia Defore · JQ = Jakie Quill · SP = Sonja Pasko · KS = Kelly Saunders
+const INTERNAL_INITIALS = ['AQS', 'DR', 'KP', 'AB', 'LC', 'LD', 'JQ', 'SP', 'KS'];
+
+// Whole-word, case-sensitive (team always writes initials in caps — avoids matching
+// lowercase fragments like the "dr" in a hypothetical word).
+const INTERNAL_INITIALS_RE = new RegExp(`\\b(?:${INTERNAL_INITIALS.join('|')})\\b`);
+const UPCHARGE_RE = /upcharg\w*\s+at\s+[\d.]+%/i;
+
 // Strip internal annotations before displaying to clients.
-// Pass 1 — upcharge annotations: "(upcharged at 40%)", "(upcharge at 45%)", etc.
-// Pass 2 — all-caps internal suffixes: " - DR", " - DONE AQS", " - AQS ADDED", etc.
-//   Strips " - [A-Z ]+" at end of string (all uppercase letters/spaces after the dash).
-//   Known risk: short all-caps location codes like " - NYC" or " - VIP" would also be
-//   stripped. None are in the current dataset; add a negative lookahead if they appear.
-// Raw estimate name is preserved in the DB — this only affects PDF output.
+// DENYLIST approach (not a blanket "strip caps after a dash" rule — that broke real
+// names like "WORLD OF COCA-COLA"): a trailing " - …" segment is removed ONLY when it
+// carries a known team-member initial (AQS, DR, KP, …) or an upcharge note. Legit
+// suffixes ("- Midtown", "- AV Package") and hyphenated names ("Ritz-Carlton",
+// "COCA-COLA") survive because their dash has no whitespace before it and/or the
+// segment contains no internal marker.
+// Raw estimate name is preserved in the DB — this only affects PDF/proposal output.
 export function sanitizeEstimateName(name: string): string {
-  return name
+  let result = name;
+  // Walk each whitespace-preceded dash; cut from the first one whose remainder carries
+  // an internal marker. (COCA-COLA's dash has no space before it, so it is never a cut point.)
+  const dashRe = /\s+-/g;
+  let match: RegExpExecArray | null;
+  while ((match = dashRe.exec(name)) !== null) {
+    const segment = name.slice(match.index);
+    if (INTERNAL_INITIALS_RE.test(segment) || UPCHARGE_RE.test(segment)) {
+      result = name.slice(0, match.index);
+      break;
+    }
+  }
+  return result
+    // Remove any standalone upcharge parenthetical not already cut (e.g. note without a dash).
     .replace(/\s*\(\s*upcharg\w*\s+at\s+[\d.]+%\s*\)/gi, '')
-    .replace(/(\s*-\s+[A-Z][A-Z ]*)+$/, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
