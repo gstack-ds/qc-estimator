@@ -56,7 +56,8 @@ export async function moveEstimateToEvent(
   const { error } = await supabase
     .from('estimates')
     .update({ event_id: eventId, updated_at: new Date().toISOString() })
-    .eq('id', estimateId);
+    .eq('id', estimateId)
+    .eq('program_id', programId); // scope to the program — never move an estimate across programs
   if (error) return { error: error.message };
   revalidatePath(`/programs/${programId}`);
   return { error: null };

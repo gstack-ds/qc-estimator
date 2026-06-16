@@ -909,8 +909,12 @@ export default function EventsView({ programId, events: initialEvents, unassigne
         setUnassignedCards((prev) => [...prev, moved]);
       }
     }
-    await moveEstimateToEvent(id, programId, targetEventId);
-    router.refresh();
+    const { error } = await moveEstimateToEvent(id, programId, targetEventId);
+    if (error) {
+      console.error('Move estimate failed:', error);
+      alert('Could not move the estimate — it has been put back. Please try again.');
+    }
+    router.refresh(); // reconcile with server (also reverts the optimistic move on failure)
   }
 
   async function handleDeleteEvent(id: string) {
