@@ -1,6 +1,9 @@
 // Server-free, pure budget resolution for an estimate's snapshot-bar chip.
-// Unifies the THREE budget sources into one precedence so the header always shows the same
-// number the per-person comparison badge compares against. No React/Supabase — fully testable.
+// Unifies the budget sources into one precedence. For the sources the per-person comparison
+// badge considers (event-level budget, then event-linked entry), the header now matches the
+// badge. An estimate-linked entry resolves first here (level 1) as the most specific budget —
+// the badge does not currently consult estimate-linked entries, so the header is intentionally
+// more specific in that case. No React/Supabase — fully testable.
 //
 // Precedence (most specific → least):
 //   1. estimate-linked Budget Plan entry  (budget_plan_entries.linked_estimate_id)
@@ -72,9 +75,10 @@ export function resolveEstimateBudget(input: ResolveBudgetInput): ResolvedBudget
   }
 
   // 4. Pooled budget — informational ("part of $X pool"), never a hard target here.
+  //    A partially-configured pool (no/zero total) is treated as not-set, not "$0 pool".
   const pooled = input.entries.filter((e) => e.entry_type === 'pooled');
-  if (pooled.length > 0) {
-    const total = pooled.reduce((s, e) => s + (e.pool_total ?? 0), 0);
+  const total = pooled.reduce((s, e) => s + (e.pool_total ?? 0), 0);
+  if (pooled.length > 0 && total > 0) {
     const label = pooled.length === 1 ? `part of ${fmtFlat(total)} pool` : `part of ${fmtFlat(total)} pooled`;
     return { source: 'pooled', label };
   }

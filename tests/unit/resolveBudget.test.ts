@@ -61,6 +61,12 @@ describe('resolveEstimateBudget — precedence', () => {
     expect(resolveEstimateBudget(base({}))).toEqual({ source: 'none', label: null });
   });
 
+  it('a pooled entry with no/zero total is treated as not-set (no "$0 pool")', () => {
+    expect(resolveEstimateBudget(base({ entries: [pooled(0)] }))).toEqual({ source: 'none', label: null });
+    const nullPool: BudgetEntryLike = { ...pooled(0), pool_total: null };
+    expect(resolveEstimateBudget(base({ entries: [nullPool] })).source).toBe('none');
+  });
+
   it('event budget of 0 or null does not count as set', () => {
     expect(resolveEstimateBudget(base({ eventBudgetAmount: 0, eventBudgetBasis: 'overall' })).source).toBe('none');
     expect(resolveEstimateBudget(base({ eventBudgetAmount: null })).source).toBe('none');
