@@ -55,11 +55,21 @@ export function filterToolUsers<T extends TeamMemberLike>(members: T[]): T[] {
   return ordered;
 }
 
-// Two-letter initials for the badge: first letter of first + first letter of last.
-// e.g. "Khloe Parker" → "KP", "Danielle Rose" → "DR", "Alex Stack" → "AS".
+// Personal sign-off overrides for members whose badge initials are not first+last.
+// Alex signs as "AQS" (how the team has always referred to him, incl. in the estimate
+// notes the deck sanitizer strips) — not his first+last "AS". Keyed by full name, lowercased.
+const INITIALS_OVERRIDES: Record<string, string> = {
+  'alex stack': 'AQS',
+};
+
+// Initials for the badge: a personal-sign-off override if one exists, otherwise
+// first letter of first + first letter of last.
+// e.g. "Alex Stack" → "AQS", "Khloe Parker" → "KP", "Danielle Rose" → "DR".
 export function memberInitials(member: TeamMemberLike): string {
   const f = (member.first_name ?? '').trim();
   const l = (member.last_name ?? '').trim();
+  const override = INITIALS_OVERRIDES[`${f} ${l}`.trim().toLowerCase()];
+  if (override) return override;
   const fi = f ? f[0] : '';
   const li = l ? l[0] : '';
   const initials = `${fi}${li}`.toUpperCase();

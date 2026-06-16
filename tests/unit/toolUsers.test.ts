@@ -77,9 +77,14 @@ describe('memberInitials', () => {
   it('builds two-letter uppercase initials from first + last name', () => {
     expect(memberInitials({ id: 6, first_name: 'Khloe', last_name: 'Parker' })).toBe('KP');
     expect(memberInitials({ id: 4, first_name: 'Danielle', last_name: 'Rose' })).toBe('DR');
-    expect(memberInitials({ id: 1, first_name: 'Alex', last_name: 'Stack' })).toBe('AS');
     expect(memberInitials({ id: 5, first_name: 'Abbie', last_name: 'Blair' })).toBe('AB');
     expect(memberInitials({ id: 2, first_name: 'Lindsey', last_name: 'Correa' })).toBe('LC');
+  });
+
+  it('uses Alex\'s personal sign-off "AQS" (override), not first+last "AS"', () => {
+    expect(memberInitials({ id: 1, first_name: 'Alex', last_name: 'Stack' })).toBe('AQS');
+    // Override is case/space-insensitive on the full name.
+    expect(memberInitials({ id: 1, first_name: ' alex ', last_name: ' STACK ' })).toBe('AQS');
   });
 
   it('falls back to "?" when names are blank', () => {
