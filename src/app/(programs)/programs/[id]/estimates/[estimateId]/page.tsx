@@ -15,6 +15,7 @@ import {
   getLocations,
   getTravelItems,
   getBudgetPlanEntryForEstimate,
+  getBudgetPlanEntries,
   getVenueWithSpaces,
   getVendorPhotos,
 } from '@/lib/supabase/queries';
@@ -40,7 +41,7 @@ export default async function EstimatePage({ params, searchParams }: Props) {
   const { id: programId, estimateId } = await params;
   const { view } = await searchParams;
 
-  const [program, allEstimates, estimate, markups, tiers, venues, allLocations, travelItems, budgetPlanEntry] = await Promise.all([
+  const [program, allEstimates, estimate, markups, tiers, venues, allLocations, travelItems, budgetPlanEntry, budgetEntries] = await Promise.all([
     getProgram(programId),
     getEstimatesForProgram(programId),
     getEstimate(estimateId),
@@ -50,6 +51,7 @@ export default async function EstimatePage({ params, searchParams }: Props) {
     getLocations(),
     getTravelItems(programId),
     getBudgetPlanEntryForEstimate(estimateId),
+    getBudgetPlanEntries(programId),
   ]);
 
   if (!program || !estimate) notFound();
@@ -83,6 +85,7 @@ export default async function EstimatePage({ params, searchParams }: Props) {
           programTravelTotal={programTravelTotal}
           includeTravelInProductionFee={program.include_travel_in_production_fee ?? false}
           budgetPlanEntry={budgetPlanEntry}
+          budgetEntries={budgetEntries}
         />
       </div>
     );
@@ -204,6 +207,7 @@ export default async function EstimatePage({ params, searchParams }: Props) {
           programTravelTotal={programTravelTotal}
           includeTravelInProductionFee={program.include_travel_in_production_fee ?? false}
           budgetPlanEntry={budgetPlanEntry}
+          budgetEntries={budgetEntries}
         />
       </div>
     );
@@ -226,6 +230,7 @@ export default async function EstimatePage({ params, searchParams }: Props) {
           programTravelTotal={programTravelTotal}
           includeTravelInProductionFee={program.include_travel_in_production_fee ?? false}
           budgetPlanEntry={budgetPlanEntry}
+          budgetEntries={budgetEntries}
         />
       </div>
     );
@@ -251,6 +256,7 @@ export default async function EstimatePage({ params, searchParams }: Props) {
         programTravelTotal={programTravelTotal}
         includeTravelInProductionFee={program.include_travel_in_production_fee ?? false}
         budgetPlanEntry={budgetPlanEntry}
+        budgetEntries={budgetEntries}
       />
     </div>
   );
