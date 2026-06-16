@@ -15,6 +15,7 @@ import {
   getProgramBrief,
   getStaffingForProgram,
   getTeamMembers,
+  getCalloutsForProgram,
   getBudgetPlanEntries,
   type DbEstimate,
   type DbLineItem,
@@ -37,6 +38,8 @@ import ProgramStatusDropdown from '@/components/programs/ProgramStatusDropdown';
 import GenerateDeckButton from '@/components/deck/GenerateDeckButton';
 import StaffingSection from '@/components/programs/StaffingSection';
 import BudgetPlanSection from '@/components/programs/BudgetPlanSection';
+import CalloutsPanel from '@/components/callouts/CalloutsPanel';
+import type { CalloutContext } from '@/components/callouts/CalloutItem';
 import type { ProgramStatus } from '@/lib/programs/constants';
 import { calculateVenueEstimate, calculateMarginAnalysis } from '@/lib/engine/pricing';
 import { calcTransportSummary } from '@/lib/engine/transportation';
@@ -299,7 +302,7 @@ function buildBudgetEstimate(
 export default async function ProgramPage({ params }: Props) {
   const { id } = await params;
 
-  const [program, locations, estimates, dbEvents, markups, dbTiers, travelItems, programDocs, existingBrief, staffingRoles, teamMembers, budgetEntries] = await Promise.all([
+  const [program, locations, estimates, dbEvents, markups, dbTiers, travelItems, programDocs, existingBrief, staffingRoles, teamMembers, budgetEntries, programCallouts] = await Promise.all([
     getProgram(id),
     getLocations(),
     getEstimatesForProgram(id),
@@ -312,7 +315,26 @@ export default async function ProgramPage({ params }: Props) {
     getStaffingForProgram(id),
     getTeamMembers(),
     getBudgetPlanEntries(id),
+    getCalloutsForProgram(id),
   ]);
+
+  // Group callouts by estimate for per-card badges + in-context threads.
+  const calloutsByEstimate: Record<string, typeof programCallouts> = {};
+  for (const c of programCallouts) {
+    (calloutsByEstimate[c.estimate_id] ??= []).push(c);
+  }
+  // Source labels (event · estimate) + jump links for the program-level callouts panel.
+  const eventNameById = new Map(dbEvents.map((e) => [e.id, e.name]));
+  const calloutContextByEstimate: Record<string, CalloutContext> = {};
+  for (const est of estimates) {
+    calloutContextByEstimate[est.id] = {
+      programId: id,
+      estimateId: est.id,
+      programName: null,
+      eventName: est.event_id ? eventNameById.get(est.event_id) ?? null : null,
+      estimateName: est.name,
+    };
+  }
 
   const tiers: TeamHoursTier[] = dbTiers.map((t) => ({
     revenueThreshold: t.revenue_threshold,
@@ -523,8 +545,22 @@ export default async function ProgramPage({ params }: Props) {
           unassignedCards={unassignedCards}
           programGuestCount={program.guest_count}
           teamMembers={teamMembers}
+          calloutsByEstimate={calloutsByEstimate}
         />
       </div>
+
+      {/* Program-wide callout history (open + resolved across all events) */}
+      {programCallouts.length > 0 && (
+        <div>
+          <h2 className="font-serif text-lg font-medium text-brand-charcoal mb-1">Callouts</h2>
+          <p className="text-sm text-brand-charcoal/60 mb-4">Everything flagged on this program — the working list and the post-event record.</p>
+          <CalloutsPanel
+            callouts={programCallouts}
+            teamMembers={teamMembers}
+            contextByEstimate={calloutContextByEstimate}
+          />
+        </div>
+      )}
 
       {/* Program P&L */}
       <ProgramPnLPanel rows={pnlRows} />

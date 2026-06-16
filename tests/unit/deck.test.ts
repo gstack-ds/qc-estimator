@@ -531,6 +531,54 @@ describe('leak-proof: internal_notes / assigned_to never reach the deck', () => 
   });
 });
 
+// ─── Leak-proof: callouts never reach the deck (migration 048) ────────────────
+// Callouts + replies live in their own tables (callouts, callout_replies) and are NEVER joined
+// into RawEstimate / DeckContract / ProposalDocument. This proves a callout + reply cannot surface
+// in the contract JSON or the rendered deck HTML, even if the estimate row is decorated with them.
+
+describe('leak-proof: callouts / replies never reach the deck', () => {
+  const CALLOUT_SECRET = 'CALLOUT: AV not permitted in serpentine room — escalate to venue';
+  const REPLY_SECRET = 'REPLY: confirmed with vendor, switching rooms';
+
+  // RawEstimate has no callouts field — the structural guarantee. The cast mimics a careless
+  // caller that attached callout data to the row before handing it to the deck builder.
+  const estimateWithCallouts = {
+    ...estimate,
+    callouts: [
+      { id: 'co-1', text: CALLOUT_SECRET, status: 'open', category: 'AV/Permitting',
+        replies: [{ id: 'r-1', text: REPLY_SECRET }] },
+    ],
+  } as unknown as RawEstimate;
+
+  it('RawEstimate / DeckContract shapes declare no callout field', () => {
+    // Structural: the contract built from a normal estimate has zero "callout" keys.
+    const contract = buildDeckContract(
+      estimate, [fbSection], [lineItem], program, location, tiers, categoryMarkups,
+    );
+    expect(JSON.stringify(contract).toLowerCase()).not.toContain('callout');
+  });
+
+  it('DeckContract JSON contains no callout/reply text even if the row carries them', () => {
+    const contract = buildDeckContract(
+      estimateWithCallouts, [fbSection], [lineItem], program, location, tiers, categoryMarkups,
+    );
+    const json = JSON.stringify(contract);
+    expect(json).not.toContain('callout');
+    expect(json).not.toContain('callouts');
+    expect(json).not.toContain(CALLOUT_SECRET);
+    expect(json).not.toContain(REPLY_SECRET);
+  });
+
+  it('rendered deck HTML never contains callout or reply text', () => {
+    const contract = buildDeckContract(
+      estimateWithCallouts, [fbSection], [lineItem], program, location, tiers, categoryMarkups,
+    );
+    const html = buildDeckHtml([{ contract, narrative: defaultNarrative(narrativeInput) }]);
+    expect(html).not.toContain(CALLOUT_SECRET);
+    expect(html).not.toContain(REPLY_SECRET);
+  });
+});
+
 // ─── sanitizeLineItemName ─────────────────────────────────────────────────────
 
 describe('sanitizeLineItemName', () => {

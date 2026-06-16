@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 interface NavLink {
   href: string;
   label: string;
+  badge?: number;
 }
 
 interface Props {
@@ -46,20 +47,25 @@ export default function MobileNav({ links, email }: Props) {
 
       {open && (
         <div className="absolute top-full right-0 mt-1 w-56 bg-brand-charcoal border border-black/30 rounded-lg shadow-xl z-50 py-2">
-          {links.map(({ href, label }) => {
+          {links.map(({ href, label, badge }) => {
             const isActive = pathname.startsWith(href);
             return (
               <Link
                 key={href}
                 href={href}
                 onClick={() => setOpen(false)}
-                className={`block px-4 py-2.5 text-sm transition-colors ${
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm transition-colors ${
                   isActive
                     ? 'text-brand-copper font-medium'
                     : 'text-brand-silver hover:text-brand-offwhite hover:bg-white/5'
                 }`}
               >
                 {label}
+                {badge != null && badge > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 text-[10px] font-semibold rounded-full bg-amber-500 text-white leading-none">
+                    {badge}
+                  </span>
+                )}
               </Link>
             );
           })}
