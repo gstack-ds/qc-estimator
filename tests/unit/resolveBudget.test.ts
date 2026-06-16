@@ -35,7 +35,11 @@ describe('resolveEstimateBudget — precedence', () => {
 
   it('2. event-level per_person formats with /pp', () => {
     const r = resolveEstimateBudget(base({ eventBudgetAmount: 120, eventBudgetBasis: 'per_person' }));
-    expect(r).toEqual({ source: 'event', label: '$120/pp' });
+    expect(r).toEqual({
+      source: 'event',
+      label: '$120/pp',
+      target: { pricingBasis: 'per_person', valueLow: 120, valueHigh: 120, pinnedValue: 120 },
+    });
   });
 
   it('3. event-linked entry when no estimate entry and no event budget', () => {
@@ -47,24 +51,49 @@ describe('resolveEstimateBudget — precedence', () => {
     expect(r.label).toBe('$4,000–$6,000');
   });
 
-  it('4. pooled when nothing more specific — single pool', () => {
+  it('4. pooled when nothing more specific — single pool (informational, no compare target)', () => {
     const r = resolveEstimateBudget(base({ entries: [pooled(20000)] }));
-    expect(r).toEqual({ source: 'pooled', label: 'part of $20,000 pool' });
+    expect(r).toEqual({ source: 'pooled', label: 'part of $20,000 pool', target: null });
   });
 
   it('4. pooled — multiple pools sum and use "pooled" wording', () => {
     const r = resolveEstimateBudget(base({ entries: [pooled(20000), pooled(5000)] }));
-    expect(r).toEqual({ source: 'pooled', label: 'part of $25,000 pooled' });
+    expect(r).toEqual({ source: 'pooled', label: 'part of $25,000 pooled', target: null });
   });
 
   it('none when there is no budget anywhere', () => {
-    expect(resolveEstimateBudget(base({}))).toEqual({ source: 'none', label: null });
+    expect(resolveEstimateBudget(base({}))).toEqual({ source: 'none', label: null, target: null });
   });
 
   it('a pooled entry with no/zero total is treated as not-set (no "$0 pool")', () => {
-    expect(resolveEstimateBudget(base({ entries: [pooled(0)] }))).toEqual({ source: 'none', label: null });
+    expect(resolveEstimateBudget(base({ entries: [pooled(0)] }))).toEqual({ source: 'none', label: null, target: null });
     const nullPool: BudgetEntryLike = { ...pooled(0), pool_total: null };
     expect(resolveEstimateBudget(base({ entries: [nullPool] })).source).toBe('none');
+  });
+});
+
+describe('resolveEstimateBudget — comparable target (per-card badge agreement)', () => {
+  it('estimate-linked entry yields a target so the badge compares against the SAME budget the header shows', () => {
+    const r = resolveEstimateBudget(base({
+      estimateEntry: perEvent({ pricing_basis: 'per_person', value_low: 90, value_high: 120, pinned_value: 100 }),
+      eventBudgetAmount: 5000, eventBudgetBasis: 'overall', // would otherwise win for the badge — estimate entry overrides
+    }));
+    expect(r.source).toBe('estimate_entry');
+    expect(r.target).toEqual({ pricingBasis: 'per_person', valueLow: 90, valueHigh: 120, pinnedValue: 100 });
+  });
+
+  it('event-linked entry yields a target with its pinned value', () => {
+    const r = resolveEstimateBudget(base({
+      eventId: 'ev1',
+      entries: [perEvent({ linked_event_id: 'ev1', pricing_basis: 'flat', value_low: 4000, value_high: 6000, pinned_value: 5000 })],
+    }));
+    expect(r.source).toBe('event_entry');
+    expect(r.target).toEqual({ pricingBasis: 'flat', valueLow: 4000, valueHigh: 6000, pinnedValue: 5000 });
+  });
+
+  it('pooled and none have no compare target (badge shows nothing; combine mode handles pools)', () => {
+    expect(resolveEstimateBudget(base({ entries: [pooled(20000)] })).target).toBeNull();
+    expect(resolveEstimateBudget(base({})).target).toBeNull();
   });
 
   it('event budget of 0 or null does not count as set', () => {

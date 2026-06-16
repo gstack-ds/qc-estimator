@@ -546,6 +546,7 @@ export default async function ProgramPage({ params }: Props) {
           programGuestCount={program.guest_count}
           teamMembers={teamMembers}
           calloutsByEstimate={calloutsByEstimate}
+          budgetEntries={budgetEntries}
         />
       </div>
 

@@ -20,14 +20,26 @@ export interface BudgetEntryLike {
   pricing_basis: 'per_person' | 'flat';
   value_low: number;
   value_high: number;
+  pinned_value?: number | null;
   pool_total: number | null;
   linked_event_id: string | null;
+}
+
+// Comparable budget for the per-card comparison badge (guestCount is added by the caller).
+// null when the resolved budget is not a per-estimate compare target (none, or informational pooled).
+export interface ResolvedBudgetTarget {
+  pricingBasis: 'per_person' | 'flat';
+  valueLow: number;
+  valueHigh: number;
+  pinnedValue: number | null;
 }
 
 export interface ResolvedBudget {
   source: BudgetSource;
   // Human label for the chip; null only when source === 'none'.
   label: string | null;
+  // Structured target so the per-card badge compares against the SAME budget the header shows.
+  target: ResolvedBudgetTarget | null;
 }
 
 export interface ResolveBudgetInput {
@@ -54,16 +66,30 @@ function labelForEntry(entry: BudgetEntryLike): string {
   return `${fmt(entry.value_low)}–${fmt(entry.value_high)}${suffix}`;
 }
 
+function targetForEntry(entry: BudgetEntryLike): ResolvedBudgetTarget {
+  return {
+    pricingBasis: entry.pricing_basis,
+    valueLow: entry.value_low,
+    valueHigh: entry.value_high,
+    pinnedValue: entry.pinned_value ?? null,
+  };
+}
+
 export function resolveEstimateBudget(input: ResolveBudgetInput): ResolvedBudget {
   // 1. Estimate-linked entry — most specific.
   if (input.estimateEntry && input.estimateEntry.entry_type === 'per_event') {
-    return { source: 'estimate_entry', label: labelForEntry(input.estimateEntry) };
+    return { source: 'estimate_entry', label: labelForEntry(input.estimateEntry), target: targetForEntry(input.estimateEntry) };
   }
 
   // 2. Event-level budget.
   if (input.eventBudgetAmount != null && input.eventBudgetAmount > 0) {
     const pp = input.eventBudgetBasis === 'per_person';
-    return { source: 'event', label: `${pp ? fmtPP(input.eventBudgetAmount) : fmtFlat(input.eventBudgetAmount)}${pp ? '/pp' : ''}` };
+    const amount = input.eventBudgetAmount;
+    return {
+      source: 'event',
+      label: `${pp ? fmtPP(amount) : fmtFlat(amount)}${pp ? '/pp' : ''}`,
+      target: { pricingBasis: pp ? 'per_person' : 'flat', valueLow: amount, valueHigh: amount, pinnedValue: amount },
+    };
   }
 
   // 3. Event-linked Budget Plan entry.
@@ -71,17 +97,17 @@ export function resolveEstimateBudget(input: ResolveBudgetInput): ResolvedBudget
     const eventEntry = input.entries.find(
       (e) => e.entry_type === 'per_event' && e.linked_event_id === input.eventId,
     );
-    if (eventEntry) return { source: 'event_entry', label: labelForEntry(eventEntry) };
+    if (eventEntry) return { source: 'event_entry', label: labelForEntry(eventEntry), target: targetForEntry(eventEntry) };
   }
 
-  // 4. Pooled budget — informational ("part of $X pool"), never a hard target here.
-  //    A partially-configured pool (no/zero total) is treated as not-set, not "$0 pool".
+  // 4. Pooled budget — informational ("part of $X pool"), never a per-estimate compare target
+  //    (pooled comparison is the job of "combine" mode). A partial pool (no/zero total) is not-set.
   const pooled = input.entries.filter((e) => e.entry_type === 'pooled');
   const total = pooled.reduce((s, e) => s + (e.pool_total ?? 0), 0);
   if (pooled.length > 0 && total > 0) {
     const label = pooled.length === 1 ? `part of ${fmtFlat(total)} pool` : `part of ${fmtFlat(total)} pooled`;
-    return { source: 'pooled', label };
+    return { source: 'pooled', label, target: null };
   }
 
-  return { source: 'none', label: null };
+  return { source: 'none', label: null, target: null };
 }
