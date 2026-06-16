@@ -492,6 +492,45 @@ describe('sanitizeEstimateName', () => {
   });
 });
 
+// ─── Leak-proof: internal fields never reach the deck ─────────────────────────
+// assigned_to + internal_notes live on the estimates table (migration 047) but are
+// INTENTIONALLY absent from RawEstimate and DeckContract. This test proves that even
+// when a DB row carries them, they cannot surface in the contract or rendered deck.
+
+describe('leak-proof: internal_notes / assigned_to never reach the deck', () => {
+  const SECRET = 'DO NOT SHOW — KP pending, upcharge at 40%, AQS';
+
+  // Simulate a DB row that has the internal fields, cast through RawEstimate.
+  // RawEstimate's type does not declare them, which is the structural guarantee;
+  // the cast here mimics a careless caller passing the raw row straight through.
+  const estimateWithInternal = {
+    ...estimate,
+    assigned_to: 6,
+    internal_notes: SECRET,
+  } as unknown as RawEstimate;
+
+  it('DeckContract JSON contains no internal field keys or note text', () => {
+    const contract = buildDeckContract(
+      estimateWithInternal, [fbSection], [lineItem], program, location, tiers, categoryMarkups,
+    );
+    const json = JSON.stringify(contract);
+    expect(json).not.toContain('internal_notes');
+    expect(json).not.toContain('internalNotes');
+    expect(json).not.toContain('assigned_to');
+    expect(json).not.toContain('assignedTo');
+    expect(json).not.toContain(SECRET);
+  });
+
+  it('rendered deck HTML never contains the internal note text', () => {
+    const contract = buildDeckContract(
+      estimateWithInternal, [fbSection], [lineItem], program, location, tiers, categoryMarkups,
+    );
+    const html = buildDeckHtml([{ contract, narrative: defaultNarrative(narrativeInput) }]);
+    expect(html).not.toContain(SECRET);
+    expect(html).not.toContain('KP pending');
+  });
+});
+
 // ─── sanitizeLineItemName ─────────────────────────────────────────────────────
 
 describe('sanitizeLineItemName', () => {

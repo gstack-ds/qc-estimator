@@ -15,6 +15,7 @@ export interface EstimateCard {
   qcMarginPct: number;
   includedInProposal: boolean;
   sortOrder: number;
+  assignedTo: number | null;
 }
 
 interface Props {

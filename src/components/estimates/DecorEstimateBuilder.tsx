@@ -23,6 +23,7 @@ import type { LocalLineItem } from './EstimateBuilder';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
 import EstimateSnapshotBar from './EstimateSnapshotBar';
+import InternalNotesField from './InternalNotesField';
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -596,6 +597,8 @@ export default function DecorEstimateBuilder({
         event={event}
         budgetPlanEntry={budgetPlanEntry}
       />
+
+      <InternalNotesField estimateId={estimate.id} programId={program.id} initialNotes={estimate.internal_notes} />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Main content */}

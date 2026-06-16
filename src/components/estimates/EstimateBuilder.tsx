@@ -43,6 +43,7 @@ import { updateProgram, applyBudgetPin } from '@/app/(programs)/programs/actions
 import { effectivePrefillPP } from '@/lib/engine/budgetPlan';
 import type { DbTemplate, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
 import EstimateSnapshotBar from './EstimateSnapshotBar';
+import InternalNotesField from './InternalNotesField';
 // TravelRefData, DbTrip no longer imported — travel is program-level.
 
 // ─── Types ───────────────────────────────────────────────
@@ -1055,6 +1056,8 @@ export default function EstimateBuilder({
         event={event}
         budgetPlanEntry={budgetPlanEntry}
       />
+
+      <InternalNotesField estimateId={estimate.id} programId={program.id} initialNotes={estimate.internal_notes} />
 
       {/* VenuePicker — shown when no venue is linked */}
       {!linkedVenueId && (

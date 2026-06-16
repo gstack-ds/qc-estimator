@@ -158,6 +158,7 @@ function buildEstimateData(
       qcMarginPct: margin.qcMarginPct,
       includedInProposal: estimate.included_in_proposal,
       sortOrder: estimate.sort_order,
+      assignedTo: estimate.assigned_to,
     };
     const pnlRow: PnLRow = {
       id: estimate.id, name: estimate.name, type: estimate.type as PnLRow['type'],
@@ -189,6 +190,7 @@ function buildEstimateData(
     qcMarginPct: margin.qcMarginPct,
     includedInProposal: estimate.included_in_proposal,
     sortOrder: estimate.sort_order,
+    assignedTo: estimate.assigned_to,
   };
   const pnlRow: PnLRow = {
     id: estimate.id, name: estimate.name, type: estimate.type as PnLRow['type'],
@@ -520,6 +522,7 @@ export default async function ProgramPage({ params }: Props) {
           events={eventRows}
           unassignedCards={unassignedCards}
           programGuestCount={program.guest_count}
+          teamMembers={teamMembers}
         />
       </div>
 
