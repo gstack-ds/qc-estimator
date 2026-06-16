@@ -46,7 +46,8 @@ interface Props {
   venueSpaceName?: string;
   venueAddress?: string;
   pendingMenuData?: MenuCourse[] | null;
-  onPendingMenuConsumed?: () => void;
+  pendingMenuSource?: 'vendor_library' | 'attachment' | null;
+  onPendingMenuConsumed?: (applied: boolean) => void;
   vendorProfile?: VendorProfileForSlide | null;
 }
 
@@ -116,7 +117,7 @@ const INCLUSION_LABELS: [keyof Omit<InclusionToggles, 'customInclusion'>, string
 
 export default function SlideCopySection({
   estimate, program, event, summary, lineItems, sections, initialData, venueName, venueSpaceName, venueAddress,
-  pendingMenuData, onPendingMenuConsumed, vendorProfile,
+  pendingMenuData, pendingMenuSource, onPendingMenuConsumed, vendorProfile,
 }: Props) {
   const [venueUrl, setVenueUrl] = useState(initialData?.venueUrl ?? '');
   const [sqft, setSqft] = useState(initialData?.sqft?.toString() ?? '');
@@ -133,6 +134,8 @@ export default function SlideCopySection({
   const [bioLoading, setBioLoading] = useState(false);
   const [bioError, setBioError] = useState<string | null>(null);
   const [menuCourses, setMenuCourses] = useState<MenuCourse[]>(initialData?.menuSelections ?? []);
+  // Which source the current menu detail came from (one at a time per estimate).
+  const [menuSource, setMenuSource] = useState<'vendor_library' | 'attachment' | undefined>(initialData?.menuSource);
   const [itinerary, setItinerary] = useState(initialData?.itinerary ?? '');
   const [barNotes, setBarNotes] = useState(initialData?.barNotes ?? '');
   const [menuLoading, setMenuLoading] = useState(false);
@@ -140,7 +143,6 @@ export default function SlideCopySection({
 
   // Profile import state
   const [profileOpen, setProfileOpen] = useState(false);
-  const [importMenuPending, setImportMenuPending] = useState<VendorMenu | null>(null);
   const [importBarPending, setImportBarPending] = useState<BarOption | null>(null);
   // Duration inputs for duration-priced bar options in slide copy import
   const [barDurationInputs, setBarDurationInputs] = useState<Record<string, string>>({});
@@ -158,13 +160,29 @@ export default function SlideCopySection({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didMount = useRef(false);
 
-  // Consume pendingMenuData from Option B "Copy to Canva"
+  // One source of truth per estimate: replacing existing menu detail always confirms first
+  // (never silently clobbers a hand-curated menu), and records which source it now came from.
+  // Returns true if applied, false if there was nothing to apply or the user cancelled.
+  const applyMenuCourses = useCallback((courses: MenuCourse[], source: 'vendor_library' | 'attachment'): boolean => {
+    if (courses.length === 0) return false;
+    if (menuCourses.length > 0) {
+      const from = menuSource === 'vendor_library' ? ' (from the vendor library)'
+        : menuSource === 'attachment' ? ' (from an uploaded PDF)' : '';
+      if (!window.confirm(`Replace the current menu detail${from} on this estimate?`)) return false;
+    }
+    setMenuCourses(courses);
+    setMenuSource(source);
+    return true;
+  }, [menuCourses.length, menuSource]);
+
+  // Consume an attached vendor menu (explicit "add detail" CTA) or a Copy-to-Canva push.
+  // Re-runs are safe: pendingMenuData is cleared by onPendingMenuConsumed, so the guard no-ops.
   useEffect(() => {
     if (pendingMenuData && pendingMenuData.length > 0) {
-      setMenuCourses(pendingMenuData);
-      onPendingMenuConsumed?.();
+      const applied = applyMenuCourses(pendingMenuData, pendingMenuSource ?? 'attachment');
+      onPendingMenuConsumed?.(applied);
     }
-  }, [pendingMenuData]);
+  }, [pendingMenuData, pendingMenuSource, applyMenuCourses, onPendingMenuConsumed]);
 
   const handleLoadMenuFromPdfs = useCallback(async () => {
     setMenuLoading(true);
@@ -173,9 +191,9 @@ export default function SlideCopySection({
     if (error || !records) return;
     const allMenuItems = records.flatMap((r) => r.extracted_data?.menuItems ?? []);
     if (allMenuItems.length > 0) {
-      setMenuCourses(extractedMenuToMenuCourses(allMenuItems));
+      applyMenuCourses(extractedMenuToMenuCourses(allMenuItems), 'attachment');
     }
-  }, [estimate.id]);
+  }, [estimate.id, applyMenuCourses]);
 
   // Debounced auto-save — skip the very first render
   useEffect(() => {
@@ -194,6 +212,7 @@ export default function SlideCopySection({
         barNotes: barNotes || undefined,
         inclusions,
         menuSelections: menuCourses.length > 0 ? menuCourses : undefined,
+        menuSource: menuCourses.length > 0 ? menuSource : undefined,
         travelResult: travelResult ?? undefined,
         travelOrigin: travelOrigin || undefined,
         travelDest: travelDest || undefined,
@@ -201,7 +220,7 @@ export default function SlideCopySection({
       saveSlideCopyData(estimate.id, data);
     }, 1500);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [venueUrl, sqft, maxCapacity, inclusions, travelResult, menuCourses, venueBio, travelOrigin, travelDest, itinerary, barNotes]);
+  }, [venueUrl, sqft, maxCapacity, inclusions, travelResult, menuCourses, menuSource, venueBio, travelOrigin, travelDest, itinerary, barNotes]);
 
   const handleCalculateTravel = useCallback(async () => {
     const origin = travelOrigin.trim();
@@ -450,24 +469,13 @@ export default function SlideCopySection({
                           {m.price_per_person != null && <span className="text-brand-silver ml-1">${m.price_per_person}/pp</span>}
                           <span className="text-brand-silver ml-1">· {m.courses.length} courses</span>
                         </div>
-                        {importMenuPending?.id === m.id ? (
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
-                            <span className="text-[11px] text-brand-charcoal/60">Replace current?</span>
-                            <button type="button" onClick={() => { setMenuCourses(vendorMenuToMenuCourses(m)); setImportMenuPending(null); }} className="text-[11px] px-2 py-0.5 rounded bg-brand-brown text-white">Yes</button>
-                            <button type="button" onClick={() => setImportMenuPending(null)} className="text-[11px] px-2 py-0.5 rounded border border-brand-silver/40 text-brand-silver">Cancel</button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (menuCourses.length > 0) { setImportMenuPending(m); }
-                              else { setMenuCourses(vendorMenuToMenuCourses(m)); }
-                            }}
-                            className="flex-shrink-0 text-[11px] px-2 py-1 rounded border border-brand-brown/30 text-brand-brown hover:bg-brand-cream transition-colors"
-                          >
-                            {menuCourses.length > 0 ? 'Replace' : 'Import'}
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => applyMenuCourses(vendorMenuToMenuCourses(m), 'vendor_library')}
+                          className="flex-shrink-0 text-[11px] px-2 py-1 rounded border border-brand-brown/30 text-brand-brown hover:bg-brand-cream transition-colors"
+                        >
+                          {menuCourses.length > 0 ? 'Replace' : 'Import'}
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -725,7 +733,7 @@ export default function SlideCopySection({
                   {packageDerivedCourses.length > 0 && (
                     <button
                       type="button"
-                      onClick={() => setMenuCourses(packageDerivedCourses)}
+                      onClick={() => applyMenuCourses(packageDerivedCourses, 'attachment')}
                       className="text-xs px-2 py-1 rounded border border-brand-copper text-brand-copper hover:bg-brand-copper/10 transition-colors"
                       title="Populate from selected packages on line items"
                     >
