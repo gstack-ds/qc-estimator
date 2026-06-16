@@ -1312,3 +1312,120 @@ export async function getBudgetPlanEntryForEstimate(estimateId: string): Promise
     .maybeSingle();
   return (data ?? null) as DbBudgetPlanEntry | null;
 }
+
+// ─── Callouts ─────────────────────────────────────────────
+// Issue-tracking + discussion on estimates. INTERNAL ONLY — these tables are never joined into
+// RawEstimate / DeckContract / ProposalDocument, so callout text cannot reach a client document.
+
+export interface DbCallout {
+  id: string;
+  estimate_id: string;
+  event_id: string | null;
+  program_id: string;
+  text: string;
+  category: string | null;
+  status: string; // 'open' | 'resolved'
+  created_by: number | null;
+  owner: number | null;
+  resolved_by: number | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbCalloutReply {
+  id: string;
+  callout_id: string;
+  author: number | null;
+  text: string;
+  created_at: string;
+}
+
+export interface DbCalloutWithReplies extends DbCallout {
+  replies: DbCalloutReply[];
+}
+
+// Context-enriched callout for the dedicated /callouts page (names resolved for display + links).
+export interface CalloutWithContext extends DbCalloutWithReplies {
+  program_name: string | null;
+  event_name: string | null;
+  estimate_name: string | null;
+}
+
+const CALLOUT_FIELDS =
+  'id, estimate_id, event_id, program_id, text, category, status, created_by, owner, resolved_by, resolved_at, created_at, updated_at';
+
+async function attachReplies(callouts: DbCallout[]): Promise<DbCalloutWithReplies[]> {
+  if (callouts.length === 0) return [];
+  const supabase = await createClient();
+  const ids = callouts.map((c) => c.id);
+  const { data: replies } = await supabase
+    .from('callout_replies')
+    .select('id, callout_id, author, text, created_at')
+    .in('callout_id', ids)
+    .order('created_at', { ascending: true });
+  const byCallout: Record<string, DbCalloutReply[]> = {};
+  for (const r of (replies ?? []) as DbCalloutReply[]) {
+    (byCallout[r.callout_id] ??= []).push(r);
+  }
+  return callouts.map((c) => ({ ...c, replies: byCallout[c.id] ?? [] }));
+}
+
+// All callouts for a program (powers per-estimate-card badges + in-context threads).
+export async function getCalloutsForProgram(programId: string): Promise<DbCalloutWithReplies[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('callouts')
+    .select(CALLOUT_FIELDS)
+    .eq('program_id', programId)
+    .order('created_at', { ascending: false });
+  if (error) return [];
+  return attachReplies((data ?? []) as DbCallout[]);
+}
+
+// Team-wide open callout count (nav badge). HEAD count — no rows transferred.
+export async function getOpenCalloutCount(): Promise<number> {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from('callouts')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'open');
+  if (error) return 0;
+  return count ?? 0;
+}
+
+// Every callout across all programs, enriched with program/event/estimate names (dedicated page).
+export async function getAllCalloutsWithContext(): Promise<CalloutWithContext[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('callouts')
+    .select(CALLOUT_FIELDS)
+    .order('created_at', { ascending: false });
+  if (error) return [];
+  const callouts = (data ?? []) as DbCallout[];
+  if (callouts.length === 0) return [];
+
+  const withReplies = await attachReplies(callouts);
+
+  // Resolve names via bulk lookups (small volume; avoids fragile nested-FK select syntax).
+  const programIds = [...new Set(callouts.map((c) => c.program_id))];
+  const eventIds = [...new Set(callouts.map((c) => c.event_id).filter((x): x is string => !!x))];
+  const estimateIds = [...new Set(callouts.map((c) => c.estimate_id))];
+
+  const [progs, evs, ests] = await Promise.all([
+    supabase.from('programs').select('id, name').in('id', programIds),
+    eventIds.length ? supabase.from('events').select('id, name').in('id', eventIds) : Promise.resolve({ data: [] }),
+    supabase.from('estimates').select('id, name').in('id', estimateIds),
+  ]);
+
+  const progName = new Map((progs.data ?? []).map((p: { id: string; name: string }) => [p.id, p.name]));
+  const evName = new Map((evs.data ?? []).map((e: { id: string; name: string }) => [e.id, e.name]));
+  const estName = new Map((ests.data ?? []).map((e: { id: string; name: string }) => [e.id, e.name]));
+
+  return withReplies.map((c) => ({
+    ...c,
+    program_name: progName.get(c.program_id) ?? null,
+    event_name: c.event_id ? evName.get(c.event_id) ?? null : null,
+    estimate_name: estName.get(c.estimate_id) ?? null,
+  }));
+}

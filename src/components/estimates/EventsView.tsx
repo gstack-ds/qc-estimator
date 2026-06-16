@@ -23,8 +23,16 @@ import { CSS } from '@dnd-kit/utilities';
 import AddEstimateButton from './AddEstimateButton';
 import AddEventButton from './AddEventButton';
 import AssignedToBadge from './AssignedToBadge';
+import CalloutButton from '@/components/callouts/CalloutButton';
 import type { EstimateCard } from './ComparisonView';
-import type { DbBudgetPlanEntry, DbTeamMember } from '@/lib/supabase/queries';
+import type { DbBudgetPlanEntry, DbTeamMember, DbCalloutWithReplies } from '@/lib/supabase/queries';
+
+// estimate_id -> that estimate's callouts (threaded to cards for badges + thread modal).
+type CalloutsByEstimate = Record<string, DbCalloutWithReplies[]>;
+
+function openCalloutCount(callouts: DbCalloutWithReplies[] | undefined): number {
+  return (callouts ?? []).filter((c) => c.status === 'open').length;
+}
 import { compareEstimateToBudget, combineEstimatesToBudget, type ComparisonStatus } from '@/lib/engine/budgetComparison';
 import type { BudgetTarget } from '@/lib/engine/budgetComparison';
 
@@ -83,6 +91,7 @@ interface Props {
   unassignedCards: EstimateCard[];
   programGuestCount: number;
   teamMembers: DbTeamMember[];
+  calloutsByEstimate: CalloutsByEstimate;
 }
 
 // ─── Budget comparison helpers ────────────────────────────
@@ -143,7 +152,7 @@ interface DeltaInfo {
 
 // ─── Sortable estimate card wrapper ──────────────────────
 
-function SortableEstimateCard({ card, programId, isLowest, isBestMargin, onToggleBudget, onToggleProposal, onAssign, teamMembers, eventGuestCount, delta }: {
+function SortableEstimateCard({ card, programId, isLowest, isBestMargin, onToggleBudget, onToggleProposal, onAssign, teamMembers, eventId, callouts, eventGuestCount, delta }: {
   card: EstimateCard;
   programId: string;
   isLowest: boolean;
@@ -152,6 +161,8 @@ function SortableEstimateCard({ card, programId, isLowest, isBestMargin, onToggl
   onToggleProposal: (id: string, next: boolean) => void;
   onAssign: (id: string, memberId: number | null) => void;
   teamMembers: DbTeamMember[];
+  eventId: string | null;
+  callouts: DbCalloutWithReplies[];
   eventGuestCount?: number;
   delta?: DeltaInfo;
 }) {
@@ -172,6 +183,8 @@ function SortableEstimateCard({ card, programId, isLowest, isBestMargin, onToggl
         onToggleProposal={onToggleProposal}
         onAssign={onAssign}
         teamMembers={teamMembers}
+        eventId={eventId}
+        callouts={callouts}
         eventGuestCount={eventGuestCount}
         delta={delta}
         dragHandleProps={{ ...attributes, ...listeners }}
@@ -191,6 +204,8 @@ function EstimateCardItem({
   onToggleProposal,
   onAssign,
   teamMembers,
+  eventId,
+  callouts,
   eventGuestCount,
   delta: deltaInfo,
   dragHandleProps,
@@ -203,6 +218,8 @@ function EstimateCardItem({
   onToggleProposal: (id: string, next: boolean) => void;
   onAssign: (id: string, memberId: number | null) => void;
   teamMembers: DbTeamMember[];
+  eventId: string | null;
+  callouts: DbCalloutWithReplies[];
   eventGuestCount?: number;
   delta?: DeltaInfo;
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
@@ -304,11 +321,22 @@ function EstimateCardItem({
           </div>
           <span className="text-xs text-brand-charcoal/70">In Proposal</span>
         </label>
-        <AssignedToBadge
-          assignedTo={card.assignedTo}
-          teamMembers={teamMembers}
-          onAssign={(memberId) => onAssign(card.id, memberId)}
-        />
+        <div className="ml-auto flex items-center gap-1.5">
+          <CalloutButton
+            estimateId={card.id}
+            programId={programId}
+            eventId={eventId}
+            estimateName={card.name}
+            callouts={callouts}
+            teamMembers={teamMembers}
+            defaultOwner={card.assignedTo}
+          />
+          <AssignedToBadge
+            assignedTo={card.assignedTo}
+            teamMembers={teamMembers}
+            onAssign={(memberId) => onAssign(card.id, memberId)}
+          />
+        </div>
       </div>
     </div>
   );
@@ -324,6 +352,7 @@ function EventCard({
   onToggleProposal,
   onAssign,
   teamMembers,
+  calloutsByEstimate,
   onDelete,
   onUpdate,
 }: {
@@ -334,6 +363,7 @@ function EventCard({
   onToggleProposal: (id: string, next: boolean) => void;
   onAssign: (id: string, memberId: number | null) => void;
   teamMembers: DbTeamMember[];
+  calloutsByEstimate: CalloutsByEstimate;
   onDelete: (id: string) => void;
   onUpdate: (id: string, data: Partial<EventRow>) => void;
 }) {
@@ -384,6 +414,9 @@ function EventCard({
   const withTotal = cards.filter((c) => c.total > 0);
   const groupLowest = withTotal.length > 1 ? Math.min(...withTotal.map((c) => c.total)) : null;
   const groupBestMargin = withTotal.length > 0 ? Math.max(...withTotal.map((c) => c.qcMarginPct)) : null;
+
+  // Aggregate open callouts across this event's estimates (header badge).
+  const eventOpenCallouts = cards.reduce((n, c) => n + openCalloutCount(calloutsByEstimate[c.id]), 0);
 
   const dateStr = fmtDate(event.event_date);
   const startStr = fmtTime(event.start_time);
@@ -589,6 +622,19 @@ function EventCard({
             {event.guest_count > 0 ? `${event.guest_count.toLocaleString()} guests` : ''}
           </span>
 
+          {eventOpenCallouts > 0 && (
+            <span
+              className="flex items-center gap-1 text-[11px] font-semibold bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5 flex-shrink-0"
+              title={`${eventOpenCallouts} open callout${eventOpenCallouts === 1 ? '' : 's'} in this event`}
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.3-3.9A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              {eventOpenCallouts}
+            </span>
+          )}
+
           {event.budget_amount !== null && event.budget_amount > 0 && (
             <span className="text-xs bg-brand-charcoal/8 text-brand-charcoal/50 border border-brand-cream rounded px-1.5 py-0.5 flex-shrink-0">
               ${event.budget_amount.toLocaleString('en-US')}{event.budget_basis === 'per_person' ? '/pp' : ''}
@@ -674,6 +720,8 @@ function EventCard({
                             onToggleProposal={onToggleProposal}
                             onAssign={onAssign}
                             teamMembers={teamMembers}
+                            eventId={event.id}
+                            callouts={calloutsByEstimate[card.id] ?? []}
                             eventGuestCount={guestCount}
                             delta={deltaInfo}
                           />
@@ -709,6 +757,8 @@ function EventCard({
                           onToggleProposal={onToggleProposal}
                           onAssign={onAssign}
                           teamMembers={teamMembers}
+                          eventId={event.id}
+                          callouts={calloutsByEstimate[card.id] ?? []}
                           eventGuestCount={guestCount}
                         />
                       ))}
@@ -762,7 +812,7 @@ function EventCard({
 
 // ─── Main EventsView ──────────────────────────────────────
 
-export default function EventsView({ programId, events: initialEvents, unassignedCards: initialUnassigned, programGuestCount, teamMembers }: Props) {
+export default function EventsView({ programId, events: initialEvents, unassignedCards: initialUnassigned, programGuestCount, teamMembers, calloutsByEstimate }: Props) {
   const router = useRouter();
   const [events, setEvents] = useState(initialEvents);
   const [unassignedCards, setUnassignedCards] = useState(initialUnassigned);
@@ -859,6 +909,7 @@ export default function EventsView({ programId, events: initialEvents, unassigne
           onToggleProposal={handleToggleProposal}
           onAssign={handleAssign}
           teamMembers={teamMembers}
+          calloutsByEstimate={calloutsByEstimate}
           onDelete={handleDeleteEvent}
           onUpdate={handleUpdateEvent}
         />
@@ -880,6 +931,8 @@ export default function EventsView({ programId, events: initialEvents, unassigne
                 onToggleProposal={handleToggleProposal}
                 onAssign={handleAssign}
                 teamMembers={teamMembers}
+                eventId={null}
+                callouts={calloutsByEstimate[card.id] ?? []}
               />
             ))}
           </div>

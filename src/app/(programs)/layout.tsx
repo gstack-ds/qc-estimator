@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import NavLinks from '@/components/layout/NavLinks';
 import UserMenu from '@/components/layout/UserMenu';
 import MobileNav from '@/components/layout/MobileNav';
-import { getProfile } from '@/lib/supabase/queries';
+import { getProfile, getOpenCalloutCount } from '@/lib/supabase/queries';
 
 export default async function ProgramsLayout({
   children,
@@ -16,13 +16,17 @@ export default async function ProgramsLayout({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const profile = await getProfile(user.id);
+  const [profile, openCallouts] = await Promise.all([
+    getProfile(user.id),
+    getOpenCalloutCount(),
+  ]);
   const isAdmin = profile?.role === 'admin';
 
   const navLinks = [
     { href: '/leads', label: 'Leads' },
     { href: '/programs', label: 'Programs' },
     { href: '/venues', label: 'Vendors' },
+    { href: '/callouts', label: 'Callouts', badge: openCallouts },
     { href: '/document-extractor', label: 'Doc Reader' },
     ...(isAdmin ? [{ href: '/admin', label: 'Reference Data' }] : []),
   ];

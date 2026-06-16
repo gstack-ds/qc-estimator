@@ -15,6 +15,7 @@ import {
   getProgramBrief,
   getStaffingForProgram,
   getTeamMembers,
+  getCalloutsForProgram,
   getBudgetPlanEntries,
   type DbEstimate,
   type DbLineItem,
@@ -299,7 +300,7 @@ function buildBudgetEstimate(
 export default async function ProgramPage({ params }: Props) {
   const { id } = await params;
 
-  const [program, locations, estimates, dbEvents, markups, dbTiers, travelItems, programDocs, existingBrief, staffingRoles, teamMembers, budgetEntries] = await Promise.all([
+  const [program, locations, estimates, dbEvents, markups, dbTiers, travelItems, programDocs, existingBrief, staffingRoles, teamMembers, budgetEntries, programCallouts] = await Promise.all([
     getProgram(id),
     getLocations(),
     getEstimatesForProgram(id),
@@ -312,7 +313,14 @@ export default async function ProgramPage({ params }: Props) {
     getStaffingForProgram(id),
     getTeamMembers(),
     getBudgetPlanEntries(id),
+    getCalloutsForProgram(id),
   ]);
+
+  // Group callouts by estimate for per-card badges + in-context threads.
+  const calloutsByEstimate: Record<string, typeof programCallouts> = {};
+  for (const c of programCallouts) {
+    (calloutsByEstimate[c.estimate_id] ??= []).push(c);
+  }
 
   const tiers: TeamHoursTier[] = dbTiers.map((t) => ({
     revenueThreshold: t.revenue_threshold,
@@ -523,6 +531,7 @@ export default async function ProgramPage({ params }: Props) {
           unassignedCards={unassignedCards}
           programGuestCount={program.guest_count}
           teamMembers={teamMembers}
+          calloutsByEstimate={calloutsByEstimate}
         />
       </div>
 
