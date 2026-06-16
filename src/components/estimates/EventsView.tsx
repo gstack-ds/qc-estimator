@@ -24,6 +24,8 @@ import AddEstimateButton from './AddEstimateButton';
 import AddEventButton from './AddEventButton';
 import AssignedToBadge from './AssignedToBadge';
 import CalloutButton from '@/components/callouts/CalloutButton';
+import CalloutsPanel from '@/components/callouts/CalloutsPanel';
+import type { CalloutContext } from '@/components/callouts/CalloutItem';
 import type { EstimateCard } from './ComparisonView';
 import type { DbBudgetPlanEntry, DbTeamMember, DbCalloutWithReplies } from '@/lib/supabase/queries';
 
@@ -415,8 +417,17 @@ function EventCard({
   const groupLowest = withTotal.length > 1 ? Math.min(...withTotal.map((c) => c.total)) : null;
   const groupBestMargin = withTotal.length > 0 ? Math.max(...withTotal.map((c) => c.qcMarginPct)) : null;
 
-  // Aggregate open callouts across this event's estimates (header badge).
-  const eventOpenCallouts = cards.reduce((n, c) => n + openCalloutCount(calloutsByEstimate[c.id]), 0);
+  // This event's callouts across all its estimates (header summary + in-context history panel).
+  const eventCallouts = cards.flatMap((c) => calloutsByEstimate[c.id] ?? []);
+  const eventOpenCallouts = eventCallouts.filter((c) => c.status === 'open').length;
+  const eventResolvedCallouts = eventCallouts.length - eventOpenCallouts;
+  // Source label (which estimate) + jump link for each callout in the panel.
+  const calloutContext: Record<string, CalloutContext> = {};
+  for (const c of cards) {
+    calloutContext[c.id] = {
+      programId, estimateId: c.id, programName: null, eventName: null, estimateName: c.name,
+    };
+  }
 
   const dateStr = fmtDate(event.event_date);
   const startStr = fmtTime(event.start_time);
@@ -622,16 +633,18 @@ function EventCard({
             {event.guest_count > 0 ? `${event.guest_count.toLocaleString()} guests` : ''}
           </span>
 
-          {eventOpenCallouts > 0 && (
+          {eventCallouts.length > 0 && (
             <span
-              className="flex items-center gap-1 text-[11px] font-semibold bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5 flex-shrink-0"
-              title={`${eventOpenCallouts} open callout${eventOpenCallouts === 1 ? '' : 's'} in this event`}
+              className={`flex items-center gap-1 text-[11px] font-medium rounded-full px-2 py-0.5 flex-shrink-0 border ${
+                eventOpenCallouts > 0 ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-brand-offwhite text-brand-silver border-brand-cream'
+              }`}
+              title={`${eventOpenCallouts} open · ${eventResolvedCallouts} resolved callout${eventCallouts.length === 1 ? '' : 's'} in this event`}
             >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.3-3.9A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
               </svg>
-              {eventOpenCallouts}
+              {eventOpenCallouts} open · {eventResolvedCallouts} resolved
             </span>
           )}
 
@@ -804,6 +817,9 @@ function EventCard({
           <div className="flex justify-end pt-1">
             <AddEstimateButton programId={programId} eventId={event.id} />
           </div>
+
+          {/* In-context callout history for this event (debrief surface) */}
+          <CalloutsPanel callouts={eventCallouts} teamMembers={teamMembers} contextByEstimate={calloutContext} />
         </div>
       )}
     </div>
