@@ -25,6 +25,7 @@ import type { LocalLineItem } from './EstimateBuilder';
 // TravelPanel removed — team travel is now entered at the program level.
 import AttachmentsPanel from './AttachmentsPanel';
 import EstimateSnapshotBar from './EstimateSnapshotBar';
+import InternalNotesField from './InternalNotesField';
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -577,6 +578,8 @@ export default function AvEstimateBuilder({
         event={event}
         budgetPlanEntry={budgetPlanEntry}
       />
+
+      <InternalNotesField estimateId={estimate.id} programId={program.id} initialNotes={estimate.internal_notes} />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Main content */}

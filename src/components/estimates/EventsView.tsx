@@ -22,8 +22,9 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import AddEstimateButton from './AddEstimateButton';
 import AddEventButton from './AddEventButton';
+import AssignedToBadge from './AssignedToBadge';
 import type { EstimateCard } from './ComparisonView';
-import type { DbBudgetPlanEntry } from '@/lib/supabase/queries';
+import type { DbBudgetPlanEntry, DbTeamMember } from '@/lib/supabase/queries';
 import { compareEstimateToBudget, combineEstimatesToBudget, type ComparisonStatus } from '@/lib/engine/budgetComparison';
 import type { BudgetTarget } from '@/lib/engine/budgetComparison';
 
@@ -81,6 +82,7 @@ interface Props {
   events: EventRow[];
   unassignedCards: EstimateCard[];
   programGuestCount: number;
+  teamMembers: DbTeamMember[];
 }
 
 // ─── Budget comparison helpers ────────────────────────────
@@ -141,13 +143,15 @@ interface DeltaInfo {
 
 // ─── Sortable estimate card wrapper ──────────────────────
 
-function SortableEstimateCard({ card, programId, isLowest, isBestMargin, onToggleBudget, onToggleProposal, eventGuestCount, delta }: {
+function SortableEstimateCard({ card, programId, isLowest, isBestMargin, onToggleBudget, onToggleProposal, onAssign, teamMembers, eventGuestCount, delta }: {
   card: EstimateCard;
   programId: string;
   isLowest: boolean;
   isBestMargin: boolean;
   onToggleBudget: (id: string, next: boolean) => void;
   onToggleProposal: (id: string, next: boolean) => void;
+  onAssign: (id: string, memberId: number | null) => void;
+  teamMembers: DbTeamMember[];
   eventGuestCount?: number;
   delta?: DeltaInfo;
 }) {
@@ -166,6 +170,8 @@ function SortableEstimateCard({ card, programId, isLowest, isBestMargin, onToggl
         isBestMargin={isBestMargin}
         onToggleBudget={onToggleBudget}
         onToggleProposal={onToggleProposal}
+        onAssign={onAssign}
+        teamMembers={teamMembers}
         eventGuestCount={eventGuestCount}
         delta={delta}
         dragHandleProps={{ ...attributes, ...listeners }}
@@ -183,6 +189,8 @@ function EstimateCardItem({
   isBestMargin,
   onToggleBudget,
   onToggleProposal,
+  onAssign,
+  teamMembers,
   eventGuestCount,
   delta: deltaInfo,
   dragHandleProps,
@@ -193,6 +201,8 @@ function EstimateCardItem({
   isBestMargin: boolean;
   onToggleBudget: (id: string, next: boolean) => void;
   onToggleProposal: (id: string, next: boolean) => void;
+  onAssign: (id: string, memberId: number | null) => void;
+  teamMembers: DbTeamMember[];
   eventGuestCount?: number;
   delta?: DeltaInfo;
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
@@ -294,6 +304,11 @@ function EstimateCardItem({
           </div>
           <span className="text-xs text-brand-charcoal/70">In Proposal</span>
         </label>
+        <AssignedToBadge
+          assignedTo={card.assignedTo}
+          teamMembers={teamMembers}
+          onAssign={(memberId) => onAssign(card.id, memberId)}
+        />
       </div>
     </div>
   );
@@ -307,6 +322,8 @@ function EventCard({
   cards,
   onToggleBudget,
   onToggleProposal,
+  onAssign,
+  teamMembers,
   onDelete,
   onUpdate,
 }: {
@@ -315,6 +332,8 @@ function EventCard({
   cards: EstimateCard[];
   onToggleBudget: (id: string, next: boolean) => void;
   onToggleProposal: (id: string, next: boolean) => void;
+  onAssign: (id: string, memberId: number | null) => void;
+  teamMembers: DbTeamMember[];
   onDelete: (id: string) => void;
   onUpdate: (id: string, data: Partial<EventRow>) => void;
 }) {
@@ -653,6 +672,8 @@ function EventCard({
                             isBestMargin={isBestMargin}
                             onToggleBudget={onToggleBudget}
                             onToggleProposal={onToggleProposal}
+                            onAssign={onAssign}
+                            teamMembers={teamMembers}
                             eventGuestCount={guestCount}
                             delta={deltaInfo}
                           />
@@ -686,6 +707,8 @@ function EventCard({
                           isBestMargin={false}
                           onToggleBudget={onToggleBudget}
                           onToggleProposal={onToggleProposal}
+                          onAssign={onAssign}
+                          teamMembers={teamMembers}
                           eventGuestCount={guestCount}
                         />
                       ))}
@@ -739,7 +762,7 @@ function EventCard({
 
 // ─── Main EventsView ──────────────────────────────────────
 
-export default function EventsView({ programId, events: initialEvents, unassignedCards: initialUnassigned, programGuestCount }: Props) {
+export default function EventsView({ programId, events: initialEvents, unassignedCards: initialUnassigned, programGuestCount, teamMembers }: Props) {
   const router = useRouter();
   const [events, setEvents] = useState(initialEvents);
   const [unassignedCards, setUnassignedCards] = useState(initialUnassigned);
@@ -771,6 +794,17 @@ export default function EventsView({ programId, events: initialEvents, unassigne
     );
     setUnassignedCards((prev) => prev.map((c) => (c.id === id ? { ...c, includedInProposal: next } : c)));
     await updateEstimateProposalInclusion(id, programId, next);
+  }
+
+  async function handleAssign(id: string, memberId: number | null) {
+    setEvents((prev) =>
+      prev.map((ev) => ({
+        ...ev,
+        cards: ev.cards.map((c) => (c.id === id ? { ...c, assignedTo: memberId } : c)),
+      }))
+    );
+    setUnassignedCards((prev) => prev.map((c) => (c.id === id ? { ...c, assignedTo: memberId } : c)));
+    await updateEstimate(id, programId, { assigned_to: memberId });
   }
 
   async function handleDeleteEvent(id: string) {
@@ -823,6 +857,8 @@ export default function EventsView({ programId, events: initialEvents, unassigne
           cards={event.cards}
           onToggleBudget={handleToggleBudget}
           onToggleProposal={handleToggleProposal}
+          onAssign={handleAssign}
+          teamMembers={teamMembers}
           onDelete={handleDeleteEvent}
           onUpdate={handleUpdateEvent}
         />
@@ -842,6 +878,8 @@ export default function EventsView({ programId, events: initialEvents, unassigne
                 isBestMargin={false}
                 onToggleBudget={handleToggleBudget}
                 onToggleProposal={handleToggleProposal}
+                onAssign={handleAssign}
+                teamMembers={teamMembers}
               />
             ))}
           </div>

@@ -34,6 +34,9 @@ export async function updateEstimate(id: string, programId: string, data: Partia
   food_tax_override: number | null;
   alcohol_tax_override: number | null;
   general_tax_override: number | null;
+  // INTERNAL ONLY — assignee + working notes. Never reaches a client-facing document.
+  assigned_to: number | null;
+  internal_notes: string | null;
 }>) {
   const supabase = await createClient();
   const { error } = await supabase.from('estimates').update(data).eq('id', id);
