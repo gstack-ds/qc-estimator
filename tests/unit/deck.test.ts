@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { NarrativeOutputSchema, defaultNarrative } from '../../src/lib/deck/types';
 import type { NarrativeInput } from '../../src/lib/deck/types';
-import { buildDeckHtml, sanitizeLineItemName, sectionDisplayLabel, SECTION_DISPLAY_LABELS } from '../../src/lib/deck/renderer';
+import { buildDeckHtml, sanitizeEstimateName, sanitizeLineItemName, sectionDisplayLabel, SECTION_DISPLAY_LABELS } from '../../src/lib/deck/renderer';
 import {
   buildDeckContract,
   type RawEstimate,
@@ -358,7 +358,7 @@ describe('buildDeckHtml', () => {
     expect(html).toContain('Wicked Wolf');
   });
 
-  it('all-caps internal suffixes are stripped from estimate name in rendered HTML', () => {
+  it('internal initial suffixes (caps and mixed-case) are stripped from estimate name in rendered HTML', () => {
     const doneAqs: RawEstimate = { ...estimate, name: "Marlow's Tavern - DONE AQS" };
     const aqsOnly: RawEstimate = { ...estimate, name: 'Ecco Midtown - AQS DONE' };
     const mixedCase: RawEstimate = { ...estimate, name: 'Old Vinings Inn - KP Pending' };
@@ -369,14 +369,14 @@ describe('buildDeckHtml', () => {
       defaultNarrative({ ...narrativeInput, estimateName: e.name })
     );
     const html = buildDeckHtml(contracts.map((c, i) => ({ contract: c, narrative: narratives[i] })));
-    // All-caps suffixes must be gone
+    // Any segment carrying a team initial must be gone — caps OR mixed-case.
     expect(html).not.toContain('DONE AQS');
     expect(html).not.toContain('AQS DONE');
+    expect(html).not.toContain('KP Pending');
     // Venue names must remain
     expect(html).toContain("Marlow's Tavern");
     expect(html).toContain('Ecco Midtown');
-    // Mixed-case suffix (" - KP Pending") must NOT be stripped
-    expect(html).toContain('KP Pending');
+    expect(html).toContain('Old Vinings Inn');
   });
 
   it('chained all-caps suffixes are fully stripped in one pass', () => {
@@ -431,6 +431,64 @@ describe('buildDeckHtml', () => {
 
     // Names without a price prefix must be unchanged
     expect(html).toContain('Standard Lunch Buffet');
+  });
+});
+
+// ─── sanitizeEstimateName (denylist) ──────────────────────────────────────────
+// DENYLIST: strip a trailing " - …" note segment ONLY when it carries a known team
+// initial (AQS/DR/KP/…) or an upcharge note. Must NOT touch real names — proven
+// against the live DB via scripts/check-sanitize-names.ts (22 junk strips, 0 false
+// positives). The cases below mirror the real rows in that audit.
+
+describe('sanitizeEstimateName', () => {
+  it('CRITICAL: real client names with hyphens or caps survive untouched', () => {
+    // The blanket "strip caps after a dash" rule broke this — the whole reason for the denylist.
+    expect(sanitizeEstimateName('WORLD OF COCA-COLA')).toBe('WORLD OF COCA-COLA');
+    expect(sanitizeEstimateName('Coca-cola products')).toBe('Coca-cola products');
+    expect(sanitizeEstimateName('The Ritz-Carlton')).toBe('The Ritz-Carlton');
+  });
+
+  it('legit dash suffixes (no internal marker) survive', () => {
+    expect(sanitizeEstimateName('South City Kitchen - Midtown')).toBe('South City Kitchen - Midtown');
+    expect(sanitizeEstimateName('NYC Water Cruises - Louisa of the Sea')).toBe('NYC Water Cruises - Louisa of the Sea');
+    expect(sanitizeEstimateName('Balloons Over Atlanta & Event Visions - Balloons + Backdrop'))
+      .toBe('Balloons Over Atlanta & Event Visions - Balloons + Backdrop');
+    // "AV" is not a team initial, so an AV-package suffix must survive.
+    expect(sanitizeEstimateName('Grand Ballroom - AV Package')).toBe('Grand Ballroom - AV Package');
+  });
+
+  it('strips AQS-tagged internal notes', () => {
+    expect(sanitizeEstimateName('5Church Midtown - AQS OVER BUDGET')).toBe('5Church Midtown');
+    expect(sanitizeEstimateName('AltaToro - AQS SERPENTINE ROOM MAX OF 50 SEATED')).toBe('AltaToro');
+    expect(sanitizeEstimateName("Marlow's Tavern - DONE AQS")).toBe("Marlow's Tavern");
+    expect(sanitizeEstimateName('Holeman and Finch - AQS OUT OF BUDGET')).toBe('Holeman and Finch');
+  });
+
+  it('strips DR / KP tagged notes including mixed-case and dates', () => {
+    expect(sanitizeEstimateName('Old Vinings Inn - KP Pending')).toBe('Old Vinings Inn');
+    expect(sanitizeEstimateName('Two Urban Licks - KP Pending')).toBe('Two Urban Licks');
+    expect(sanitizeEstimateName('Rumi\'s Kitchen Colony Square - KP edited 6/12/26')).toBe("Rumi's Kitchen Colony Square");
+  });
+
+  it('strips DR + upcharge note', () => {
+    expect(sanitizeEstimateName('Fado Irish Pub - DR (upcharge at 40%)')).toBe('Fado Irish Pub');
+    expect(sanitizeEstimateName('Wicked Wolf - DR (upcharge at 45%)')).toBe('Wicked Wolf');
+    expect(sanitizeEstimateName('The Nook at Piedmont - DR (upcharged at 55%)')).toBe('The Nook at Piedmont');
+  });
+
+  it('handles no-space-after-dash and preserves "+" in the venue name', () => {
+    expect(sanitizeEstimateName('Alma Cocina Downtown -REMOVE AV NOT PERMITTED AQS')).toBe('Alma Cocina Downtown');
+    expect(sanitizeEstimateName('Saints + Council - PATIO MAX OF 75 AQS')).toBe('Saints + Council');
+  });
+
+  it('cuts at the first dash whose remainder carries a marker (multi-dash note)', () => {
+    expect(sanitizeEstimateName('Alta Toro - AQS -NO IN BUDGET OPTION FOR THIS SIZE GROUP')).toBe('Alta Toro');
+    expect(sanitizeEstimateName('The Grand Venue - DR - DONE AQS')).toBe('The Grand Venue');
+  });
+
+  it('plain names with no dash are unchanged', () => {
+    expect(sanitizeEstimateName('Two Urban Licks')).toBe('Two Urban Licks');
+    expect(sanitizeEstimateName('Canoe')).toBe('Canoe');
   });
 });
 
