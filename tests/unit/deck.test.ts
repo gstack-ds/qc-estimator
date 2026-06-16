@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { NarrativeOutputSchema, defaultNarrative } from '../../src/lib/deck/types';
 import type { NarrativeInput } from '../../src/lib/deck/types';
-import { buildDeckHtml, sanitizeLineItemName } from '../../src/lib/deck/renderer';
+import { buildDeckHtml, sanitizeLineItemName, sectionDisplayLabel, SECTION_DISPLAY_LABELS } from '../../src/lib/deck/renderer';
 import {
   buildDeckContract,
   type RawEstimate,
@@ -479,5 +479,106 @@ describe('sanitizeLineItemName', () => {
 
   it('returns empty string unchanged', () => {
     expect(sanitizeLineItemName('')).toBe('');
+  });
+
+  // ─── Auto-seeded default name mappings ──────────────────────────────────────
+
+  it('maps "Per Person Food" → "Menu" (internal shorthand for food F&B line)', () => {
+    expect(sanitizeLineItemName('Per Person Food')).toBe('Menu');
+  });
+
+  it('maps "NA Beverages" → "Non-Alcoholic Beverages"', () => {
+    expect(sanitizeLineItemName('NA Beverages')).toBe('Non-Alcoholic Beverages');
+  });
+
+  it('maps "QC Event Staff" → "Event Staff" (strips internal company prefix)', () => {
+    expect(sanitizeLineItemName('QC Event Staff')).toBe('Event Staff');
+  });
+
+  it('leaves "Bar Package" unchanged — client-safe name', () => {
+    expect(sanitizeLineItemName('Bar Package')).toBe('Bar Package');
+  });
+
+  it('lookup is exact-match only — does not map partial strings containing default names', () => {
+    // "Per Person Food" as a prefix or substring must not trigger the lookup
+    expect(sanitizeLineItemName('Per Person Food & Beverage Package')).toBe('Per Person Food & Beverage Package');
+    expect(sanitizeLineItemName('QC Event Staffing')).toBe('QC Event Staffing');
+    expect(sanitizeLineItemName('NA Beverages (upgrade)')).toBe('NA Beverages (upgrade)');
+  });
+});
+
+// ─── sectionDisplayLabel ──────────────────────────────────────────────────────
+
+describe('sectionDisplayLabel', () => {
+  it('strips "Non-Taxable" from staffing section', () => {
+    expect(sectionDisplayLabel('Non-Taxable Staffing')).toBe('Staffing');
+  });
+
+  it('maps "Florals - Non-Taxable" → "Florals"', () => {
+    expect(sectionDisplayLabel('Florals - Non-Taxable')).toBe('Florals');
+  });
+
+  it('maps "Florals - Taxable" → "Florals" (strips tax-bucket qualifier)', () => {
+    expect(sectionDisplayLabel('Florals - Taxable')).toBe('Florals');
+  });
+
+  it('maps "Rentals - Non-Taxable" → "Rentals"', () => {
+    expect(sectionDisplayLabel('Rentals - Non-Taxable')).toBe('Rentals');
+  });
+
+  it('maps "F&B" → "Food & Beverage"', () => {
+    expect(sectionDisplayLabel('F&B')).toBe('Food & Beverage');
+  });
+
+  it('passes through known client-safe section names unchanged', () => {
+    expect(sectionDisplayLabel('Rentals - Seating')).toBe('Seating Rentals');
+    expect(sectionDisplayLabel('Venue Fees')).toBe('Venue Fees');
+    expect(sectionDisplayLabel('AV & Production')).toBe('AV & Production');
+    expect(sectionDisplayLabel('Transportation')).toBe('Transportation');
+  });
+
+  it('passes through unknown user-renamed sections unchanged', () => {
+    expect(sectionDisplayLabel('Custom Section Name')).toBe('Custom Section Name');
+    expect(sectionDisplayLabel('Cocktail Florals')).toBe('Cocktail Florals');
+  });
+
+  it('SECTION_DISPLAY_LABELS contains no "Non-Taxable" or "Taxable" in any value', () => {
+    for (const [key, value] of Object.entries(SECTION_DISPLAY_LABELS)) {
+      expect(
+        value,
+        `SECTION_DISPLAY_LABELS["${key}"] = "${value}" contains tax-bucket language`
+      ).not.toMatch(/non-taxable|taxable/i);
+    }
+  });
+
+  it('internal tax-bucket section names are absent from rendered deck HTML', () => {
+    const staffingSection: RawSection = {
+      id: 'sec-staffing',
+      name: 'Non-Taxable Staffing',
+      tax_bucket: 'staffing',
+      markup_pct: 0.90,
+      sort_order: 1,
+    };
+    const staffItem: RawLineItem = {
+      ...lineItem,
+      id: 'li-staff',
+      section_id: 'sec-staffing',
+      section: 'Non-Taxable Staffing',
+      name: 'Event Staff',
+      qty: 1,
+      unit_price: 500,
+      tax_type: 'none',
+    };
+    const contractWithStaffing = buildDeckContract(
+      estimate, [fbSection, staffingSection], [lineItem, staffItem],
+      program, location, tiers, categoryMarkups
+    );
+    const sectionNarrative = defaultNarrative(narrativeInput);
+    const html = buildDeckHtml([{ contract: contractWithStaffing, narrative: sectionNarrative }]);
+
+    expect(html).not.toContain('Non-Taxable Staffing');
+    expect(html).toContain('Staffing');
+    // F&B section still renders as "Food &amp; Beverage" (HTML-escaped)
+    expect(html).toContain('Food &amp; Beverage');
   });
 });

@@ -5,7 +5,7 @@ import type { EstimateSummary, Location } from '@/types';
 import type { LineItemForExport } from '@/lib/utils/export';
 import { itemClientCost } from '@/lib/utils/export';
 import type { TourDetails } from '@/lib/tours/types';
-import { sanitizeLineItemName } from '@/lib/deck/renderer';
+import { sanitizeLineItemName, sectionDisplayLabel, sanitizeEstimateName } from '@/lib/deck/renderer';
 
 function shortLocationName(name: string): string {
   return name.replace(/\s*\([^)]*\)/, '').replace(/\s+(NC|SC|GA|VA|PA|MD|NY|NJ|DC)$/, '').trim();
@@ -72,19 +72,6 @@ function fmtRound(n: number) {
   return '$' + Math.round(n).toLocaleString('en-US');
 }
 
-const SECTION_LABELS: Record<string, string> = {
-  'F&B': 'Food & Beverage',
-  'Equipment & Staffing': 'Equipment & Staffing',
-  'Venue Fees': 'Venue Fees',
-  'Non-Taxable Staffing': 'Non-Taxable Staffing',
-  'Florals - Taxable': 'Florals',
-  'Florals - Non-Taxable': 'Non-Taxable Florals',
-  'Rentals - Seating': 'Seating Rentals',
-  'Rentals - Lounge': 'Lounge Rentals',
-  'Rentals - Tables': 'Table Rentals',
-  'Rentals - Rugs & Accessories': 'Rugs & Accessories',
-  'Rentals - Non-Taxable': 'Non-Taxable Rentals',
-};
 
 export interface ProposalDocumentProps {
   estimateId: string;
@@ -219,7 +206,7 @@ export default function ProposalDocument({
           return (
             <View key={section} wrap={false}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionHeaderText}>{SECTION_LABELS[section] ?? section}</Text>
+                <Text style={styles.sectionHeaderText}>{sectionDisplayLabel(section)}</Text>
               </View>
               <View style={styles.tableHeader}>
                 <Text style={[styles.tableHeaderCell, styles.colItem]}>Item</Text>
@@ -334,7 +321,7 @@ export default function ProposalDocument({
         {/* Footer */}
         <View style={styles.footer} fixed>
           <Text style={styles.footerText}>Quill Creative Event Design · (803) 792-9338 · events@qceventdesign.com</Text>
-          <Text style={styles.footerText}>{estimateName}</Text>
+          <Text style={styles.footerText}>{sanitizeEstimateName(estimateName)}</Text>
         </View>
       </Page>
     </Document>

@@ -51,12 +51,47 @@ function fmtPct(n: number): string {
 //   Known risk: short all-caps location codes like " - NYC" or " - VIP" would also be
 //   stripped. None are in the current dataset; add a negative lookahead if they appear.
 // Raw estimate name is preserved in the DB — this only affects PDF output.
-function sanitizeEstimateName(name: string): string {
+export function sanitizeEstimateName(name: string): string {
   return name
     .replace(/\s*\(\s*upcharg\w*\s+at\s+[\d.]+%\s*\)/gi, '')
     .replace(/(\s*-\s+[A-Z][A-Z ]*)+$/, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
+}
+
+// Exact-match lookup for auto-seeded default line item names that are internal
+// shorthand and must never appear verbatim on a client proposal.
+// Only venue estimates receive these defaults (actions.ts createEstimate).
+// Kept as a lookup — not a broad regex — to avoid false-positives on user-authored names.
+const LINE_ITEM_NAME_MAP: Record<string, string> = {
+  'Per Person Food': 'Menu',
+  'NA Beverages': 'Non-Alcoholic Beverages',
+  'QC Event Staff': 'Event Staff',
+};
+
+// Client-facing display labels for all estimate section names.
+// Single source of truth shared by the deck renderer (HTML) and ProposalDocument (react-pdf).
+// Internal tax-bucket language ("Non-Taxable", "- Taxable") is stripped — clients see
+// category labels only. Raw section names are preserved in the DB.
+export const SECTION_DISPLAY_LABELS: Record<string, string> = {
+  'F&B': 'Food & Beverage',
+  'Equipment & Staffing': 'Equipment & Staffing',
+  'Venue Fees': 'Venue Fees',
+  'Non-Taxable Staffing': 'Staffing',
+  'Florals - Taxable': 'Florals',
+  'Florals - Non-Taxable': 'Florals',
+  'Rentals - Seating': 'Seating Rentals',
+  'Rentals - Lounge': 'Lounge Rentals',
+  'Rentals - Tables': 'Table Rentals',
+  'Rentals - Rugs & Accessories': 'Rugs & Accessories',
+  'Rentals - Non-Taxable': 'Rentals',
+  'AV & Production': 'AV & Production',
+  'Tour & Guide Services': 'Tour & Guide Services',
+  'Transportation': 'Transportation',
+};
+
+export function sectionDisplayLabel(name: string): string {
+  return SECTION_DISPLAY_LABELS[name] ?? name;
 }
 
 // Strip leading per-person price-tier prefixes from vendor menu names.
@@ -65,6 +100,7 @@ function sanitizeEstimateName(name: string): string {
 // Handles: "$70 Per Person ...", "$85/pp ...", "$85 / pp ...", "$1,200/person ..."
 // Safe to apply to all line item names — no match leaves the string unchanged.
 export function sanitizeLineItemName(name: string): string {
+  if (name in LINE_ITEM_NAME_MAP) return LINE_ITEM_NAME_MAP[name];
   return name
     .replace(/^\$[\d,]+(?:\s*\/\s*(?:pp|person)|\s+per\s+person)\s+/i, '')
     .replace(/\s{2,}/g, ' ')
@@ -139,7 +175,7 @@ function buildPricingPage(
 
       return `
       <div class="section">
-        <div class="section-header">${esc(section.name)}</div>
+        <div class="section-header">${esc(sectionDisplayLabel(section.name))}</div>
         <table class="items-table"><tbody>${rowsHtml}</tbody></table>
       </div>`;
     })
