@@ -38,6 +38,7 @@ function openCalloutCount(callouts: DbCalloutWithReplies[] | undefined): number 
 }
 import { compareEstimateToBudget, combineEstimatesToBudget, type ComparisonStatus } from '@/lib/engine/budgetComparison';
 import type { BudgetTarget } from '@/lib/engine/budgetComparison';
+import { resolveEstimateBudget } from '@/lib/budget/resolveBudget';
 
 // ─── Event type display config ────────────────────────────
 
@@ -95,6 +96,9 @@ interface Props {
   programGuestCount: number;
   teamMembers: DbTeamMember[];
   calloutsByEstimate: CalloutsByEstimate;
+  // All Budget Plan entries for the program — used to resolve the per-card compare target with
+  // the same precedence the snapshot-bar header uses (so header and badge always agree).
+  budgetEntries: DbBudgetPlanEntry[];
 }
 
 // ─── Budget comparison helpers ────────────────────────────
@@ -371,6 +375,7 @@ function EventCard({
   teamMembers,
   eventOptions,
   calloutsByEstimate,
+  budgetEntries,
   onDelete,
   onUpdate,
 }: {
@@ -384,6 +389,7 @@ function EventCard({
   teamMembers: DbTeamMember[];
   eventOptions: MoveEventOption[];
   calloutsByEstimate: CalloutsByEstimate;
+  budgetEntries: DbBudgetPlanEntry[];
   onDelete: (id: string) => void;
   onUpdate: (id: string, data: Partial<EventRow>) => void;
 }) {
@@ -473,6 +479,22 @@ function EventCard({
   const combineResult = activeBudgetTarget && !eventBudgetTarget && comparisonMode === 'combine'
     ? combineEstimatesToBudget(cards, activeBudgetTarget)
     : null;
+
+  // Per-card compare target — uses the SAME precedence as the snapshot-bar header
+  // (estimate-linked entry → event budget → event-linked entry) via the shared resolver, so the
+  // badge and header always agree, including the estimate-linked case the event-level target misses.
+  // null for pooled/none (combine mode handles pools).
+  function cardBudget(cardId: string): { target: BudgetTarget | null; source: string } {
+    const estimateEntry = budgetEntries.find((e) => e.entry_type === 'per_event' && e.linked_estimate_id === cardId) ?? null;
+    const resolved = resolveEstimateBudget({
+      estimateEntry,
+      eventId: event.id,
+      eventBudgetAmount: event.budget_amount,
+      eventBudgetBasis: event.budget_basis,
+      entries: budgetEntries,
+    });
+    return { target: resolved.target ? { ...resolved.target, guestCount: event.guest_count } : null, source: resolved.source };
+  }
 
   function handleEditClick() {
     setEditName(event.name);
@@ -736,8 +758,13 @@ function EventCard({
                         const isLowest = groupLowest !== null && card.total === groupLowest && card.total > 0;
                         const isBestMargin = groupBestMargin !== null && card.qcMarginPct === groupBestMargin && card.total > 0;
                         let deltaInfo: DeltaInfo | undefined;
-                        if (activeBudgetTarget && (eventBudgetTarget || comparisonMode === 'compare_each') && card.includeInBudget && card.total > 0) {
-                          const result = compareEstimateToBudget(card.id, card.total, event.guest_count, activeBudgetTarget);
+                        const cb = cardBudget(card.id);
+                        // An estimate-linked budget is per-estimate, so it always shows its own delta
+                        // (matching the header) even in combine mode. Event-level/event-linked deltas
+                        // follow the mode gate (combine shows the pooled banner instead).
+                        const showDelta = cb.source === 'estimate_entry' || eventBudgetTarget || comparisonMode === 'compare_each';
+                        if (cb.target && showDelta && card.includeInBudget && card.total > 0) {
+                          const result = compareEstimateToBudget(card.id, card.total, event.guest_count, cb.target);
                           deltaInfo = { delta: result.delta, status: result.status, budgetLow: result.budgetLow, budgetHigh: result.budgetHigh, pricingBasis: result.pricingBasis };
                         }
                         return (
@@ -850,7 +877,7 @@ function EventCard({
 
 // ─── Main EventsView ──────────────────────────────────────
 
-export default function EventsView({ programId, events: initialEvents, unassignedCards: initialUnassigned, programGuestCount, teamMembers, calloutsByEstimate }: Props) {
+export default function EventsView({ programId, events: initialEvents, unassignedCards: initialUnassigned, programGuestCount, teamMembers, calloutsByEstimate, budgetEntries }: Props) {
   const router = useRouter();
   const [events, setEvents] = useState(initialEvents);
   const [unassignedCards, setUnassignedCards] = useState(initialUnassigned);
@@ -972,6 +999,7 @@ export default function EventsView({ programId, events: initialEvents, unassigne
           teamMembers={teamMembers}
           eventOptions={eventOptions}
           calloutsByEstimate={calloutsByEstimate}
+          budgetEntries={budgetEntries}
           onDelete={handleDeleteEvent}
           onUpdate={handleUpdateEvent}
         />

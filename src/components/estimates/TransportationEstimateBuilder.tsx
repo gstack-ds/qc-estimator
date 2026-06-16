@@ -65,6 +65,7 @@ interface Props {
   eventName?: string | null;
   event?: DbEvent | null;
   budgetPlanEntry?: DbBudgetPlanEntry | null;
+  budgetEntries?: DbBudgetPlanEntry[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -116,7 +117,7 @@ function dbScheduleRowToLocal(r: DbTransportScheduleRow): LocalScheduleRow {
 // ─── Component ────────────────────────────────────────────
 
 export default function TransportationEstimateBuilder({
-  program, location, allEstimates, estimate, vehicleRates: initRates, scheduleRows: initRows, programTravelTotal = 0, includeTravelInProductionFee = false, tiers, eventName, event = null, budgetPlanEntry = null,
+  program, location, allEstimates, estimate, vehicleRates: initRates, scheduleRows: initRows, programTravelTotal = 0, includeTravelInProductionFee = false, tiers, eventName, event = null, budgetPlanEntry = null, budgetEntries = [],
 }: Props) {
   const [estimateName, setEstimateName] = useState(estimate.name);
   const [commission, setCommission] = useState(estimate.transport_commission ?? 0);
@@ -396,6 +397,7 @@ export default function TransportationEstimateBuilder({
         guestCount={program.guest_count}
         event={event}
         budgetPlanEntry={budgetPlanEntry}
+        budgetEntries={budgetEntries}
       />
 
       <InternalNotesField estimateId={estimate.id} programId={program.id} initialNotes={estimate.internal_notes} />

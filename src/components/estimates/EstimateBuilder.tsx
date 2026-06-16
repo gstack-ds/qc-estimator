@@ -194,6 +194,7 @@ interface Props {
   venueSpaces?: DbVenueSpace[];
   allLocations?: DbLocation[];
   budgetPlanEntry?: DbBudgetPlanEntry | null;
+  budgetEntries?: DbBudgetPlanEntry[];
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -201,7 +202,7 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 export default function EstimateBuilder({
   program, location, allEstimates, estimate, dbLineItems, dbSections, markups, tiers, eventName,
   event = null, initialSlideCopyData = null, venues = [], venueSpaces = [], allLocations = [],
-  programTravelTotal = 0, includeTravelInProductionFee = false, budgetPlanEntry = null,
+  programTravelTotal = 0, includeTravelInProductionFee = false, budgetPlanEntry = null, budgetEntries = [],
 }: Props) {
   const router = useRouter();
   const programConfig = useMemo(() => toProgramConfig(program, location), [program, location]);
@@ -1073,6 +1074,7 @@ export default function EstimateBuilder({
         guestCount={program.guest_count}
         event={event}
         budgetPlanEntry={budgetPlanEntry}
+        budgetEntries={budgetEntries}
       />
 
       <InternalNotesField estimateId={estimate.id} programId={program.id} initialNotes={estimate.internal_notes} />

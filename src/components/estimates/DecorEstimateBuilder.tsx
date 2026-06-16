@@ -134,12 +134,13 @@ interface Props {
   eventName?: string | null;
   event?: DbEvent | null;
   budgetPlanEntry?: DbBudgetPlanEntry | null;
+  budgetEntries?: DbBudgetPlanEntry[];
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 export default function DecorEstimateBuilder({
-  program, location, allEstimates, estimate, dbLineItems, dbSections, markups, tiers, programTravelTotal = 0, includeTravelInProductionFee = false, eventName, event = null, budgetPlanEntry = null,
+  program, location, allEstimates, estimate, dbLineItems, dbSections, markups, tiers, programTravelTotal = 0, includeTravelInProductionFee = false, eventName, event = null, budgetPlanEntry = null, budgetEntries = [],
 }: Props) {
   const programConfig = useMemo(() => toProgramConfig(program, location), [program, location]);
   const tiersList = useMemo(() => toTiers(tiers), [tiers]);
@@ -596,6 +597,7 @@ export default function DecorEstimateBuilder({
         guestCount={program.guest_count}
         event={event}
         budgetPlanEntry={budgetPlanEntry}
+        budgetEntries={budgetEntries}
       />
 
       <InternalNotesField estimateId={estimate.id} programId={program.id} initialNotes={estimate.internal_notes} />
