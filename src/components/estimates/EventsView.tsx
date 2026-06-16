@@ -484,7 +484,7 @@ function EventCard({
   // (estimate-linked entry → event budget → event-linked entry) via the shared resolver, so the
   // badge and header always agree, including the estimate-linked case the event-level target misses.
   // null for pooled/none (combine mode handles pools).
-  function cardBudgetTarget(cardId: string): BudgetTarget | null {
+  function cardBudget(cardId: string): { target: BudgetTarget | null; source: string } {
     const estimateEntry = budgetEntries.find((e) => e.entry_type === 'per_event' && e.linked_estimate_id === cardId) ?? null;
     const resolved = resolveEstimateBudget({
       estimateEntry,
@@ -493,7 +493,7 @@ function EventCard({
       eventBudgetBasis: event.budget_basis,
       entries: budgetEntries,
     });
-    return resolved.target ? { ...resolved.target, guestCount: event.guest_count } : null;
+    return { target: resolved.target ? { ...resolved.target, guestCount: event.guest_count } : null, source: resolved.source };
   }
 
   function handleEditClick() {
@@ -758,9 +758,13 @@ function EventCard({
                         const isLowest = groupLowest !== null && card.total === groupLowest && card.total > 0;
                         const isBestMargin = groupBestMargin !== null && card.qcMarginPct === groupBestMargin && card.total > 0;
                         let deltaInfo: DeltaInfo | undefined;
-                        const cardTarget = cardBudgetTarget(card.id);
-                        if (cardTarget && (eventBudgetTarget || comparisonMode === 'compare_each') && card.includeInBudget && card.total > 0) {
-                          const result = compareEstimateToBudget(card.id, card.total, event.guest_count, cardTarget);
+                        const cb = cardBudget(card.id);
+                        // An estimate-linked budget is per-estimate, so it always shows its own delta
+                        // (matching the header) even in combine mode. Event-level/event-linked deltas
+                        // follow the mode gate (combine shows the pooled banner instead).
+                        const showDelta = cb.source === 'estimate_entry' || eventBudgetTarget || comparisonMode === 'compare_each';
+                        if (cb.target && showDelta && card.includeInBudget && card.total > 0) {
+                          const result = compareEstimateToBudget(card.id, card.total, event.guest_count, cb.target);
                           deltaInfo = { delta: result.delta, status: result.status, budgetLow: result.budgetLow, budgetHigh: result.budgetHigh, pricingBasis: result.pricingBasis };
                         }
                         return (
