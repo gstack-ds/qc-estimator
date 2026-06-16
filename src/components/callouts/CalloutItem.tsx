@@ -57,6 +57,13 @@ export default function CalloutItem({ callout, programId, teamMembers, actingAs,
   }
 
   function toggleResolved() {
+    if (!resolved) {
+      // Deliberate confirm. Nudge toward discussion when nothing's been said yet (ethos: discuss → resolve).
+      const msg = callout.replies.length === 0
+        ? 'Resolve this callout? No one has replied yet.'
+        : 'Resolve this callout?';
+      if (!window.confirm(msg)) return;
+    }
     startTransition(async () => {
       if (resolved) await reopenCallout(callout.id, programId);
       else await resolveCallout(callout.id, programId, actingAs);
@@ -66,7 +73,7 @@ export default function CalloutItem({ callout, programId, teamMembers, actingAs,
 
   return (
     <div className={`rounded-lg border p-3 ${resolved ? 'border-brand-cream bg-brand-offwhite/50' : 'border-brand-cream bg-white'}`}>
-      {/* Top row: category + status + jump (page only) */}
+      {/* Top row: category + status · (right) resolve/reopen + jump (page only) */}
       <div className="flex items-center gap-2 flex-wrap mb-1.5">
         {callout.category && (
           <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${categoryClasses(callout.category)}`}>
@@ -76,14 +83,37 @@ export default function CalloutItem({ callout, programId, teamMembers, actingAs,
         <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${resolved ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
           {resolved ? 'Resolved' : 'Open'}
         </span>
-        {context && (
-          <Link
-            href={`/programs/${context.programId}/estimates/${context.estimateId}`}
-            className="ml-auto text-[10px] font-semibold text-brand-copper hover:underline truncate max-w-[60%]"
+
+        <div className="ml-auto flex items-center gap-2">
+          {/* Resolve / Reopen — deliberate + de-emphasized; lives here, far from the reply submit. */}
+          <button
+            type="button"
+            onClick={toggleResolved}
+            disabled={busy}
+            className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded border transition-colors whitespace-nowrap disabled:opacity-40 ${
+              resolved
+                ? 'border-brand-cream text-brand-silver hover:text-brand-charcoal hover:border-brand-silver/40'
+                : 'border-brand-cream text-brand-silver hover:text-green-700 hover:border-green-300'
+            }`}
+            title={resolved ? 'Reopen this callout' : 'Resolve this callout'}
           >
-            → {[context.programName, context.eventName, context.estimateName].filter(Boolean).join(' · ') || 'source'}
-          </Link>
-        )}
+            {!resolved && (
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+            {resolved ? 'Reopen' : 'Resolve'}
+          </button>
+
+          {context && (
+            <Link
+              href={`/programs/${context.programId}/estimates/${context.estimateId}`}
+              className="text-[10px] font-semibold text-brand-copper hover:underline truncate max-w-[14rem]"
+            >
+              → {[context.programName, context.eventName, context.estimateName].filter(Boolean).join(' · ') || 'source'}
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Issue text */}
@@ -109,7 +139,7 @@ export default function CalloutItem({ callout, programId, teamMembers, actingAs,
         </div>
       )}
 
-      {/* Actions */}
+      {/* Reply row — the common action. Resolve is intentionally NOT here (see header). */}
       <div className="mt-2 flex items-end gap-2">
         <textarea
           value={reply}
@@ -123,21 +153,9 @@ export default function CalloutItem({ callout, programId, teamMembers, actingAs,
           type="button"
           onClick={submitReply}
           disabled={busy || !reply.trim()}
-          className="text-xs font-medium px-2.5 py-1.5 rounded border border-brand-copper text-brand-copper hover:bg-brand-copper/10 disabled:opacity-40 transition-colors whitespace-nowrap"
+          className="text-xs font-semibold px-3 py-1.5 rounded bg-brand-copper text-white hover:bg-brand-copper/90 disabled:opacity-40 transition-colors whitespace-nowrap"
         >
           Reply
-        </button>
-        <button
-          type="button"
-          onClick={toggleResolved}
-          disabled={busy}
-          className={`text-xs font-medium px-2.5 py-1.5 rounded transition-colors whitespace-nowrap ${
-            resolved
-              ? 'border border-brand-cream text-brand-silver hover:text-brand-charcoal'
-              : 'bg-green-600 text-white hover:bg-green-700'
-          }`}
-        >
-          {resolved ? 'Reopen' : 'Resolve'}
         </button>
       </div>
     </div>
