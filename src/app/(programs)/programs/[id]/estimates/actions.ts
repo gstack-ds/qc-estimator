@@ -45,6 +45,24 @@ export async function updateEstimate(id: string, programId: string, data: Partia
   return { error: null };
 }
 
+// Move an estimate to a specific event (or to Unassigned when eventId is null).
+// Works for both unassigned estimates and re-homing one from one event to another.
+export async function moveEstimateToEvent(
+  estimateId: string,
+  programId: string,
+  eventId: string | null,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('estimates')
+    .update({ event_id: eventId, updated_at: new Date().toISOString() })
+    .eq('id', estimateId)
+    .eq('program_id', programId); // scope to the program — never move an estimate across programs
+  if (error) return { error: error.message };
+  revalidatePath(`/programs/${programId}`);
+  return { error: null };
+}
+
 export async function reorderEstimates(programId: string, order: { id: string; sort_order: number }[]) {
   const supabase = await createClient();
   await Promise.all(
@@ -106,6 +124,7 @@ export async function duplicateEstimate(sourceId: string, programId: string) {
     .insert({
       program_id: programId,
       type: source.type,
+      event_id: source.event_id ?? null, // keep the copy under the same event as its source (else it strands in Unassigned)
       name: `${source.name} (copy)`,
       room_space: source.room_space,
       fb_minimum: source.fb_minimum,

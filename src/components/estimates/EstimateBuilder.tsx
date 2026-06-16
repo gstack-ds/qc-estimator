@@ -39,6 +39,7 @@ import ExportButtons from './ExportButtons';
 import { updateEstimate, upsertLineItem, deleteLineItem, cacheEstimateTotal, saveTemplate, upsertSection, deleteSection, reorderSections, reorderLineItems } from '@/app/(programs)/programs/[id]/estimates/actions';
 import { linkVenueToEstimate, syncVenueDefaults, updateVenueSpace, createVenueSpace } from '@/app/(programs)/venues/actions';
 import { classifySpaceSync, findMatchingSpace, isAutoFilled } from '@/lib/vendors/venueSync';
+import { isDefaultEstimateName, seedEstimateName } from '@/lib/estimates/naming';
 import { updateProgram, applyBudgetPin } from '@/app/(programs)/programs/actions';
 import { effectivePrefillPP } from '@/lib/engine/budgetPlan';
 import type { DbTemplate, ExtractedData } from '@/app/(programs)/programs/[id]/estimates/actions';
@@ -315,8 +316,23 @@ export default function EstimateBuilder({
     setLinkedVenueId(venueId);
     setLinkedSpaceId(spaceId);
     setLinkedVenueData(venueData);
-    // Auto-fill room space from venue name when no space specified
-    if (!spaceId) handleVenueAutoFill({ roomSpace: venueData.name });
+    // Auto-fill on first selection. When a specific space is chosen, fill Room/Space + F&B min
+    // + fee defaults (mirrors LinkVenuePanel); otherwise fall back to the venue name.
+    const space = spaceId ? venueSpaces.find((s) => s.id === spaceId) ?? null : null;
+    const autoFill: Parameters<typeof handleVenueAutoFill>[0] = space
+      ? {
+          roomSpace: space.name,
+          fbMinimum: space.fb_minimum,
+          serviceChargeOverride: venueData.service_charge_default,
+          gratuityOverride: venueData.gratuity_default,
+          adminFeeOverride: venueData.admin_fee_default,
+        }
+      : { roomSpace: venueData.name };
+    // Seed the estimate name (Venue — Space) only if it's still a default placeholder.
+    if (isDefaultEstimateName(est.name)) {
+      autoFill.name = seedEstimateName(venueData.name, space?.name ?? null);
+    }
+    handleVenueAutoFill(autoFill);
     // Location suggestion
     if (venueCity && allLocations.length > 0) {
       const cityLower = venueCity.toLowerCase();
@@ -384,6 +400,7 @@ export default function EstimateBuilder({
   }
 
   function handleVenueAutoFill(fields: {
+    name?: string;
     roomSpace?: string;
     fbMinimum?: number;
     serviceChargeOverride?: number | null;
@@ -391,6 +408,7 @@ export default function EstimateBuilder({
     adminFeeOverride?: number | null;
   }) {
     const patch: Partial<LocalEstimate> = {};
+    if (fields.name !== undefined) patch.name = fields.name;
     if (fields.roomSpace !== undefined) patch.roomSpace = fields.roomSpace;
     if (fields.fbMinimum !== undefined) {
       patch.fbMinimum = fields.fbMinimum;

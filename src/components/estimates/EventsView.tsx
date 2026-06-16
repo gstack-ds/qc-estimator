@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { updateEstimate, reorderEstimates, updateEstimateProposalInclusion } from '@/app/(programs)/programs/[id]/estimates/actions';
+import { updateEstimate, reorderEstimates, updateEstimateProposalInclusion, moveEstimateToEvent } from '@/app/(programs)/programs/[id]/estimates/actions';
 import { deleteEvent, updateEvent, updateBudgetEntry } from '@/app/(programs)/programs/actions';
 import {
   DndContext,
@@ -25,6 +25,7 @@ import AddEventButton from './AddEventButton';
 import AssignedToBadge from './AssignedToBadge';
 import CalloutButton from '@/components/callouts/CalloutButton';
 import CalloutsPanel from '@/components/callouts/CalloutsPanel';
+import MoveEstimateButton, { type MoveEventOption } from './MoveEstimateButton';
 import type { CalloutContext } from '@/components/callouts/CalloutItem';
 import type { EstimateCard } from './ComparisonView';
 import type { DbBudgetPlanEntry, DbTeamMember, DbCalloutWithReplies } from '@/lib/supabase/queries';
@@ -154,7 +155,7 @@ interface DeltaInfo {
 
 // ─── Sortable estimate card wrapper ──────────────────────
 
-function SortableEstimateCard({ card, programId, isLowest, isBestMargin, onToggleBudget, onToggleProposal, onAssign, teamMembers, eventId, callouts, eventGuestCount, delta }: {
+function SortableEstimateCard({ card, programId, isLowest, isBestMargin, onToggleBudget, onToggleProposal, onAssign, onMove, teamMembers, eventId, eventOptions, callouts, eventGuestCount, delta }: {
   card: EstimateCard;
   programId: string;
   isLowest: boolean;
@@ -162,8 +163,10 @@ function SortableEstimateCard({ card, programId, isLowest, isBestMargin, onToggl
   onToggleBudget: (id: string, next: boolean) => void;
   onToggleProposal: (id: string, next: boolean) => void;
   onAssign: (id: string, memberId: number | null) => void;
+  onMove: (id: string, eventId: string | null) => void;
   teamMembers: DbTeamMember[];
   eventId: string | null;
+  eventOptions: MoveEventOption[];
   callouts: DbCalloutWithReplies[];
   eventGuestCount?: number;
   delta?: DeltaInfo;
@@ -184,8 +187,10 @@ function SortableEstimateCard({ card, programId, isLowest, isBestMargin, onToggl
         onToggleBudget={onToggleBudget}
         onToggleProposal={onToggleProposal}
         onAssign={onAssign}
+        onMove={onMove}
         teamMembers={teamMembers}
         eventId={eventId}
+        eventOptions={eventOptions}
         callouts={callouts}
         eventGuestCount={eventGuestCount}
         delta={delta}
@@ -205,8 +210,10 @@ function EstimateCardItem({
   onToggleBudget,
   onToggleProposal,
   onAssign,
+  onMove,
   teamMembers,
   eventId,
+  eventOptions,
   callouts,
   eventGuestCount,
   delta: deltaInfo,
@@ -219,8 +226,10 @@ function EstimateCardItem({
   onToggleBudget: (id: string, next: boolean) => void;
   onToggleProposal: (id: string, next: boolean) => void;
   onAssign: (id: string, memberId: number | null) => void;
+  onMove: (id: string, eventId: string | null) => void;
   teamMembers: DbTeamMember[];
   eventId: string | null;
+  eventOptions: MoveEventOption[];
   callouts: DbCalloutWithReplies[];
   eventGuestCount?: number;
   delta?: DeltaInfo;
@@ -324,6 +333,11 @@ function EstimateCardItem({
           <span className="text-xs text-brand-charcoal/70">In Proposal</span>
         </label>
         <div className="ml-auto flex items-center gap-1.5">
+          <MoveEstimateButton
+            currentEventId={eventId}
+            events={eventOptions}
+            onMove={(targetEventId) => onMove(card.id, targetEventId)}
+          />
           <CalloutButton
             estimateId={card.id}
             programId={programId}
@@ -353,7 +367,9 @@ function EventCard({
   onToggleBudget,
   onToggleProposal,
   onAssign,
+  onMove,
   teamMembers,
+  eventOptions,
   calloutsByEstimate,
   onDelete,
   onUpdate,
@@ -364,7 +380,9 @@ function EventCard({
   onToggleBudget: (id: string, next: boolean) => void;
   onToggleProposal: (id: string, next: boolean) => void;
   onAssign: (id: string, memberId: number | null) => void;
+  onMove: (id: string, eventId: string | null) => void;
   teamMembers: DbTeamMember[];
+  eventOptions: MoveEventOption[];
   calloutsByEstimate: CalloutsByEstimate;
   onDelete: (id: string) => void;
   onUpdate: (id: string, data: Partial<EventRow>) => void;
@@ -732,8 +750,10 @@ function EventCard({
                             onToggleBudget={onToggleBudget}
                             onToggleProposal={onToggleProposal}
                             onAssign={onAssign}
+                            onMove={onMove}
                             teamMembers={teamMembers}
                             eventId={event.id}
+                            eventOptions={eventOptions}
                             callouts={calloutsByEstimate[card.id] ?? []}
                             eventGuestCount={guestCount}
                             delta={deltaInfo}
@@ -769,8 +789,10 @@ function EventCard({
                           onToggleBudget={onToggleBudget}
                           onToggleProposal={onToggleProposal}
                           onAssign={onAssign}
+                          onMove={onMove}
                           teamMembers={teamMembers}
                           eventId={event.id}
+                          eventOptions={eventOptions}
                           callouts={calloutsByEstimate[card.id] ?? []}
                           eventGuestCount={guestCount}
                         />
@@ -839,6 +861,8 @@ export default function EventsView({ programId, events: initialEvents, unassigne
   const allCards = [...events.flatMap((e) => e.cards), ...unassignedCards];
   const budgetTotal = allCards.filter((c) => c.includeInBudget).reduce((sum, c) => sum + c.total, 0);
   const budgetCount = allCards.filter((c) => c.includeInBudget).length;
+  // Event targets for the per-card "Move to event" picker.
+  const eventOptions: MoveEventOption[] = events.map((e) => ({ id: e.id, name: e.name }));
 
   async function handleToggleBudget(id: string, next: boolean) {
     setEvents((prev) =>
@@ -871,6 +895,26 @@ export default function EventsView({ programId, events: initialEvents, unassigne
     );
     setUnassignedCards((prev) => prev.map((c) => (c.id === id ? { ...c, assignedTo: memberId } : c)));
     await updateEstimate(id, programId, { assigned_to: memberId });
+  }
+
+  async function handleMove(id: string, targetEventId: string | null) {
+    // Find the card wherever it currently lives, then re-home it optimistically.
+    const moved = [...events.flatMap((e) => e.cards), ...unassignedCards].find((c) => c.id === id);
+    if (moved) {
+      setEvents((prev) => prev.map((ev) => ({ ...ev, cards: ev.cards.filter((c) => c.id !== id) })));
+      setUnassignedCards((prev) => prev.filter((c) => c.id !== id));
+      if (targetEventId) {
+        setEvents((prev) => prev.map((ev) => (ev.id === targetEventId ? { ...ev, cards: [...ev.cards, moved] } : ev)));
+      } else {
+        setUnassignedCards((prev) => [...prev, moved]);
+      }
+    }
+    const { error } = await moveEstimateToEvent(id, programId, targetEventId);
+    if (error) {
+      console.error('Move estimate failed:', error);
+      alert('Could not move the estimate — it has been put back. Please try again.');
+    }
+    router.refresh(); // reconcile with server (also reverts the optimistic move on failure)
   }
 
   async function handleDeleteEvent(id: string) {
@@ -924,7 +968,9 @@ export default function EventsView({ programId, events: initialEvents, unassigne
           onToggleBudget={handleToggleBudget}
           onToggleProposal={handleToggleProposal}
           onAssign={handleAssign}
+          onMove={handleMove}
           teamMembers={teamMembers}
+          eventOptions={eventOptions}
           calloutsByEstimate={calloutsByEstimate}
           onDelete={handleDeleteEvent}
           onUpdate={handleUpdateEvent}
@@ -946,8 +992,10 @@ export default function EventsView({ programId, events: initialEvents, unassigne
                 onToggleBudget={handleToggleBudget}
                 onToggleProposal={handleToggleProposal}
                 onAssign={handleAssign}
+                onMove={handleMove}
                 teamMembers={teamMembers}
                 eventId={null}
+                eventOptions={eventOptions}
                 callouts={calloutsByEstimate[card.id] ?? []}
               />
             ))}
