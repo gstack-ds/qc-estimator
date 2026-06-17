@@ -37,7 +37,7 @@ interface Props {
   onDelete: (id: string) => void;
   onAdd: (sectionDef: LocalSectionDef, taxType: TaxType) => void;
   onAddFromTemplate?: (sectionDef: LocalSectionDef, template: DbTemplate) => void;
-  onSaveAsTemplate?: (id: string) => Promise<void>;
+  onSaveAsTemplate?: (id: string) => Promise<{ error: string | null }>;
   onRename?: (sectionId: string, newName: string) => void;
   onDeleteSection?: (sectionId: string) => void;
   onReorderItems?: (sectionId: string, newItems: LocalLineItem[]) => void;
@@ -70,7 +70,7 @@ function SortableItemRow({
   onChange: (id: string, patch: Partial<LocalLineItem>) => void;
   onBlur: (id: string) => void;
   onDelete: (id: string) => void;
-  onSaveAsTemplate?: (id: string) => Promise<void>;
+  onSaveAsTemplate?: (id: string) => Promise<{ error: string | null }>;
   markups: DbMarkup[];
   location: Location | null;
   guestCount?: number;

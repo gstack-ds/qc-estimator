@@ -349,10 +349,10 @@ export default function DecorEstimateBuilder({
     setTimeout(() => handleItemSave(tempId), 0);
   }, [handleItemSave]);
 
-  const handleSaveAsTemplate = useCallback(async (id: string) => {
+  const handleSaveAsTemplate = useCallback(async (id: string): Promise<{ error: string | null }> => {
     const item = lineItemsRef.current.find((li) => li.id === id);
-    if (!item) return;
-    await saveTemplate({
+    if (!item) return { error: 'Line item not found.' };
+    return saveTemplate({
       name: item.name || 'Unnamed item',
       category_id: item.categoryId === 'custom' ? null : (item.categoryId ?? null),
       default_unit_price: item.unitPrice,

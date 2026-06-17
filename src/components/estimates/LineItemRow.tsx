@@ -17,7 +17,7 @@ interface Props {
   onChange: (id: string, patch: Partial<LocalLineItem>) => void;
   onBlur: (id: string) => void;
   onDelete: (id: string) => void;
-  onSaveAsTemplate?: (id: string) => Promise<void>;
+  onSaveAsTemplate?: (id: string) => Promise<{ error: string | null }>;
   showMath?: boolean;
   taxExempt?: boolean;
 }
@@ -49,7 +49,7 @@ function fmtM(v: number) {
 const inputClass = 'border border-brand-cream rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-copper focus:border-brand-brown bg-white text-brand-charcoal w-full';
 
 export default function LineItemRow({ item, markups, location, showTaxToggle, guestCount, onChange, onBlur, onDelete, onSaveAsTemplate, showMath, taxExempt }: Props) {
-  const [savedTemplate, setSavedTemplate] = useState(false);
+  const [templateSave, setTemplateSave] = useState<{ state: 'idle' | 'saved' | 'error'; message?: string }>({ state: 'idle' });
   const isCustom = item.categoryId === 'custom';
   const isRevenue = item.isRevenueItem === true;
   const ourCost = isRevenue ? 0 : item.qty * item.unitPrice;
@@ -87,9 +87,17 @@ export default function LineItemRow({ item, markups, location, showTaxToggle, gu
 
   async function handleSaveAsTemplate() {
     if (!onSaveAsTemplate) return;
-    await onSaveAsTemplate(item.id);
-    setSavedTemplate(true);
-    setTimeout(() => setSavedTemplate(false), 2000);
+    const { error } = await onSaveAsTemplate(item.id);
+    if (error) {
+      // Surface the real failure (was previously swallowed → false "Saved!"). console.error so the
+      // exact error (e.g. an RLS message) can be captured from prod, like the thumbnail-bucket bug.
+      console.error('Save as template failed:', error);
+      setTemplateSave({ state: 'error', message: error });
+      setTimeout(() => setTemplateSave({ state: 'idle' }), 5000);
+    } else {
+      setTemplateSave({ state: 'saved' });
+      setTimeout(() => setTemplateSave({ state: 'idle' }), 2000);
+    }
   }
 
   return (
@@ -262,10 +270,23 @@ export default function LineItemRow({ item, markups, location, showTaxToggle, gu
       {onSaveAsTemplate ? (
         <button
           onClick={handleSaveAsTemplate}
-          className={`text-base leading-none text-center transition-colors ${savedTemplate ? 'text-brand-brown' : 'text-brand-silver/40 hover:text-brand-brown'}`}
-          title={savedTemplate ? 'Saved!' : 'Save as template'}
+          className={`text-base leading-none text-center transition-colors ${
+            templateSave.state === 'error'
+              ? 'text-red-500'
+              : templateSave.state === 'saved'
+                ? 'text-brand-copper'
+                : 'text-brand-copper/70 hover:text-brand-copper'
+          }`}
+          title={
+            templateSave.state === 'error'
+              ? `Save failed: ${templateSave.message ?? 'unknown error'}`
+              : templateSave.state === 'saved'
+                ? 'Saved to templates ✓'
+                : 'Save as template'
+          }
+          aria-label="Save as template"
         >
-          {savedTemplate ? '★' : '☆'}
+          {templateSave.state === 'error' ? '⚠' : templateSave.state === 'saved' ? '★' : '☆'}
         </button>
       ) : (
         <div />
