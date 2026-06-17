@@ -865,15 +865,17 @@ export interface DbTemplate {
   created_by: string | null;
 }
 
-export async function getTemplates(): Promise<{ error: string | null; templates: DbTemplate[] }> {
+export async function getTemplates(): Promise<{ error: string | null; templates: DbTemplate[]; currentUserId: string | null }> {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
   const { data, error } = await supabase
     .from('line_item_templates')
     .select('id, name, category_id, default_unit_price, tax_type, created_by, category_markups(name, markup_pct)')
     .order('name');
-  if (error) return { error: error.message, templates: [] };
+  if (error) return { error: error.message, templates: [], currentUserId: user?.id ?? null };
   return {
     error: null,
+    currentUserId: user?.id ?? null,
     templates: (data ?? []).map((row) => {
       const cat = (row.category_markups as unknown) as { name: string; markup_pct: number } | null;
       return {
@@ -909,8 +911,17 @@ export async function saveTemplate(data: {
 
 export async function deleteTemplate(id: string): Promise<{ error: string | null }> {
   const supabase = await createClient();
-  const { error } = await supabase.from('line_item_templates').delete().eq('id', id);
+  // .select() so we know how many rows were actually removed: an RLS-blocked delete
+  // returns no error but 0 rows, and we must not let the caller treat that as success.
+  const { data, error } = await supabase
+    .from('line_item_templates')
+    .delete()
+    .eq('id', id)
+    .select('id');
   if (error) return { error: error.message };
+  if (!data || data.length === 0) {
+    return { error: 'You can only delete templates you created.' };
+  }
   return { error: null };
 }
 
