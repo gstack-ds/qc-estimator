@@ -50,6 +50,13 @@ const inputClass = 'border border-brand-cream rounded px-2 py-1 text-sm focus:ou
 
 export default function LineItemRow({ item, markups, location, showTaxToggle, guestCount, onChange, onBlur, onDelete, onSaveAsTemplate, showMath, taxExempt }: Props) {
   const [templateSave, setTemplateSave] = useState<{ state: 'idle' | 'saved' | 'error'; message?: string }>({ state: 'idle' });
+  // Signature of the fields a template captures (name | unit price | category | tax).
+  // Filled star = "a template was saved from this row" — it stays filled while the row still
+  // matches what was saved, and auto-reverts the moment any of these change, because templates
+  // are snapshots (a copy at save-time), not a live link. Session-scoped only — there is no
+  // stored binding to persist across reload.
+  const templateSig = `${item.name}|${item.unitPrice}|${item.categoryId ?? ''}|${item.taxType}`;
+  const [savedSig, setSavedSig] = useState<string | null>(null);
   const isCustom = item.categoryId === 'custom';
   const isRevenue = item.isRevenueItem === true;
   const ourCost = isRevenue ? 0 : item.qty * item.unitPrice;
@@ -95,14 +102,20 @@ export default function LineItemRow({ item, markups, location, showTaxToggle, gu
       setTemplateSave({ state: 'error', message: error });
       setTimeout(() => setTemplateSave({ state: 'idle' }), 5000);
     } else {
+      setSavedSig(templateSig);
       setTemplateSave({ state: 'saved' });
       setTimeout(() => setTemplateSave({ state: 'idle' }), 2000);
     }
   }
 
+  // Star stays filled while the row still matches the snapshot that was saved.
+  const savedMatchesRow = savedSig !== null && savedSig === templateSig;
+  const starFilled = templateSave.state === 'saved' || savedMatchesRow;
+
   const templateLabel =
     templateSave.state === 'error' ? `Save failed: ${templateSave.message ?? 'unknown error'}`
-    : templateSave.state === 'saved' ? 'Saved to templates ✓'
+    : templateSave.state === 'saved' ? 'Saved as template ✓'
+    : savedMatchesRow ? 'Saved as a template (snapshot — not linked to this row)'
     : 'Save as template';
 
   return (
@@ -273,20 +286,35 @@ export default function LineItemRow({ item, markups, location, showTaxToggle, gu
 
       {/* Save as template */}
       {onSaveAsTemplate ? (
-        <button
-          onClick={handleSaveAsTemplate}
-          className={`text-base leading-none text-center transition-colors ${
-            templateSave.state === 'error'
-              ? 'text-red-500'
-              : templateSave.state === 'saved'
-                ? 'text-brand-copper'
-                : 'text-brand-copper/70 hover:text-brand-copper'
-          }`}
-          title={templateLabel}
-          aria-label={templateLabel}
-        >
-          {templateSave.state === 'error' ? '⚠' : templateSave.state === 'saved' ? '★' : '☆'}
-        </button>
+        <div className="relative flex items-center justify-center">
+          <button
+            onClick={handleSaveAsTemplate}
+            className={`text-base leading-none text-center transition-colors ${
+              templateSave.state === 'error'
+                ? 'text-red-500'
+                : starFilled
+                  ? 'text-brand-copper'
+                  : 'text-brand-copper/70 hover:text-brand-copper'
+            }`}
+            title={templateLabel}
+            aria-label={templateLabel}
+          >
+            {templateSave.state === 'error' ? '⚠' : starFilled ? '★' : '☆'}
+          </button>
+          {templateSave.state === 'saved' && (
+            <span className="absolute right-full mr-1.5 top-1/2 -translate-y-1/2 whitespace-nowrap bg-brand-copper text-white text-[10px] font-medium px-1.5 py-0.5 rounded shadow-sm pointer-events-none z-20">
+              Saved as template ✓
+            </span>
+          )}
+          {templateSave.state === 'error' && (
+            <span
+              className="absolute right-full mr-1.5 top-1/2 -translate-y-1/2 whitespace-nowrap bg-red-500 text-white text-[10px] font-medium px-1.5 py-0.5 rounded shadow-sm pointer-events-none z-20 max-w-[200px] truncate"
+              title={templateSave.message}
+            >
+              Save failed
+            </span>
+          )}
+        </div>
       ) : (
         <div />
       )}
