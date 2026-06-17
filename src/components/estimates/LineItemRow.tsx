@@ -100,6 +100,11 @@ export default function LineItemRow({ item, markups, location, showTaxToggle, gu
     }
   }
 
+  const templateLabel =
+    templateSave.state === 'error' ? `Save failed: ${templateSave.message ?? 'unknown error'}`
+    : templateSave.state === 'saved' ? 'Saved to templates ✓'
+    : 'Save as template';
+
   return (
     <div className="border-b border-brand-cream/40 last:border-0">
     <div className="grid items-center gap-2 py-1.5" style={{ gridTemplateColumns: '32px 2fr 60px 90px 130px 100px 60px 80px 80px 20px 20px' }}>
@@ -277,14 +282,8 @@ export default function LineItemRow({ item, markups, location, showTaxToggle, gu
                 ? 'text-brand-copper'
                 : 'text-brand-copper/70 hover:text-brand-copper'
           }`}
-          title={
-            templateSave.state === 'error'
-              ? `Save failed: ${templateSave.message ?? 'unknown error'}`
-              : templateSave.state === 'saved'
-                ? 'Saved to templates ✓'
-                : 'Save as template'
-          }
-          aria-label="Save as template"
+          title={templateLabel}
+          aria-label={templateLabel}
         >
           {templateSave.state === 'error' ? '⚠' : templateSave.state === 'saved' ? '★' : '☆'}
         </button>
