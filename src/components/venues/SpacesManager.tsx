@@ -18,6 +18,7 @@ interface SpaceForm {
   fb_minimum: string;
   room_fee: string;
   privacy_tag: SpacePrivacyTag | '';
+  is_suggested: boolean;
   notes: string;
 }
 
@@ -25,6 +26,7 @@ const emptyForm: SpaceForm = {
   name: '', capacity_seated: '', capacity_standing: '',
   fb_minimum: '', room_fee: '',
   privacy_tag: '',
+  is_suggested: false,
   notes: '',
 };
 
@@ -36,6 +38,7 @@ function spaceToForm(s: DbVenueSpace): SpaceForm {
     fb_minimum: s.fb_minimum.toString(),
     room_fee: s.room_fee.toString(),
     privacy_tag: (s.privacy_tag as SpacePrivacyTag) ?? '',
+    is_suggested: s.is_suggested,
     notes: s.notes ?? '',
   };
 }
@@ -48,6 +51,7 @@ function formToPayload(f: SpaceForm) {
     fb_minimum: parseFloat(f.fb_minimum) || 0,
     room_fee: parseFloat(f.room_fee) || 0,
     privacy_tag: f.privacy_tag || null,
+    is_suggested: f.is_suggested,
     notes: f.notes.trim() || null,
   };
 }
@@ -101,6 +105,16 @@ function SpaceFormFields({ form, onChange }: { form: SpaceForm; onChange: (f: Sp
         <label className="block text-xs text-brand-silver mb-1">Notes</label>
         <textarea value={form.notes} onChange={set('notes')} rows={2} className="w-full border border-brand-silver/30 rounded px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand-brown text-sm resize-none" placeholder="Any notes about this space…" />
       </div>
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={form.is_suggested}
+          onChange={(e) => onChange({ ...form, is_suggested: e.target.checked })}
+          className="accent-brand-copper cursor-pointer"
+        />
+        <span className="text-sm text-brand-charcoal">Suggested space</span>
+        <span className="text-xs text-brand-silver">— highlighted first on the venue card</span>
+      </label>
     </div>
   );
 }
@@ -209,7 +223,14 @@ export default function SpacesManager({ venueId, initialSpaces }: Props) {
               ) : (
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-brand-charcoal">{space.name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-brand-charcoal">{space.name}</span>
+                      {space.is_suggested && (
+                        <span className="text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full border border-brand-copper/40 text-brand-copper bg-brand-copper/5 font-medium">
+                          Suggested
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-brand-silver mt-1 flex flex-wrap gap-x-4 gap-y-0.5">
                       {space.capacity_seated !== null && <span>Seated: {space.capacity_seated}</span>}
                       {space.capacity_standing !== null && <span>Standing: {space.capacity_standing}</span>}

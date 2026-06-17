@@ -135,17 +135,30 @@ function PhotoGrid({ photos }: { photos: VendorPhoto[] }) {
 
 function SpacesSection({ spaces }: { spaces: DbVenueWithSpaces['spaces'] }) {
   if (!spaces.length) return null;
+  // Suggested space(s) pitch first; stable sort preserves order otherwise.
+  const ordered = [...spaces].sort((a, b) => Number(b.is_suggested) - Number(a.is_suggested));
   return (
     <section className="print:break-inside-avoid-page">
       <SectionHead label="Spaces &amp; Rooms" />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print:gap-3">
-        {spaces.map(s => (
+        {ordered.map(s => (
           <div
             key={s.id}
-            className="border border-brand-cream rounded-xl p-5 bg-brand-offwhite space-y-3 print:p-3 print:break-inside-avoid"
+            className={`border rounded-xl p-5 space-y-3 print:p-3 print:break-inside-avoid ${
+              s.is_suggested
+                ? 'border-brand-copper/40 bg-brand-copper/5'
+                : 'border-brand-cream bg-brand-offwhite'
+            }`}
           >
             <div className="flex items-start justify-between gap-2">
-              <h3 className="font-serif text-lg text-brand-charcoal leading-snug">{s.name}</h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-serif text-lg text-brand-charcoal leading-snug">{s.name}</h3>
+                {s.is_suggested && (
+                  <span className="flex-shrink-0 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full border border-brand-copper/50 text-brand-copper bg-white font-medium">
+                    Suggested
+                  </span>
+                )}
+              </div>
               {s.privacy_tag && (
                 <span className={`flex-shrink-0 text-[10px] uppercase tracking-widest px-2 py-1 rounded border font-medium ${PRIVACY_COLORS[s.privacy_tag] ?? 'bg-gray-50 text-gray-600 border-gray-200'}`}>
                   {PRIVACY_LABELS[s.privacy_tag] ?? s.privacy_tag}
@@ -309,18 +322,6 @@ function InclusionsSection({ inclusions }: { inclusions: VendorInclusion[] }) {
   );
 }
 
-// ── Notes section ─────────────────────────────────────────────────────────────
-
-function NotesSection({ notes }: { notes: string }) {
-  if (!notes.trim()) return null;
-  return (
-    <section className="print:break-inside-avoid">
-      <SectionHead label="Notes" />
-      <p className="text-sm text-brand-charcoal/80 leading-relaxed whitespace-pre-wrap">{notes}</p>
-    </section>
-  );
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface Props {
@@ -334,7 +335,8 @@ interface Props {
 export default function VendorBrochure({ venue, menus, barOptions, inclusions, photos }: Props) {
   const typeLabel = VENDOR_TYPE_LABELS[venue.vendor_type] ?? venue.vendor_type;
   const locationParts = [venue.city, venue.state].filter(Boolean).join(', ');
-  const hasContent = menus.length > 0 || barOptions.length > 0 || inclusions.length > 0 || venue.profile_notes;
+  // profile_notes now renders as the hero description above — not in the body.
+  const hasContent = menus.length > 0 || barOptions.length > 0 || inclusions.length > 0;
 
   return (
     <div className="brochure-root bg-white">
@@ -395,6 +397,15 @@ export default function VendorBrochure({ venue, menus, barOptions, inclusions, p
         )}
       </header>
 
+      {/* ── Hero description ────────────────────────────────────────────── */}
+      {venue.profile_notes?.trim() && (
+        <section className="mb-10 print:mb-6 print:break-inside-avoid">
+          <p className="font-display text-lg md:text-xl leading-relaxed text-brand-charcoal/85 max-w-3xl whitespace-pre-wrap print:text-base">
+            {venue.profile_notes}
+          </p>
+        </section>
+      )}
+
       {/* ── Body sections ───────────────────────────────────────────────── */}
       <div className="space-y-10 print:space-y-6">
         {photos.length > 0 && (
@@ -416,28 +427,22 @@ export default function VendorBrochure({ venue, menus, barOptions, inclusions, p
             {menus.length > 0 && (
               <>
                 <MenusSection menus={menus} />
-                {(barOptions.length > 0 || inclusions.length > 0 || !!venue.profile_notes) && <Divider />}
+                {(barOptions.length > 0 || inclusions.length > 0) && <Divider />}
               </>
             )}
             {barOptions.length > 0 && (
               <>
                 <BarSection barOptions={barOptions} />
-                {(inclusions.length > 0 || !!venue.profile_notes) && <Divider />}
+                {inclusions.length > 0 && <Divider />}
               </>
             )}
             {inclusions.length > 0 && (
-              <>
-                <InclusionsSection inclusions={inclusions} />
-                {!!venue.profile_notes && <Divider />}
-              </>
-            )}
-            {!!venue.profile_notes && (
-              <NotesSection notes={venue.profile_notes} />
+              <InclusionsSection inclusions={inclusions} />
             )}
           </div>
         )}
 
-        {!photos.length && !venue.spaces.length && !hasContent && (
+        {!photos.length && !venue.spaces.length && !hasContent && !venue.profile_notes?.trim() && (
           <div className="py-16 text-center">
             <p className="text-brand-silver text-sm">No profile content yet.</p>
             <p className="text-brand-silver/60 text-xs mt-1">Add menus, photos, and spaces in Edit mode.</p>

@@ -817,6 +817,7 @@ export interface DbVenueSpace {
   fb_minimum: number;
   room_fee: number;
   privacy_tag: 'private' | 'semi_private' | 'main_dining' | null;
+  is_suggested: boolean;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -827,7 +828,7 @@ export interface DbVenueWithSpaces extends DbVenue {
 }
 
 const VENUE_FIELDS = 'id, name, address, city, state, zip, service_styles, contact_name, contact_title, contact_email, contact_phone, email_signature, website, market, notes, last_used_date, vendor_type, service_charge_default, gratuity_default, admin_fee_default, menus, bar_options, inclusions, profile_notes, created_at, updated_at';
-const SPACE_FIELDS = 'id, venue_id, name, capacity_seated, capacity_standing, fb_minimum, room_fee, privacy_tag, notes, created_at, updated_at';
+const SPACE_FIELDS = 'id, venue_id, name, capacity_seated, capacity_standing, fb_minimum, room_fee, privacy_tag, is_suggested, notes, created_at, updated_at';
 
 export async function getVenues(): Promise<DbVenue[]> {
   const supabase = await createClient();
