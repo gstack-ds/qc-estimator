@@ -202,6 +202,7 @@ export async function createVenueSpace(venueId: string, data: {
   fb_minimum?: number;
   room_fee?: number;
   privacy_tag?: 'private' | 'semi_private' | 'main_dining' | null;
+  is_suggested?: boolean;
   notes?: string | null;
 }): Promise<{ id: string } | { error: string }> {
   const supabase = await createClient();
@@ -222,6 +223,7 @@ export async function updateVenueSpace(id: string, venueId: string, data: {
   fb_minimum?: number;
   room_fee?: number;
   privacy_tag?: 'private' | 'semi_private' | 'main_dining' | null;
+  is_suggested?: boolean;
   notes?: string | null;
 }): Promise<{ error?: string }> {
   const supabase = await createClient();
