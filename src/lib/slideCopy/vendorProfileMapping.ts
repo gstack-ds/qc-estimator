@@ -9,6 +9,23 @@ import type { MenuCourse, MenuOption } from '@/types/slideCopy';
 // Converts a stored VendorMenu into the MenuCourse[] format used by SlideCopySection.
 // Courses with a selection_rule become 'needs_selection'; others become 'final'.
 
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+};
+
+// Parse the count from a course selection rule: "choose 3" → 3, "please choose one" → 1.
+// A selection rule with no explicit number defaults to 1 (the "choose one" case).
+export function parseMaxSelections(rule?: string): number | undefined {
+  if (!rule) return undefined;
+  const digit = rule.match(/\d+/);
+  if (digit) return parseInt(digit[0], 10);
+  const lower = rule.toLowerCase();
+  for (const [word, n] of Object.entries(NUMBER_WORDS)) {
+    if (new RegExp(`\\b${word}\\b`).test(lower)) return n;
+  }
+  return 1;
+}
+
 export function vendorMenuToMenuCourses(menu: VendorMenu): MenuCourse[] {
   return menu.courses.map((course): MenuCourse => {
     const hasSelection = !!course.selection_rule;
@@ -22,7 +39,7 @@ export function vendorMenuToMenuCourses(menu: VendorMenu): MenuCourse[] {
     return {
       name: course.name,
       selectionRule: course.selection_rule,
-      maxSelections: undefined,
+      maxSelections: hasSelection ? parseMaxSelections(course.selection_rule) : undefined,
       scenario: hasSelection ? 'needs_selection' : 'final',
       options,
     };

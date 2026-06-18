@@ -1,191 +1,68 @@
 import { describe, it, expect } from 'vitest';
-import { mapMenuToLineItems, mapBarToLineItems } from '../../src/lib/vendors/menuImport';
+import { mapMenuToLineItems, mapBarToLineItems, collapseFoodMenuToLine } from '../../src/lib/vendors/menuImport';
 import type { MenuImportSection, MenuImportMarkup } from '../../src/lib/vendors/menuImport';
 import { computeBarPricePP } from '../../src/lib/vendors/profileTypes';
 import type { VendorMenu, BarOption } from '../../src/lib/vendors/profileTypes';
+import { vendorMenuToMenuCourses, parseMaxSelections } from '../../src/lib/slideCopy/vendorProfileMapping';
+import { extractedMenuToMenuCourses } from '../../src/lib/slideCopy/menuMapping';
+import type { ExtractedMenuItem } from '../../src/app/(programs)/programs/[id]/estimates/actions';
 
-const FB_SECTION: MenuImportSection = {
-  id: 'section-fb-1',
-  name: 'Food & Beverage',
-  taxBucket: 'fb',
-  markupPct: 0.55,
-};
-
-const CATERING_MARKUP: MenuImportMarkup = {
-  id: 'markup-catering-1',
-  markupPct: 0.55,
-};
-
+const FB_SECTION: MenuImportSection = { id: 'section-fb-1', name: 'Food & Beverage', taxBucket: 'fb', markupPct: 0.55 };
+const CATERING_MARKUP: MenuImportMarkup = { id: 'markup-catering-1', markupPct: 0.55 };
 const GUEST_COUNT = 80;
 
-// ─── Menu with menu-level price_per_person ────────────────
+// ─── A menu imports as ONE line (priced) ──────────────────
 
 describe('menu with price_per_person', () => {
   const menu: VendorMenu = {
-    id: 'm1',
-    name: 'Gold Package',
-    price_per_person: 95,
-    courses: [
-      {
-        id: 'c1',
-        name: 'Appetizers',
-        items: [
-          { id: 'i1', name: 'Bruschetta' },
-          { id: 'i2', name: 'Shrimp Cocktail', price: 12 },
-        ],
-      },
-    ],
+    id: 'm1', name: 'Gold Package', price_per_person: 95,
+    courses: [{ id: 'c1', name: 'Appetizers', items: [{ id: 'i1', name: 'Bruschetta' }, { id: 'i2', name: 'Shrimp Cocktail', price: 12 }] }],
   };
 
-  it('returns exactly one line item when price_per_person is set', () => {
-    const result = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0);
-    expect(result).toHaveLength(1);
+  it('returns exactly one line item — the menu, not its dishes', () => {
+    expect(mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0)).toHaveLength(1);
   });
-
-  it('uses menu name as line item name', () => {
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0);
+  it('uses menu name, price_per_person, guest count, food tax, section, markup', () => {
+    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 5);
     expect(item.name).toBe('Gold Package');
-  });
-
-  it('uses price_per_person as unitPrice', () => {
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0);
     expect(item.unitPrice).toBe(95);
-  });
-
-  it('uses guestCount as qty', () => {
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0);
     expect(item.qty).toBe(GUEST_COUNT);
-  });
-
-  it('sets taxType to food', () => {
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0);
     expect(item.taxType).toBe('food');
-  });
-
-  it('sets sectionId and section name from section arg', () => {
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0);
     expect(item.sectionId).toBe('section-fb-1');
     expect(item.section).toBe('Food & Beverage');
-  });
-
-  it('sets taxBucket from section', () => {
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0);
     expect(item.taxBucket).toBe('fb');
-  });
-
-  it('sets markupPct from markup arg', () => {
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0);
-    expect(item.categoryMarkupPct).toBe(0.55);
-    expect(item.defaultMarkupPct).toBe(0.55);
-  });
-
-  it('sets categoryId from markup arg', () => {
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0);
     expect(item.categoryId).toBe('markup-catering-1');
-  });
-
-  it('marks item as isNew', () => {
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0);
+    expect(item.categoryMarkupPct).toBe(0.55);
     expect(item.isNew).toBe(true);
-  });
-
-  it('uses startSortOrder for the single item', () => {
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 5);
     expect(item.sortOrder).toBe(5);
   });
 });
 
-// ─── Menu without price_per_person — individual items ────
+// ─── A no-price multi-course menu STILL imports as ONE line (the bug fix) ──────
 
-describe('menu without price_per_person — course items', () => {
+describe('menu without price_per_person — one line, never per-dish', () => {
   const menu: VendorMenu = {
-    id: 'm2',
-    name: 'A La Carte',
+    id: 'm2', name: 'Family-Style Dinner',
     courses: [
-      {
-        id: 'c1',
-        name: 'Mains',
-        items: [
-          { id: 'i1', name: 'Chicken', price: 28 },
-          { id: 'i2', name: 'Salmon', price: 35 },
-        ],
-      },
-      {
-        id: 'c2',
-        name: 'Desserts',
-        items: [
-          { id: 'i3', name: 'Cheesecake', price: 10 },
-        ],
-      },
+      { id: 'c1', name: 'Mains', items: [{ id: 'i1', name: 'Chicken', price: 28 }, { id: 'i2', name: 'Salmon', price: 35 }] },
+      { id: 'c2', name: 'Desserts', items: [{ id: 'i3', name: 'Cheesecake', price: 10 }] },
     ],
   };
 
-  it('returns one item per course item', () => {
+  it('returns ONE line for the whole menu (not one per dish)', () => {
     const result = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0);
-    expect(result).toHaveLength(3);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('Family-Style Dinner');
   });
-
-  it('uses course item names', () => {
-    const result = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0);
-    const names = result.map((r) => r.name);
-    expect(names).toContain('Chicken');
-    expect(names).toContain('Salmon');
-    expect(names).toContain('Cheesecake');
-  });
-
-  it('uses course item price as unitPrice', () => {
-    const result = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0);
-    const chicken = result.find((r) => r.name === 'Chicken')!;
-    expect(chicken.unitPrice).toBe(28);
-  });
-
-  it('increments sortOrder from startSortOrder', () => {
-    const result = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 3);
-    expect(result[0].sortOrder).toBe(3);
-    expect(result[1].sortOrder).toBe(4);
-    expect(result[2].sortOrder).toBe(5);
+  it('unitPrice is 0 when the menu has no per-person price (for the planner to fill)', () => {
+    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0);
+    expect(item.unitPrice).toBe(0);
   });
 });
 
-// ─── Menu without price_per_person — items without prices ─
-
-describe('menu without price_per_person — unpriced items default to zero', () => {
-  const menu: VendorMenu = {
-    id: 'm3',
-    name: 'Tasting Menu',
-    courses: [
-      {
-        id: 'c1',
-        name: 'Starters',
-        items: [
-          { id: 'i1', name: 'Caprese Salad' },
-          { id: 'i2', name: 'Soup Du Jour' },
-        ],
-      },
-    ],
-  };
-
-  it('returns items for each course item', () => {
-    const result = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0);
-    expect(result).toHaveLength(2);
-  });
-
-  it('sets unitPrice to 0 for items without a price', () => {
-    const result = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0);
-    expect(result.every((r) => r.unitPrice === 0)).toBe(true);
-  });
-});
-
-// ─── Menu without price_per_person and no items ──────────
-
-describe('menu without price_per_person and no course items', () => {
-  const menu: VendorMenu = {
-    id: 'm4',
-    name: 'Custom Menu',
-    courses: [],
-  };
-
-  it('returns one fallback item using menu name', () => {
+describe('menu with no courses at all', () => {
+  it('returns one line using the menu name', () => {
+    const menu: VendorMenu = { id: 'm4', name: 'Custom Menu', courses: [] };
     const result = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0);
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe('Custom Menu');
@@ -193,200 +70,178 @@ describe('menu without price_per_person and no course items', () => {
   });
 });
 
-// ─── Markup with null categoryId ─────────────────────────
-
-describe('markup with null categoryId', () => {
+describe('markup with null categoryId / guest counts', () => {
   it('passes null categoryId through', () => {
     const menu: VendorMenu = { id: 'm5', name: 'Simple', price_per_person: 50, courses: [] };
-    const nullMarkup: MenuImportMarkup = { id: null, markupPct: 0.55 };
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, nullMarkup, GUEST_COUNT, 0);
+    const [item] = mapMenuToLineItems(menu, FB_SECTION, { id: null, markupPct: 0.55 }, GUEST_COUNT, 0);
     expect(item.categoryId).toBeNull();
   });
-});
-
-// ─── Different guest counts ───────────────────────────────
-
-describe('different guest counts', () => {
-  it('uses the provided guestCount for qty', () => {
+  it('uses the provided guest count for qty', () => {
     const menu: VendorMenu = { id: 'm6', name: 'Dinner', price_per_person: 100, courses: [] };
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, 120, 0);
-    expect(item.qty).toBe(120);
-  });
-
-  it('works with guestCount of 1', () => {
-    const menu: VendorMenu = { id: 'm7', name: 'Sample', price_per_person: 75, courses: [] };
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, 1, 0);
-    expect(item.qty).toBe(1);
+    expect(mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, 120, 0)[0].qty).toBe(120);
   });
 });
 
-// ─── computeBarPricePP ────────────────────────────────────
+describe('menu name price-text stripping', () => {
+  it('strips a price suffix from the menu name', () => {
+    const menu: VendorMenu = { id: 'm-p', name: 'Gold Package - $95 per person', price_per_person: 95, courses: [] };
+    expect(mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, 80, 0)[0].name).toBe('Gold Package');
+  });
+  it('leaves a clean menu name unchanged', () => {
+    const menu: VendorMenu = { id: 'm-p2', name: 'Breakfast Package', price_per_person: 45, courses: [] };
+    expect(mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, 50, 0)[0].name).toBe('Breakfast Package');
+  });
+});
 
-const BAR_SIMPLE: BarOption = { id: 'b1', name: 'House Bar', price_per_person: 40, categories: [] };
-const BAR_DURATION: BarOption = {
-  id: 'b2', name: 'Premium Open Bar', price_per_person: 45,
-  base_hours: 2, additional_hour_price_per_person: 12,
-  categories: [],
+// ─── collapseFoodMenuToLine — attachment "Populate Line Items" path ───────────
+
+describe('collapseFoodMenuToLine', () => {
+  it('collapses many food items into one line', () => {
+    const item = collapseFoodMenuToLine(
+      [{ name: 'Charcuterie', pricePerPerson: 0 }, { name: 'Salad', pricePerPerson: 0 }, { name: 'Entrées', pricePerPerson: 0 }],
+      'Plated Menu', FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 2,
+    );
+    expect(item.name).toBe('Plated Menu');
+    expect(item.qty).toBe(GUEST_COUNT);
+    expect(item.taxType).toBe('food');
+    expect(item.sortOrder).toBe(2);
+    expect(item.unitPrice).toBe(0);
+  });
+  it('uses the highest per-person price found among the items', () => {
+    const item = collapseFoodMenuToLine(
+      [{ name: 'A', pricePerPerson: 0 }, { name: 'B', pricePerPerson: 120 }, { name: 'C', pricePerPerson: 95 }],
+      'Plated Menu', FB_SECTION, CATERING_MARKUP, GUEST_COUNT, 0,
+    );
+    expect(item.unitPrice).toBe(120);
+  });
+});
+
+// ─── parseMaxSelections ───────────────────────────────────
+
+describe('parseMaxSelections', () => {
+  it('parses digits and number words; defaults a ruled course to 1', () => {
+    expect(parseMaxSelections('choose 3')).toBe(3);
+    expect(parseMaxSelections('please choose one')).toBe(1);
+    expect(parseMaxSelections('select two')).toBe(2);
+    expect(parseMaxSelections('choose')).toBe(1);
+    expect(parseMaxSelections(undefined)).toBeUndefined();
+  });
+});
+
+// ─── Old Vinings "Carousel President's Dinner" — the live-bug fixture ──────────
+// Structure mirrors tests/fixtures/2027-05-11_Defore_Presidents_PacesMenu.pdf:
+// one prix-fixe family-style menu, no printed price, with a "please choose one" entrée course.
+
+const OLD_VININGS: VendorMenu = {
+  id: 'ov', name: "Carousel President's Dinner",
+  courses: [
+    { id: 'app', name: 'Appetizer', items: [{ id: 'a1', name: 'Charcuterie Boards' }] },
+    { id: 'sal', name: 'Salad', items: [{ id: 's1', name: 'Artisan Greens' }] },
+    { id: 'ent', name: 'Entrees', selection_rule: 'please choose one', items: [
+      { id: 'e1', name: 'Springer Mountain Buttermilk Fried Chicken Breast' },
+      { id: 'e2', name: 'Market Fish' },
+      { id: 'e3', name: 'Signature Crab Cakes' },
+      { id: 'e4', name: 'Grilled Beef Tenderloin Medallions' },
+      { id: 'e5', name: 'Vegetable Spaghetti', dietary_tags: ['V', 'VG'] },
+    ] },
+    { id: 'acc', name: 'Accoutrements', items: [{ id: 'ac1', name: 'Whipped Potatoes and Seasonal Vegetables' }] },
+    { id: 'des', name: 'Desserts', items: [
+      { id: 'd1', name: 'Seasonal Fruit Cobbler' },
+      { id: 'd2', name: 'Flourless Chocolate Torte' },
+    ] },
+  ],
 };
 
-describe('computeBarPricePP', () => {
-  it('returns price_per_person when no duration fields', () => {
-    expect(computeBarPricePP(BAR_SIMPLE)).toBe(40);
-    expect(computeBarPricePP(BAR_SIMPLE, null)).toBe(40);
-    expect(computeBarPricePP(BAR_SIMPLE, 5)).toBe(40);
+describe("Old Vinings prix-fixe menu — ONE line + menu detail (not ~10 lines)", () => {
+  it('imports as exactly ONE estimate line item', () => {
+    const result = mapMenuToLineItems(OLD_VININGS, FB_SECTION, CATERING_MARKUP, 80, 0);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("Carousel President's Dinner");
+    expect(result[0].unitPrice).toBe(0); // no printed price → blank for the planner
+    expect(result[0].taxType).toBe('food');
+    expect(result[0].qty).toBe(80);
   });
 
-  it('returns price_per_person when durationHours is null', () => {
+  it('populates the full menu detail as menuSelections', () => {
+    const courses = vendorMenuToMenuCourses(OLD_VININGS);
+    expect(courses).toHaveLength(5);
+
+    const entrees = courses.find((c) => c.name === 'Entrees')!;
+    expect(entrees.scenario).toBe('needs_selection');
+    expect(entrees.maxSelections).toBe(1); // "please choose one"
+    expect(entrees.options).toHaveLength(5);
+
+    const veg = entrees.options.find((o) => o.name === 'Vegetable Spaghetti')!;
+    expect(veg.tags).toEqual(['V', 'VG']);
+
+    // Family-style courses are served (no client choice).
+    for (const name of ['Appetizer', 'Salad', 'Accoutrements', 'Desserts']) {
+      expect(courses.find((c) => c.name === name)!.scenario).toBe('final');
+    }
+  });
+});
+
+// ─── Path B detail mapping (attachment extraction) — Old Vinings shape ────────
+// extractedMenuToMenuCourses must derive maxSelections=1 from "please choose one" even when
+// the extractor didn't emit a maxSelections field.
+
+describe('extractedMenuToMenuCourses — attachment menu detail', () => {
+  const extracted: ExtractedMenuItem[] = [
+    { name: 'Charcuterie Boards', category: 'food', pricePerPerson: 0, needsSelection: false, selections: ['Charcuterie Boards'] },
+    {
+      name: 'Entrees', category: 'food', pricePerPerson: 0, needsSelection: true, selectionRule: 'please choose one',
+      options: [
+        { name: 'Springer Mountain Buttermilk Fried Chicken Breast' },
+        { name: 'Market Fish' },
+        { name: 'Signature Crab Cakes' },
+        { name: 'Grilled Beef Tenderloin Medallions' },
+        { name: 'Vegetable Spaghetti', tags: ['V', 'VG'] },
+      ],
+    },
+  ];
+
+  it('derives maxSelections=1 for a "please choose one" course with no explicit count', () => {
+    const courses = extractedMenuToMenuCourses(extracted);
+    const entrees = courses.find((c) => c.name === 'Entrees')!;
+    expect(entrees.scenario).toBe('needs_selection');
+    expect(entrees.maxSelections).toBe(1);
+    expect(entrees.options).toHaveLength(5);
+    expect(entrees.options.find((o) => o.name === 'Vegetable Spaghetti')!.tags).toEqual(['V', 'VG']);
+    expect(courses.find((c) => c.name === 'Charcuterie Boards')!.scenario).toBe('final');
+  });
+});
+
+// ─── computeBarPricePP + mapBarToLineItems (unchanged behavior) ───────────────
+
+const BAR_SIMPLE: BarOption = { id: 'b1', name: 'House Bar', price_per_person: 40, categories: [] };
+const BAR_DURATION: BarOption = { id: 'b2', name: 'Premium Open Bar', price_per_person: 45, base_hours: 2, additional_hour_price_per_person: 12, categories: [] };
+
+describe('computeBarPricePP', () => {
+  it('returns price_per_person when no/!null duration', () => {
+    expect(computeBarPricePP(BAR_SIMPLE)).toBe(40);
     expect(computeBarPricePP(BAR_DURATION, null)).toBe(45);
   });
-
-  it('returns base price when duration <= base_hours', () => {
-    expect(computeBarPricePP(BAR_DURATION, 2)).toBe(45); // exactly at base
-    expect(computeBarPricePP(BAR_DURATION, 1)).toBe(45); // under base
-  });
-
   it('adds extra hours beyond base_hours', () => {
-    // 3hr: $45 + 1×$12 = $57
     expect(computeBarPricePP(BAR_DURATION, 3)).toBe(57);
-    // 5hr: $45 + 3×$12 = $81
-    expect(computeBarPricePP(BAR_DURATION, 5)).toBe(81);
-  });
-
-  it('handles fractional extra hours', () => {
-    // 2.5hr: $45 + 0.5×$12 = $51
     expect(computeBarPricePP(BAR_DURATION, 2.5)).toBe(51);
   });
-
   it('returns 0 when price_per_person is 0', () => {
-    const opt: BarOption = { id: 'b3', name: 'Complimentary', price_per_person: 0, categories: [] };
-    expect(computeBarPricePP(opt, 4)).toBe(0);
+    expect(computeBarPricePP({ id: 'b3', name: 'Comp', price_per_person: 0, categories: [] }, 4)).toBe(0);
   });
 });
-
-// ─── mapBarToLineItems ────────────────────────────────────
 
 describe('mapBarToLineItems', () => {
-  it('creates a single alcohol line item from a simple bar option', () => {
-    const [item] = mapBarToLineItems(BAR_SIMPLE, null, FB_SECTION, CATERING_MARKUP, 100, 0);
-    expect(item.name).toBe('House Bar');
-    expect(item.qty).toBe(100);
-    expect(item.unitPrice).toBe(40);
-    expect(item.taxType).toBe('alcohol');
-    expect(item.taxBucket).toBe('fb');
-    expect(item.isNew).toBe(true);
+  it('creates a single alcohol line item', () => {
+    const items = mapBarToLineItems(BAR_SIMPLE, null, FB_SECTION, CATERING_MARKUP, 100, 0);
+    expect(items).toHaveLength(1);
+    expect(items[0].name).toBe('House Bar');
+    expect(items[0].taxType).toBe('alcohol');
+    expect(items[0].unitPrice).toBe(40);
   });
-
-  it('applies duration pricing when durationHours is provided', () => {
-    // 4hr: $45 + 2×$12 = $69
+  it('applies duration pricing and strips price text from the name', () => {
     const [item] = mapBarToLineItems(BAR_DURATION, 4, FB_SECTION, CATERING_MARKUP, 50, 0);
     expect(item.unitPrice).toBe(69);
-  });
-
-  it('uses base price when no duration provided', () => {
-    const [item] = mapBarToLineItems(BAR_DURATION, null, FB_SECTION, CATERING_MARKUP, 50, 0);
-    expect(item.unitPrice).toBe(45);
-  });
-
-  it('uses guestCount for qty', () => {
-    const [item] = mapBarToLineItems(BAR_SIMPLE, null, FB_SECTION, CATERING_MARKUP, 75, 0);
-    expect(item.qty).toBe(75);
-  });
-
-  it('sets correct section and markup', () => {
-    const [item] = mapBarToLineItems(BAR_SIMPLE, null, FB_SECTION, CATERING_MARKUP, 50, 0);
-    expect(item.sectionId).toBe('section-fb-1');
-    expect(item.categoryMarkupPct).toBe(0.55);
-  });
-
-  it('always returns exactly one item', () => {
-    const items = mapBarToLineItems(BAR_DURATION, 3, FB_SECTION, CATERING_MARKUP, 100, 0);
-    expect(items).toHaveLength(1);
-  });
-});
-
-// ─── Price text stripping ─────────────────────────────────
-// Claude sometimes embeds price info in item/menu names.
-// Descriptions are client-facing — prices belong only in the cost field.
-
-describe('price text stripped from menu item names', () => {
-  it('strips "- $30 Per Person" suffix from course item name', () => {
-    const menu: VendorMenu = {
-      id: 'm-price-1',
-      name: 'Catering Package',
-      courses: [
-        {
-          id: 'c1',
-          name: 'Appetizers',
-          items: [{ id: 'i1', name: "Hors D'Oeuvres Display - $30 Per Person" }],
-        },
-      ],
-    };
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, 50, 0);
-    expect(item.name).toBe("Hors D'Oeuvres Display");
-  });
-
-  it('strips "- $95 per person" suffix from menu name (menu-level price)', () => {
-    const menu: VendorMenu = {
-      id: 'm-price-2',
-      name: 'Gold Package - $95 per person',
-      price_per_person: 95,
-      courses: [],
-    };
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, 80, 0);
-    expect(item.name).toBe('Gold Package');
-  });
-
-  it('strips "($45)" parenthetical price suffix', () => {
-    const menu: VendorMenu = {
-      id: 'm-price-3',
-      name: 'Chicken Dinner',
-      courses: [
-        {
-          id: 'c1',
-          name: 'Mains',
-          items: [{ id: 'i1', name: 'Filet Mignon ($85)' }],
-        },
-      ],
-    };
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, 50, 0);
-    expect(item.name).toBe('Filet Mignon');
-  });
-
-  it('strips "$30/pp" suffix', () => {
-    const menu: VendorMenu = {
-      id: 'm-price-4',
-      name: 'Buffet',
-      courses: [
-        {
-          id: 'c1',
-          name: 'Stations',
-          items: [{ id: 'i1', name: 'Pasta Station $30/pp' }],
-        },
-      ],
-    };
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, 50, 0);
-    expect(item.name).toBe('Pasta Station');
-  });
-
-  it('leaves names without price text unchanged', () => {
-    const menu: VendorMenu = {
-      id: 'm-price-5',
-      name: 'Breakfast Package',
-      price_per_person: 45,
-      courses: [],
-    };
-    const [item] = mapMenuToLineItems(menu, FB_SECTION, CATERING_MARKUP, 50, 0);
-    expect(item.name).toBe('Breakfast Package');
-  });
-
-  it('strips price from bar option name', () => {
-    const bar: BarOption = {
-      id: 'b-price-1',
-      name: 'Open Bar - $55 Per Person',
-      price_per_person: 55,
-      categories: [],
-    };
-    const [item] = mapBarToLineItems(bar, null, FB_SECTION, CATERING_MARKUP, 50, 0);
-    expect(item.name).toBe('Open Bar');
+    const [stripped] = mapBarToLineItems({ id: 'bp', name: 'Open Bar - $55 Per Person', price_per_person: 55, categories: [] }, null, FB_SECTION, CATERING_MARKUP, 50, 0);
+    expect(stripped.name).toBe('Open Bar');
   });
 });

@@ -33,7 +33,8 @@ import { parseMenus, parseBarOptions, parseInclusions } from '@/lib/vendors/prof
 import type { VendorMenu } from '@/lib/vendors/profileTypes';
 import VendorMenuImportModal from './VendorMenuImportModal';
 import type { BarSelection } from './VendorMenuImportModal';
-import { mapMenuToLineItems, mapBarToLineItems } from '@/lib/vendors/menuImport';
+import { mapMenuToLineItems, mapBarToLineItems, collapseFoodMenuToLine } from '@/lib/vendors/menuImport';
+import { extractedMenuToMenuCourses } from '@/lib/slideCopy/menuMapping';
 import { vendorMenuToMenuCourses } from '@/lib/slideCopy/vendorProfileMapping';
 import AttachmentsPanel from './AttachmentsPanel';
 import ExportButtons from './ExportButtons';
@@ -700,9 +701,13 @@ export default function EstimateBuilder({
       startOrder
     );
     handleImportItems(items as LocalLineItem[]);
-    // Pricing line created. Offer the explicit "add menu detail to the proposal" step (Option B) —
-    // detail is populated only when the user clicks, downstream of finalizing pricing.
+    // ONE pricing line + full menu DETAIL on import: courses, dishes, dietary tags, and the
+    // "choose one" rule flow into menuSelections — never one billable line per dish.
+    setPendingSlideMenuData(vendorMenuToMenuCourses(menu));
+    setPendingSlideMenuSource('vendor_library');
+    // Retained as the retry CTA only if a replace-confirm is cancelled (cleared on successful apply).
     setAttachedMenuForDetail(menu);
+    setTimeout(() => { slideCopyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
   }, [sections, markups, program.guest_count, handleImportItems]);
 
   const handleAddBarPackages = useCallback((selections: BarSelection[]) => {
@@ -819,8 +824,44 @@ export default function EstimateBuilder({
     const toImport: LocalLineItem[] = [];
 
     if (fbSection) {
-      data.menuItems.forEach((item) => {
-        const taxType: TaxType = item.category === 'alcohol' ? 'alcohol' : item.category === 'food' ? 'food' : 'none';
+      const foodItems = data.menuItems.filter((i) => i.category === 'food');
+      const beverageItems = data.menuItems.filter((i) => i.category !== 'food');
+
+      if (foodItems.length > 1) {
+        // Multi-course menu → ONE food line; the dishes become menu detail (menuSelections) below.
+        toImport.push(collapseFoodMenuToLine(
+          foodItems,
+          data.venueName ? `${data.venueName} Menu` : 'Plated Menu',
+          { id: fbSection.id, name: fbSection.name, taxBucket: fbSection.taxBucket, markupPct: cateringMarkup?.markup_pct ?? 0.55 },
+          { id: cateringMarkup?.id ?? null, markupPct: cateringMarkup?.markup_pct ?? 0.55 },
+          program.guest_count,
+          nextOrder(fbSection.id),
+        ) as LocalLineItem);
+      } else {
+        // Single food item (or a package) → keep as its own line, preserving packageOptions.
+        foodItems.forEach((item) => {
+          toImport.push({
+            id: `new-${Date.now()}-${Math.random()}`,
+            sectionId: fbSection.id,
+            section: fbSection.name,
+            taxBucket: fbSection.taxBucket,
+            name: item.packageOptions?.label ?? item.name,
+            qty: program.guest_count,
+            unitPrice: item.pricePerPerson ?? 0,
+            categoryId: cateringMarkup?.id ?? null,
+            defaultMarkupPct: cateringMarkup?.markup_pct ?? 0.55,
+            categoryMarkupPct: cateringMarkup?.markup_pct ?? 0.55,
+            taxType: 'food',
+            sortOrder: nextOrder(fbSection.id),
+            isNew: true,
+            packageOptions: item.packageOptions ?? null,
+            selectedPackageId: null,
+          });
+        });
+      }
+
+      // Bar / non-alcoholic beverages stay as their own lines (not part of the food menu).
+      beverageItems.forEach((item) => {
         toImport.push({
           id: `new-${Date.now()}-${Math.random()}`,
           sectionId: fbSection.id,
@@ -832,7 +873,7 @@ export default function EstimateBuilder({
           categoryId: cateringMarkup?.id ?? null,
           defaultMarkupPct: cateringMarkup?.markup_pct ?? 0.55,
           categoryMarkupPct: cateringMarkup?.markup_pct ?? 0.55,
-          taxType,
+          taxType: item.category === 'alcohol' ? 'alcohol' : 'none',
           sortOrder: nextOrder(fbSection.id),
           isNew: true,
           packageOptions: item.packageOptions ?? null,
@@ -875,6 +916,13 @@ export default function EstimateBuilder({
         isNew: true,
       });
     });
+
+    // Populate the menu DETAIL (courses, dishes, tags, choose-one rules) alongside the line(s).
+    const menuCourses = extractedMenuToMenuCourses(data.menuItems);
+    if (menuCourses.length > 0) {
+      setPendingSlideMenuData(menuCourses);
+      setPendingSlideMenuSource('attachment');
+    }
 
     handleImportItems(toImport);
   }, [markups, sections, program.guest_count, handleImportItems]);

@@ -41,15 +41,38 @@ function stripPriceText(s: string): string {
   return s.replace(/\s*[-–—(]?\s*\$[\d,]+(?:\.\d+)?(?:\s*(?:per\s+person?|\/pp?\b|p\.p\.|each))?\s*\)?\s*$/i, '').trim();
 }
 
+function buildMenuLineItem(
+  name: string,
+  unitPrice: number,
+  section: MenuImportSection,
+  markup: MenuImportMarkup,
+  guestCount: number,
+  sortOrder: number,
+): MenuLineItem {
+  return {
+    id: `menu-import-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    sectionId: section.id,
+    section: section.name,
+    taxBucket: section.taxBucket,
+    name: stripPriceText(name),
+    qty: guestCount,
+    unitPrice,
+    categoryId: markup.id,
+    defaultMarkupPct: markup.markupPct,
+    categoryMarkupPct: markup.markupPct,
+    taxType: 'food',
+    sortOrder,
+    isNew: true,
+  };
+}
+
 /**
- * Maps a VendorMenu to a list of line items for import into an estimate.
+ * Maps a VendorMenu to line items for import into an estimate.
  *
- * Rules:
- * - If menu has price_per_person → ONE line item (the whole menu at that per-person price)
- * - If no menu price_per_person → one line item per course item (priced at item.price ?? 0)
- *   If there are no items at all → one $0 line item using the menu name
- * - qty = guestCount for all items
- * - taxType = 'food' (all menus are F&B)
+ * A menu ALWAYS imports as exactly ONE line item — the whole menu. The dishes/courses are
+ * menu DETAIL (the menuSelections channel), never separate billable line items.
+ * unitPrice = the menu's per-person price, or 0 when the menu has none (e.g. a prix-fixe PDF
+ * with no printed price) for the planner to fill in. qty = guestCount, taxType = 'food'.
  */
 export function mapMenuToLineItems(
   menu: VendorMenu,
@@ -58,45 +81,25 @@ export function mapMenuToLineItems(
   guestCount: number,
   startSortOrder: number,
 ): MenuLineItem[] {
-  const items: MenuLineItem[] = [];
-  let order = startSortOrder;
+  return [buildMenuLineItem(menu.name, menu.price_per_person ?? 0, section, markup, guestCount, startSortOrder)];
+}
 
-  function makeItem(name: string, unitPrice: number): MenuLineItem {
-    return {
-      id: `menu-import-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      sectionId: section.id,
-      section: section.name,
-      taxBucket: section.taxBucket,
-      name,
-      qty: guestCount,
-      unitPrice,
-      categoryId: markup.id,
-      defaultMarkupPct: markup.markupPct,
-      categoryMarkupPct: markup.markupPct,
-      taxType: 'food',
-      sortOrder: order++,
-      isNew: true,
-    };
-  }
-
-  if (menu.price_per_person != null) {
-    items.push(makeItem(stripPriceText(menu.name), menu.price_per_person));
-    return items;
-  }
-
-  // No menu-level price — flatten all course items
-  for (const course of menu.courses) {
-    for (const item of course.items) {
-      items.push(makeItem(stripPriceText(item.name), item.price ?? 0));
-    }
-  }
-
-  // Fallback: no items at all
-  if (items.length === 0) {
-    items.push(makeItem(stripPriceText(menu.name), 0));
-  }
-
-  return items;
+/**
+ * Collapses extracted food menu items (the parsed courses/dishes of ONE menu) into a single
+ * line item — used by the attachment "Populate Line Items" path so a multi-course menu PDF
+ * imports as one menu line, not one line per dish. unitPrice = the highest per-person price
+ * found among the items (a prix-fixe price often rides on one course), else 0.
+ */
+export function collapseFoodMenuToLine(
+  foodItems: { name?: string; pricePerPerson?: number | null }[],
+  menuName: string,
+  section: MenuImportSection,
+  markup: MenuImportMarkup,
+  guestCount: number,
+  sortOrder: number,
+): MenuLineItem {
+  const unitPrice = foodItems.reduce((max, i) => Math.max(max, i.pricePerPerson ?? 0), 0);
+  return buildMenuLineItem(menuName, unitPrice, section, markup, guestCount, sortOrder);
 }
 
 /**
