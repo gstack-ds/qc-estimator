@@ -1,7 +1,17 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { isPublicSharePath } from '@/lib/budget/sharePath';
 
 export async function middleware(request: NextRequest) {
+  // Public, no-login budget share links (/b/<token>) bypass auth entirely — and must never be
+  // indexed or cached. Checked FIRST so this path never touches Supabase or the auth gate.
+  if (isPublicSharePath(request.nextUrl.pathname)) {
+    const res = NextResponse.next({ request });
+    res.headers.set('X-Robots-Tag', 'noindex, nofollow');
+    res.headers.set('Cache-Control', 'no-store, max-age=0, must-revalidate');
+    return res;
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
