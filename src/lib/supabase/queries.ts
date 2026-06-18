@@ -1314,6 +1314,115 @@ export async function getBudgetPlanEntryForEstimate(estimateId: string): Promise
   return (data ?? null) as DbBudgetPlanEntry | null;
 }
 
+// ─── Budget Documents (client budget builder) ─────────────
+// Returns null on any query error (e.g. migration 051 not yet run) so the page renders
+// an empty "build budget" state rather than crashing.
+
+import type { BudgetDocument, BudgetLine, BudgetMember, BudgetAggregation, BudgetTier } from '@/lib/budget/budgetDocument';
+
+interface DbBudgetLineMemberRow {
+  id: string;
+  budget_line_id: string;
+  source_estimate_id: string | null;
+  tier: BudgetTier | null;
+  label: string | null;
+  derived_value: number;
+  derived_pp: number;
+  override_value: number | null;
+  source_removed: boolean;
+  rank: number;
+  sort_order: number;
+}
+
+interface DbBudgetLineRow {
+  id: string;
+  budget_document_id: string;
+  event_id: string | null;
+  name: string;
+  aggregation: BudgetAggregation;
+  tiered: boolean;
+  is_per_person: boolean;
+  guest_count: number | null;
+  is_optional: boolean;
+  is_included: boolean;
+  selected_member_id: string | null;
+  notes: string | null;
+  sort_order: number;
+}
+
+export async function getBudgetForProgram(programId: string): Promise<BudgetDocument | null> {
+  const supabase = await createClient();
+  const { data: doc, error } = await supabase
+    .from('budget_documents')
+    .select('id, program_id, title, status, disclaimers')
+    .eq('program_id', programId)
+    .maybeSingle();
+  if (error || !doc) return null;
+
+  const { data: lineRows, error: linesErr } = await supabase
+    .from('budget_lines')
+    .select('id, budget_document_id, event_id, name, aggregation, tiered, is_per_person, guest_count, is_optional, is_included, selected_member_id, notes, sort_order')
+    .eq('budget_document_id', doc.id)
+    .order('sort_order');
+  if (linesErr) return null;
+
+  const lineRowsArr = (lineRows ?? []) as DbBudgetLineRow[];
+  const lineIds = lineRowsArr.map((l) => l.id);
+
+  let memberRows: DbBudgetLineMemberRow[] = [];
+  if (lineIds.length > 0) {
+    const { data, error: memErr } = await supabase
+      .from('budget_line_members')
+      .select('id, budget_line_id, source_estimate_id, tier, label, derived_value, derived_pp, override_value, source_removed, rank, sort_order')
+      .in('budget_line_id', lineIds)
+      .order('sort_order');
+    if (memErr) return null;
+    memberRows = (data ?? []) as DbBudgetLineMemberRow[];
+  }
+
+  const membersByLine = new Map<string, BudgetMember[]>();
+  for (const r of memberRows) {
+    const m: BudgetMember = {
+      id: r.id,
+      sourceEstimateId: r.source_estimate_id,
+      tier: r.tier,
+      label: r.label,
+      derivedValue: Number(r.derived_value),
+      derivedPp: Number(r.derived_pp),
+      overrideValue: r.override_value == null ? null : Number(r.override_value),
+      sourceRemoved: r.source_removed,
+      rank: r.rank,
+      sortOrder: r.sort_order,
+    };
+    (membersByLine.get(r.budget_line_id) ?? membersByLine.set(r.budget_line_id, []).get(r.budget_line_id)!).push(m);
+  }
+
+  const lines: BudgetLine[] = lineRowsArr.map((l) => ({
+    id: l.id,
+    eventId: l.event_id,
+    name: l.name,
+    aggregation: l.aggregation,
+    tiered: l.tiered,
+    isPerPerson: l.is_per_person,
+    guestCount: l.guest_count,
+    isOptional: l.is_optional,
+    isIncluded: l.is_included,
+    selectedMemberId: l.selected_member_id,
+    notes: l.notes,
+    sortOrder: l.sort_order,
+    members: (membersByLine.get(l.id) ?? []).sort((a, b) => a.sortOrder - b.sortOrder),
+  }));
+
+  return {
+    id: doc.id,
+    programId: doc.program_id,
+    title: doc.title,
+    status: doc.status,
+    disclaimers: doc.disclaimers,
+    lines,
+  };
+}
+
 // ─── Callouts ─────────────────────────────────────────────
 // Issue-tracking + discussion on estimates. INTERNAL ONLY — these tables are never joined into
 // RawEstimate / DeckContract / ProposalDocument, so callout text cannot reach a client document.
