@@ -11,7 +11,9 @@ import {
   getBudgetForProgram,
 } from '@/lib/supabase/queries';
 import { buildBudgetProgramConfig, deriveEstimateValue } from '@/lib/budget/deriveEstimates';
-import { assignTiersByRank, type BudgetMode, modeToToggles, type BudgetMember } from '@/lib/budget/budgetDocument';
+import { assignTiersByRank, type BudgetMode, type BudgetTier, modeToToggles, type BudgetMember } from '@/lib/budget/budgetDocument';
+
+const ALL_TIERS: BudgetTier[] = ['low', 'mid', 'high'];
 
 function revalidate(programId: string) {
   revalidatePath(`/programs/${programId}/budget`);
@@ -123,47 +125,75 @@ export async function setLineMode(lineId: string, programId: string, mode: Budge
 
   const { data: lineRow } = await supabase
     .from('budget_lines')
-    .select('is_per_person')
+    .select('is_per_person, aggregation, tiered')
     .eq('id', lineId)
     .single();
   const isPerPerson = lineRow?.is_per_person ?? false;
+  const wasTiers = lineRow?.aggregation === 'select_one' && lineRow?.tiered === true;
 
   const { data: memberRows } = await supabase
     .from('budget_line_members')
-    .select('id, tier, derived_value, derived_pp, override_value, sort_order')
+    .select('id, tier, source_estimate_id, label, derived_value, derived_pp, override_value, sort_order')
     .eq('budget_line_id', lineId)
     .order('sort_order');
+  const rows = memberRows ?? [];
 
-  // Map snake_case rows → the BudgetMember shape the pure engine expects.
-  const members: BudgetMember[] = (memberRows ?? []).map((r) => ({
-    id: r.id as string,
-    sourceEstimateId: null,
-    tier: r.tier as BudgetMember['tier'],
-    label: null,
-    derivedValue: Number(r.derived_value),
-    derivedPp: Number(r.derived_pp),
-    overrideValue: r.override_value == null ? null : Number(r.override_value),
-    sourceRemoved: false,
-    rank: 0,
-    sortOrder: r.sort_order as number,
-  }));
+  const isBlankScaffold = (r: typeof rows[number]) =>
+    !r.source_estimate_id && r.override_value == null && Number(r.derived_value) === 0 && Number(r.derived_pp) === 0 && !r.label;
 
   let selectedMemberId: string | null = null;
 
   if (mode === 'tiers') {
+    // Map rows → engine shape and rank into Low/Mid/High (pp-aware).
+    const members: BudgetMember[] = rows.map((r) => ({
+      id: r.id, sourceEstimateId: r.source_estimate_id ?? null, tier: (r.tier as BudgetTier | null) ?? null,
+      label: r.label ?? null, derivedValue: Number(r.derived_value), derivedPp: Number(r.derived_pp),
+      overrideValue: r.override_value == null ? null : Number(r.override_value), sourceRemoved: false, rank: 0, sortOrder: r.sort_order,
+    }));
     const tiers = assignTiersByRank(members, isPerPerson);
     const tierById = new Map(tiers.map((t) => [t.id, t.tier]));
     for (const m of members) {
       await supabase.from('budget_line_members').update({ tier: tierById.get(m.id) ?? null }).eq('id', m.id);
     }
-    // Default the selected tier to mid (else low).
-    selectedMemberId = tiers.find((t) => t.tier === 'mid')?.id ?? tiers.find((t) => t.tier === 'low')?.id ?? null;
-  } else {
-    // add_up or pick_one — clear tier assignments.
+
+    // Always present three selectable tiers — materialize a blank member for any missing tier
+    // so a single-estimate line still offers Low/Mid/High to pick from.
+    const present = new Set(tiers.map((t) => t.tier));
+    let nextOrder = rows.reduce((mx, r) => Math.max(mx, r.sort_order), -1) + 1;
+    const byTier = new Map<BudgetTier, { id: string; eff: number }>();
     for (const m of members) {
-      if (m.tier !== null) await supabase.from('budget_line_members').update({ tier: null }).eq('id', m.id);
+      const t = tierById.get(m.id);
+      if (t) byTier.set(t, { id: m.id, eff: m.overrideValue ?? (isPerPerson ? m.derivedPp : m.derivedValue) });
     }
-    selectedMemberId = mode === 'pick_one' ? (members[0]?.id ?? null) : null;
+    for (const tier of ALL_TIERS) {
+      if (present.has(tier)) continue;
+      const { data: ins } = await supabase
+        .from('budget_line_members')
+        .insert({ budget_line_id: lineId, source_estimate_id: null, tier, derived_value: 0, derived_pp: 0, sort_order: nextOrder++ })
+        .select('id')
+        .single();
+      if (ins) byTier.set(tier, { id: ins.id, eff: 0 });
+    }
+
+    // Default the selected tier to a populated one (mid → low → high), so the count isn't $0.
+    selectedMemberId =
+      (byTier.get('mid')?.eff ?? 0) > 0 ? byTier.get('mid')!.id
+      : (byTier.get('low')?.eff ?? 0) > 0 ? byTier.get('low')!.id
+      : (byTier.get('high')?.eff ?? 0) > 0 ? byTier.get('high')!.id
+      : byTier.get('low')?.id ?? byTier.get('mid')?.id ?? byTier.get('high')?.id ?? null;
+  } else {
+    // add_up / pick_one — clear tiers; when leaving tiers mode, drop the blank scaffold members.
+    for (const r of rows) {
+      if (wasTiers && isBlankScaffold(r)) {
+        await supabase.from('budget_line_members').delete().eq('id', r.id);
+      } else if (r.tier !== null) {
+        await supabase.from('budget_line_members').update({ tier: null }).eq('id', r.id);
+      }
+    }
+    if (mode === 'pick_one') {
+      const firstReal = rows.find((r) => !(wasTiers && isBlankScaffold(r)));
+      selectedMemberId = firstReal?.id ?? null;
+    }
   }
 
   const { error } = await supabase
@@ -248,6 +278,10 @@ export async function combineLines(programId: string, documentId: string, lineId
   if (!lines || lines.length !== lineIds.length) return { error: 'Lines not found for this budget.' };
 
   const first = lines[0];
+  // Combine is a single-event operation — never merge lines across events.
+  if (!lines.every((l) => l.event_id === first.event_id)) {
+    return { error: 'All lines must belong to the same event to combine.' };
+  }
   const { data: target, error: tErr } = await supabase
     .from('budget_lines')
     .insert({ budget_document_id: documentId, event_id: first.event_id, name: first.name || 'Combined', aggregation: 'sum', sort_order: first.sort_order })

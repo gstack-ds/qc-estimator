@@ -131,6 +131,9 @@ export default function BudgetBuilder({ programId, programName, programGuestCoun
   }
   function handleCombine() {
     if (!docId || selected.size < 2) return;
+    // Only combine lines within a single event.
+    const evKeys = new Set(lines.filter((l) => selected.has(l.id)).map((l) => l.eventId ?? '__none__'));
+    if (evKeys.size > 1) { setError('Select lines within a single event to combine.'); return; }
     const ids = [...selected];
     runStructural(async () => { const r = await combineLines(programId, docId, ids); setSelected(new Set()); return r; });
   }
@@ -177,6 +180,13 @@ export default function BudgetBuilder({ programId, programName, programGuestCoun
       unassigned.push(l);
     }
   }
+
+  // Combine is a per-event subset operation: you pick which lines within ONE event get summed
+  // into a custom group; the rest stay separate. Cross-event selections are blocked.
+  const selectedLines = lines.filter((l) => selected.has(l.id));
+  const selectedEventKeys = new Set(selectedLines.map((l) => l.eventId ?? '__none__'));
+  const sameEvent = selectedEventKeys.size <= 1;
+  const canCombine = selected.size >= 2 && sameEvent;
 
   return (
     <div className="space-y-5">
@@ -231,13 +241,19 @@ export default function BudgetBuilder({ programId, programName, programGuestCoun
         />
       ) : (
         <>
-          {/* Combine action bar */}
+          {/* Combine action bar — per-event subset combine */}
           {selected.size > 0 && (
-            <div className="flex items-center gap-3 bg-brand-charcoal text-white rounded-lg px-4 py-2 text-sm sticky top-2 z-10">
+            <div className="flex items-center gap-3 bg-brand-charcoal text-white rounded-lg px-4 py-2 text-sm sticky top-2 z-10 flex-wrap">
               <span>{selected.size} selected</span>
-              <button onClick={handleCombine} disabled={busy || selected.size < 2} className="bg-white/15 hover:bg-white/25 rounded px-3 py-1 disabled:opacity-50">
+              <button onClick={handleCombine} disabled={busy || !canCombine} className="bg-white/15 hover:bg-white/25 rounded px-3 py-1 disabled:opacity-50">
                 Combine into one line
               </button>
+              {selected.size >= 2 && !sameEvent && (
+                <span className="text-white/70 text-xs">Select lines within a single event to combine</span>
+              )}
+              {selected.size === 1 && (
+                <span className="text-white/70 text-xs">Select another line in the same event to combine</span>
+              )}
               <button onClick={() => setSelected(new Set())} className="text-white/70 hover:text-white ml-auto">Clear</button>
             </div>
           )}

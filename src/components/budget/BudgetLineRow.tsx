@@ -49,8 +49,10 @@ export default function BudgetLineRow({
   const guests = resolveLineGuests(line, fallbackGuestCount);
   const totals = computeLineTotals(line, fallbackGuestCount);
 
+  // In tiers mode show exactly the Low/Mid/High slots (extras with no tier are hidden here
+  // but preserved in data — they reappear in Add up / Pick one).
   const members = mode === 'tiers'
-    ? [...line.members].sort((a, b) => (TIER_ORDER[a.tier ?? 'low'] ?? 9) - (TIER_ORDER[b.tier ?? 'low'] ?? 9))
+    ? [...line.members].filter((m) => m.tier).sort((a, b) => (TIER_ORDER[a.tier!] ?? 9) - (TIER_ORDER[b.tier!] ?? 9))
     : line.members;
 
   return (
@@ -158,9 +160,11 @@ export default function BudgetLineRow({
             busy={busy}
           />
         ))}
-        <button onClick={() => addMember(line.id)} disabled={busy} className="text-xs text-brand-silver hover:text-brand-charcoal">
-          + Add {mode === 'add_up' ? 'item' : mode === 'tiers' ? 'tier' : 'option'}
-        </button>
+        {mode !== 'tiers' && (
+          <button onClick={() => addMember(line.id)} disabled={busy} className="text-xs text-brand-silver hover:text-brand-charcoal">
+            + Add {mode === 'add_up' ? 'item' : 'option'}
+          </button>
+        )}
       </div>
 
       {/* Line total */}
@@ -208,9 +212,17 @@ function MemberRow({
 
   return (
     <div className={`flex items-center gap-2 ${mode !== 'add_up' && !isSelected ? 'opacity-50' : ''}`}>
-      {/* Selector for pick-one / tiers */}
+      {/* Selector dot for pick-one / tiers — clicking selects which value counts */}
       {mode !== 'add_up' && (
-        <input type="radio" checked={isSelected} onChange={onSelect} className="accent-brand-copper cursor-pointer flex-shrink-0" title="Counts toward the total" />
+        <button
+          type="button"
+          onClick={onSelect}
+          aria-pressed={isSelected}
+          title={isSelected ? 'This value counts toward the total' : 'Click to count this value toward the total'}
+          className={`w-4 h-4 rounded-full border-2 flex-shrink-0 transition-colors ${
+            isSelected ? 'bg-brand-copper border-brand-copper' : 'border-brand-silver/50 hover:border-brand-copper bg-white'
+          }`}
+        />
       )}
 
       {/* Tier badge */}
