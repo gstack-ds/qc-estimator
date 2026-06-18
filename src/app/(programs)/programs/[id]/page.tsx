@@ -463,6 +463,12 @@ export default async function ProgramPage({ params }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          <Link
+            href={`/programs/${id}/budget`}
+            className="text-sm border border-brand-cream text-brand-charcoal rounded-md px-3 py-1.5 hover:bg-brand-offwhite transition-colors"
+          >
+            Budget
+          </Link>
           <GenerateDeckButton mode="program" programId={id} filename={program.name} />
           <BudgetExportButton data={budgetExportData} />
           <DeleteProgramButton programId={id} />
