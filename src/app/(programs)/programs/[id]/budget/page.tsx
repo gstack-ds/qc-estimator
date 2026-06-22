@@ -1,8 +1,9 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { getProgram, getEventsForProgram, getBudgetForProgram, getActiveBudgetShare } from '@/lib/supabase/queries';
+import { getProgram, getEventsForProgram, getBudgetForProgram, getActiveBudgetShare, getBudgetResponses } from '@/lib/supabase/queries';
 import BudgetBuilder, { type BudgetEventInfo } from '@/components/budget/BudgetBuilder';
 import BudgetSharePanel from '@/components/budget/BudgetSharePanel';
+import BudgetResponsesPanel from '@/components/budget/BudgetResponsesPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,11 +14,12 @@ interface Props {
 export default async function ProgramBudgetPage({ params }: Props) {
   const { id } = await params;
 
-  const [program, dbEvents, budget, activeShare] = await Promise.all([
+  const [program, dbEvents, budget, activeShare, responses] = await Promise.all([
     getProgram(id),
     getEventsForProgram(id),
     getBudgetForProgram(id),
     getActiveBudgetShare(id),
+    getBudgetResponses(id),
   ]);
   if (!program) notFound();
 
@@ -50,6 +52,8 @@ export default async function ProgramBudgetPage({ params }: Props) {
       {budget && (
         <BudgetSharePanel programId={id} documentId={budget.id} activeShare={activeShare} />
       )}
+
+      {budget && <BudgetResponsesPanel responses={responses} />}
     </div>
   );
 }
