@@ -15,7 +15,9 @@ export default function NavLinks({ links }: { links: NavLink[] }) {
   return (
     <>
       {links.map(({ href, label, badge }) => {
-        const isActive = pathname.startsWith(href);
+        // Compare against the path only — a query/hash on the href (e.g. /programs?new=1) must
+        // not break the active-state match.
+        const isActive = pathname.startsWith(href.split(/[?#]/)[0]);
         return (
           <Link
             key={href}

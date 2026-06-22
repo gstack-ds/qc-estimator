@@ -25,7 +25,7 @@ export default async function ProgramsLayout({
 
   const navLinks = [
     { href: '/leads', label: 'Leads' },
-    { href: '/programs', label: 'Programs', badge: unreadResponses },
+    { href: unreadResponses > 0 ? '/programs?new=1' : '/programs', label: 'Programs', badge: unreadResponses },
     { href: '/venues', label: 'Vendors' },
     { href: '/callouts', label: 'Callouts', badge: openCallouts },
     { href: '/document-extractor', label: 'Doc Reader' },
