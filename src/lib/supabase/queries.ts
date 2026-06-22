@@ -1452,6 +1452,50 @@ export async function getActiveBudgetShare(programId: string): Promise<ActiveBud
   return (data ?? null) as ActiveBudgetShare | null;
 }
 
+// Central live-links dashboard (Feature B): every share link across all programs, with its
+// program context + derived status. Metadata only — never the token or snapshot.
+export type ShareLinkStatus = 'active' | 'revoked' | 'expired';
+export interface ShareLinkRow {
+  id: string;
+  programId: string | null;
+  programName: string;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  viewCount: number;
+  lastViewedAt: string | null;
+  status: ShareLinkStatus;
+}
+
+export async function getAllShareLinks(): Promise<ShareLinkRow[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('budget_shares')
+    .select('id, created_at, expires_at, revoked_at, view_count, last_viewed_at, budget_documents(program_id, programs(name))')
+    .order('created_at', { ascending: false });
+  if (error || !data) return [];
+
+  const now = Date.now();
+  return data.map((r) => {
+    const doc = (r.budget_documents as unknown) as { program_id: string | null; programs: { name: string } | null } | null;
+    const status: ShareLinkStatus =
+      r.revoked_at != null ? 'revoked'
+      : new Date(r.expires_at).getTime() <= now ? 'expired'
+      : 'active';
+    return {
+      id: r.id,
+      programId: doc?.program_id ?? null,
+      programName: doc?.programs?.name ?? 'Unknown program',
+      createdAt: r.created_at,
+      expiresAt: r.expires_at,
+      revokedAt: r.revoked_at,
+      viewCount: r.view_count ?? 0,
+      lastViewedAt: r.last_viewed_at,
+      status,
+    };
+  });
+}
+
 // ─── Callouts ─────────────────────────────────────────────
 // Issue-tracking + discussion on estimates. INTERNAL ONLY — these tables are never joined into
 // RawEstimate / DeckContract / ProposalDocument, so callout text cannot reach a client document.
