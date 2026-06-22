@@ -1423,6 +1423,35 @@ export async function getBudgetForProgram(programId: string): Promise<BudgetDocu
   };
 }
 
+export interface ActiveBudgetShare {
+  id: string;
+  expires_at: string;
+  revoked_at: string | null;
+  view_count: number;
+  last_viewed_at: string | null;
+  created_at: string;
+}
+
+// Most-recent non-revoked share for a program's budget (metadata only — never the token/snapshot).
+export async function getActiveBudgetShare(programId: string): Promise<ActiveBudgetShare | null> {
+  const supabase = await createClient();
+  const { data: doc } = await supabase
+    .from('budget_documents')
+    .select('id')
+    .eq('program_id', programId)
+    .maybeSingle();
+  if (!doc) return null;
+  const { data } = await supabase
+    .from('budget_shares')
+    .select('id, expires_at, revoked_at, view_count, last_viewed_at, created_at')
+    .eq('budget_document_id', doc.id)
+    .is('revoked_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data ?? null) as ActiveBudgetShare | null;
+}
+
 // ─── Callouts ─────────────────────────────────────────────
 // Issue-tracking + discussion on estimates. INTERNAL ONLY — these tables are never joined into
 // RawEstimate / DeckContract / ProposalDocument, so callout text cannot reach a client document.

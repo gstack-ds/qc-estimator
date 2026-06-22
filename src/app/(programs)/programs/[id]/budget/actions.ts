@@ -11,6 +11,9 @@ import {
   getBudgetForProgram,
 } from '@/lib/supabase/queries';
 import { buildBudgetProgramConfig, deriveEstimateValue } from '@/lib/budget/deriveEstimates';
+import { buildBudgetShareContract } from '@/lib/budget/budgetShareContract';
+import { generateShareToken, hashShareToken } from '@/lib/budget/shareToken';
+import { getEventsForProgram } from '@/lib/supabase/queries';
 import { assignTiersByRank, type BudgetMode, type BudgetTier, modeToToggles, type BudgetMember } from '@/lib/budget/budgetDocument';
 
 const ALL_TIERS: BudgetTier[] = ['low', 'mid', 'high'];
@@ -335,6 +338,73 @@ export async function breakOutLine(lineId: string, programId: string): Promise<{
 
   const { error: delErr } = await supabase.from('budget_lines').delete().eq('id', lineId);
   if (delErr) return { error: delErr.message };
+  revalidate(programId);
+  return {};
+}
+
+// ── Share link (Phase 2 — VIEW-ONLY) ─────────────────────────────────────────
+// Builds a client-safe snapshot, stores only the token HASH, returns the raw token ONCE.
+const EXPIRY_DAYS = new Set([14, 30, 60]);
+
+export async function createBudgetShare(
+  programId: string,
+  documentId: string,
+  expiryDays: number,
+): Promise<{ token?: string; error?: string }> {
+  const supabase = await createClient();
+  const [budget, program, dbEvents] = await Promise.all([
+    getBudgetForProgram(programId),
+    getProgram(programId),
+    getEventsForProgram(programId),
+  ]);
+  if (!budget || budget.id !== documentId) return { error: 'Budget not found.' };
+  if (!program) return { error: 'Program not found.' };
+
+  const snapshot = buildBudgetShareContract({
+    programName: program.name,
+    guestCount: program.guest_count,
+    events: dbEvents.map((e) => ({ id: e.id, name: e.name })),
+    lines: budget.lines,
+    disclaimers: budget.disclaimers,
+  });
+
+  const token = generateShareToken();
+  const tokenHash = hashShareToken(token);
+  const days = EXPIRY_DAYS.has(expiryDays) ? expiryDays : 30;
+  const expiresAt = new Date(Date.now() + days * 86_400_000).toISOString();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // One active link per budget: revoke any prior active share (regenerate semantics).
+  await supabase
+    .from('budget_shares')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('budget_document_id', documentId)
+    .is('revoked_at', null);
+
+  const { error } = await supabase.from('budget_shares').insert({
+    budget_document_id: documentId,
+    token_hash: tokenHash,
+    snapshot,
+    created_by: user?.id ?? null,
+    expires_at: expiresAt,
+  });
+  if (error) return { error: error.message };
+
+  revalidate(programId);
+  return { token };
+}
+
+export async function revokeBudgetShare(shareId: string, programId: string): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  // Scope the revoke to THIS program's budget — never let a share be revoked by bare id.
+  const budget = await getBudgetForProgram(programId);
+  if (!budget) return { error: 'Budget not found.' };
+  const { error } = await supabase
+    .from('budget_shares')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('id', shareId)
+    .eq('budget_document_id', budget.id);
+  if (error) return { error: error.message };
   revalidate(programId);
   return {};
 }
