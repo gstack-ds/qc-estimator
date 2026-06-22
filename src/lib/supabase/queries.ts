@@ -1496,6 +1496,76 @@ export async function getAllShareLinks(): Promise<ShareLinkRow[]> {
   });
 }
 
+// Client capture responses (Phase 3). Returns null/[] gracefully before migration 053 runs.
+export interface BudgetResponseLineSelection {
+  lineId: string;
+  tier?: 'low' | 'mid' | 'high';
+  guestCount?: number;
+}
+export interface BudgetResponseView {
+  id: string;
+  submittedAt: string;
+  computedTotal: number;
+  notes: string | null;
+  lineSelections: BudgetResponseLineSelection[];
+  categoryTargets: { eventId: string; amount: number }[];
+  computedByEvent: Record<string, number>;
+  // Names resolved from the share snapshot the client actually saw.
+  lineNames: Record<string, string>;
+  eventNames: Record<string, string>;
+}
+
+export async function getBudgetResponses(programId: string): Promise<BudgetResponseView[]> {
+  const supabase = await createClient();
+  const { data: doc } = await supabase
+    .from('budget_documents')
+    .select('id')
+    .eq('program_id', programId)
+    .maybeSingle();
+  if (!doc) return [];
+
+  const { data: shares, error: shareErr } = await supabase
+    .from('budget_shares')
+    .select('id, snapshot')
+    .eq('budget_document_id', doc.id);
+  if (shareErr || !shares || shares.length === 0) return [];
+
+  const snapshotByShare = new Map(shares.map((s) => [s.id, s.snapshot]));
+  const { data: responses, error: respErr } = await supabase
+    .from('budget_share_responses')
+    .select('id, share_id, selections, computed_total, client_notes, submitted_at')
+    .in('share_id', shares.map((s) => s.id))
+    .order('submitted_at', { ascending: false });
+  if (respErr || !responses) return [];
+
+  return responses.map((r) => {
+    const snap = (snapshotByShare.get(r.share_id) ?? {}) as {
+      lines?: { id: string; name: string }[];
+      events?: { id: string; name: string }[];
+    };
+    const lineNames: Record<string, string> = {};
+    for (const l of snap.lines ?? []) lineNames[l.id] = l.name;
+    const eventNames: Record<string, string> = {};
+    for (const e of snap.events ?? []) eventNames[e.id] = e.name;
+    const sel = (r.selections ?? {}) as {
+      lineSelections?: BudgetResponseLineSelection[];
+      categoryTargets?: { eventId: string; amount: number }[];
+      computedByEvent?: Record<string, number>;
+    };
+    return {
+      id: r.id,
+      submittedAt: r.submitted_at,
+      computedTotal: Number(r.computed_total),
+      notes: r.client_notes,
+      lineSelections: sel.lineSelections ?? [],
+      categoryTargets: sel.categoryTargets ?? [],
+      computedByEvent: sel.computedByEvent ?? {},
+      lineNames,
+      eventNames,
+    };
+  });
+}
+
 // ─── Callouts ─────────────────────────────────────────────
 // Issue-tracking + discussion on estimates. INTERNAL ONLY — these tables are never joined into
 // RawEstimate / DeckContract / ProposalDocument, so callout text cannot reach a client document.

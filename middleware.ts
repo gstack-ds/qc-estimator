@@ -1,11 +1,13 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
-import { isPublicSharePath } from '@/lib/budget/sharePath';
+import { isPublicBudgetSurface } from '@/lib/budget/sharePath';
 
 export async function middleware(request: NextRequest) {
-  // Public, no-login budget share links (/b/<token>) bypass auth entirely — and must never be
-  // indexed or cached. Checked FIRST so this path never touches Supabase or the auth gate.
-  if (isPublicSharePath(request.nextUrl.pathname)) {
+  // Public, no-login budget-share surfaces — the view page (/b/<token>) and the client-capture
+  // write endpoint (/api/budget/<token>/respond) — bypass auth entirely, and must never be indexed
+  // or cached. Checked FIRST so these never touch Supabase or the auth gate. Each does its own
+  // token validation server-side.
+  if (isPublicBudgetSurface(request.nextUrl.pathname)) {
     const res = NextResponse.next({ request });
     res.headers.set('X-Robots-Tag', 'noindex, nofollow');
     res.headers.set('Cache-Control', 'no-store, max-age=0, must-revalidate');

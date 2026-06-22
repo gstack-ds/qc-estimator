@@ -6,6 +6,7 @@
 import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { hashShareToken } from '@/lib/budget/shareToken';
 import BudgetDocumentView from '@/components/budget/BudgetDocumentView';
+import BudgetRespondForm from '@/components/budget/BudgetRespondForm';
 import PrintButton from '@/components/budget/PrintButton';
 import type { BudgetShareContract } from '@/lib/budget/budgetShareContract';
 
@@ -64,6 +65,7 @@ export default async function PublicBudgetSharePage({ params }: Props) {
         <PrintButton />
       </div>
       <BudgetDocumentView contract={contract} />
+      <BudgetRespondForm contract={contract} token={token} />
     </main>
   );
 }

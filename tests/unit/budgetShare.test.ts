@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { buildBudgetShareContract, type BudgetShareContract } from '@/lib/budget/budgetShareContract';
-import { isPublicSharePath } from '@/lib/budget/sharePath';
+import { isPublicSharePath, isPublicShareApi, isPublicBudgetSurface } from '@/lib/budget/sharePath';
 import BudgetDocumentView from '@/components/budget/BudgetDocumentView';
 import type { BudgetLine, BudgetMember } from '@/lib/budget/budgetDocument';
 
@@ -82,6 +82,22 @@ describe('isPublicSharePath — middleware allow-list (both directions)', () => 
   it('does NOT open authed routes', () => {
     for (const p of ['/', '/programs', '/programs/123', '/programs/123/budget', '/admin', '/leads', '/venues', '/b', '/budget', '/bb/x']) {
       expect(isPublicSharePath(p)).toBe(false);
+    }
+  });
+
+  it('lets ONLY the public capture endpoint through, nothing else under /api/budget', () => {
+    // The exact respond endpoint must bypass the auth gate (logged-out client posts here).
+    expect(isPublicShareApi('/api/budget/abc123/respond')).toBe(true);
+    expect(isPublicShareApi('/api/budget/some-long_token/respond')).toBe(true);
+    expect(isPublicBudgetSurface('/api/budget/abc123/respond')).toBe(true);
+    expect(isPublicBudgetSurface('/b/abc123')).toBe(true);
+    // Anything else under /api/budget (or any other route) stays GATED — the bypass is exact.
+    for (const p of [
+      '/api/budget', '/api/budget/abc123', '/api/budget/abc123/delete', '/api/budget/admin/clear',
+      '/api/budget/respond', '/api/scanner/run', '/api/render-deck', '/programs', '/admin',
+    ]) {
+      expect(isPublicShareApi(p)).toBe(false);
+      expect(isPublicBudgetSurface(p)).toBe(false);
     }
   });
 });
