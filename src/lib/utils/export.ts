@@ -7,6 +7,9 @@ export interface LineItemForExport {
   name: string;
   label?: string;
   section: string;
+  // Section identity. Two sections can share a display name, so grouping/rendering keys off the id
+  // (falling back to the name only when no id is present, e.g. legacy/synthetic data).
+  sectionId?: string;
   qty: number;
   unitPrice: number;
   categoryMarkupPct: number;
@@ -34,6 +37,49 @@ export function itemClientCost(li: LineItemForExport): number {
     return li.qty * li.customClientUnitPrice;
   }
   return li.qty * li.unitPrice * (1 + li.categoryMarkupPct);
+}
+
+// ─── Section grouping (proposal PDF) ──────────────────────────────────────────
+// A section is identified by id, not display name. Two sections may share a name (e.g. two
+// "FLORALS" blocks); each must render ONLY its own items. Matching is by id, falling back to the
+// name only when an item/section carries no id (legacy/synthetic data) — never name-on-id, so
+// same-named sections never pull each other's items.
+
+export interface OrderedSection {
+  id: string;
+  name: string;
+}
+export interface SectionGroup {
+  id: string;
+  name: string;
+  items: LineItemForExport[];
+}
+
+// Key by section id; fall back to the display name only when there's no usable id (treat an empty
+// string the same as missing). With a real id, two same-named sections never collide.
+const sectionKey = (li: LineItemForExport): string =>
+  li.sectionId && li.sectionId.length > 0 ? li.sectionId : li.section;
+
+export function groupLineItemsBySections(
+  lineItems: LineItemForExport[],
+  orderedSections?: OrderedSection[],
+): SectionGroup[] {
+  let entries: OrderedSection[];
+  if (orderedSections && orderedSections.length > 0) {
+    // Caller order (preserves drag-and-drop). Keyed by section id.
+    entries = orderedSections.map((s) => ({ id: s.id, name: s.name }));
+  } else {
+    // Fallback: derive unique sections from the items, first-appearance order.
+    const seen = new Set<string>();
+    entries = [];
+    for (const li of lineItems) {
+      const k = sectionKey(li);
+      if (!seen.has(k)) { seen.add(k); entries.push({ id: k, name: li.section }); }
+    }
+  }
+  return entries
+    .map((s) => ({ id: s.id, name: s.name, items: lineItems.filter((li) => sectionKey(li) === s.id) }))
+    .filter((g) => g.items.length > 0);
 }
 
 export function splitStaffingEquipment(

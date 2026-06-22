@@ -1099,7 +1099,7 @@ export default function EstimateBuilder({
               summary={summary}
               guestCount={program.guest_count}
               lineItems={lineItems}
-              orderedSections={[...sections].sort((a, b) => a.sortOrder - b.sortOrder).map((s) => s.name)}
+              orderedSections={[...sections].sort((a, b) => a.sortOrder - b.sortOrder).map((s) => ({ id: s.id, name: s.name }))}
               markups={markups}
               taxExempt={est.taxExempt}
               location={effectiveLocation}
