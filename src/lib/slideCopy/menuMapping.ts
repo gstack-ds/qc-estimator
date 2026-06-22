@@ -1,5 +1,6 @@
 import type { ExtractedMenuItem } from '@/app/(programs)/programs/[id]/estimates/actions';
 import type { MenuCourse, MenuOption } from '@/types/slideCopy';
+import { parseMaxSelections } from './vendorProfileMapping';
 
 export function extractedMenuToMenuCourses(items: ExtractedMenuItem[]): MenuCourse[] {
   return items
@@ -31,7 +32,11 @@ export function extractedMenuToMenuCourses(items: ExtractedMenuItem[]): MenuCour
       return {
         name: item.name,
         selectionRule: item.selectionRule,
-        maxSelections: item.maxSelections,
+        // Derive the count from the rule when extraction didn't emit it (e.g. "please choose one" → 1),
+        // matching the vendor-library path so attachment menus get the same choose-N behavior.
+        maxSelections: scenario === 'needs_selection'
+          ? (item.maxSelections ?? parseMaxSelections(item.selectionRule))
+          : item.maxSelections,
         scenario,
         options,
       };
