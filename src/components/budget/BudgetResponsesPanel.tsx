@@ -3,7 +3,7 @@
 // auto-applied to the estimate. Notes are rendered as plain text (React escapes by default).
 
 import type { BudgetResponseView } from '@/lib/supabase/queries';
-import MarkResponsesViewed from './MarkResponsesViewed';
+import { MarkReadButton, MarkAllReadButton } from './MarkResponsesViewed';
 
 function fmtMoney(n: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
@@ -16,7 +16,7 @@ const TIER_LABEL: Record<string, string> = { low: 'Low', mid: 'Mid', high: 'High
 export default function BudgetResponsesPanel({ programId, responses }: { programId: string; responses: BudgetResponseView[] }) {
   if (responses.length === 0) {
     return (
-      <div className="border border-brand-cream rounded-xl p-5 bg-white">
+      <div id="client-responses" className="border border-brand-cream rounded-xl p-5 bg-white scroll-mt-20">
         <h2 className="text-base font-serif text-brand-charcoal">Client responses</h2>
         <p className="text-sm text-brand-silver mt-1">
           No responses yet. When a client adjusts and submits the share link, their versions appear here.
@@ -28,9 +28,7 @@ export default function BudgetResponsesPanel({ programId, responses }: { program
   const unreadCount = responses.filter((r) => r.viewedAt == null).length;
 
   return (
-    <div className="border border-brand-cream rounded-xl p-5 bg-white space-y-4">
-      {/* Opening this panel clears the "new" indicator for the whole team. */}
-      <MarkResponsesViewed programId={programId} unreadCount={unreadCount} />
+    <div id="client-responses" className="border border-brand-cream rounded-xl p-5 bg-white space-y-4 scroll-mt-20">
       <div className="flex items-center gap-2 flex-wrap">
         <h2 className="text-base font-serif text-brand-charcoal">Client responses</h2>
         {unreadCount > 0 && (
@@ -38,25 +36,32 @@ export default function BudgetResponsesPanel({ programId, responses }: { program
             {unreadCount} new
           </span>
         )}
+        <div className="flex-1" />
+        {unreadCount > 0 && <MarkAllReadButton programId={programId} />}
       </div>
       <p className="text-xs text-brand-silver -mt-2">
         {responses.length} submitted version{responses.length === 1 ? '' : 's'}, newest first. Review and apply changes manually.
       </p>
 
       <div className="space-y-3">
-        {responses.map((r, i) => (
-          <div key={r.id} className="border border-brand-cream rounded-lg overflow-hidden">
-            <div className="bg-brand-offwhite px-4 py-2.5 flex items-center justify-between">
+        {responses.map((r, i) => {
+          const isNew = r.viewedAt == null;
+          return (
+          <div key={r.id} className={`border rounded-lg overflow-hidden ${isNew ? 'border-amber-300 ring-1 ring-amber-200' : 'border-brand-cream'}`}>
+            <div className={`px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap ${isNew ? 'bg-amber-50' : 'bg-brand-offwhite'}`}>
               <div className="text-sm text-brand-charcoal flex items-center gap-2 flex-wrap">
-                {r.viewedAt == null && (
+                {isNew && (
                   <span className="text-[10px] uppercase tracking-widest font-semibold px-1.5 py-0.5 rounded-full bg-amber-500 text-white leading-none">New</span>
                 )}
                 {i === 0 && <span className="text-[10px] uppercase tracking-widest text-brand-copper">Latest</span>}
                 <span>Submitted {fmtDateTime(r.submittedAt)}</span>
               </div>
-              <div className="text-sm">
-                <span className="text-brand-silver text-xs uppercase tracking-wide mr-2">Their total</span>
-                <span className="font-semibold text-brand-charcoal tabular-nums">{fmtMoney(r.computedTotal)}</span>
+              <div className="flex items-center gap-3 text-sm">
+                {isNew && <MarkReadButton responseId={r.id} programId={programId} />}
+                <span>
+                  <span className="text-brand-silver text-xs uppercase tracking-wide mr-2">Their total</span>
+                  <span className="font-semibold text-brand-charcoal tabular-nums">{fmtMoney(r.computedTotal)}</span>
+                </span>
               </div>
             </div>
 
@@ -114,7 +119,8 @@ export default function BudgetResponsesPanel({ programId, responses }: { program
               )}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

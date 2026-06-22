@@ -240,6 +240,15 @@ export default function ProgramsTable({ programs }: Props) {
                           Staffing: {program.staffing_needs_count} open
                         </span>
                       )}
+                      {program.unread_response_count > 0 && (
+                        <Link
+                          href={`/programs/${program.id}/budget#client-responses`}
+                          onClick={stopProp}
+                          className="text-[10px] font-semibold bg-amber-500 text-white rounded-full px-2 py-0.5 hover:bg-amber-600 transition-colors"
+                        >
+                          {program.unread_response_count} new response{program.unread_response_count === 1 ? '' : 's'} →
+                        </Link>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3">

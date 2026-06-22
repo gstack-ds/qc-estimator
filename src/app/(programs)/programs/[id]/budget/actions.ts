@@ -458,6 +458,38 @@ export async function markResponsesViewed(programId: string): Promise<{ error?: 
   return {};
 }
 
+// Mark ONE response viewed — the deliberate per-response action (clicking "Mark as read" on a
+// specific response). Service-role write (no authenticated UPDATE policy), auth-gated.
+export async function markResponseViewed(responseId: string, programId: string): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return {};
+
+  // Scope to THIS program's shares (matches markResponsesViewed) so the response can only be
+  // marked in the context of the program it belongs to.
+  const { data: doc } = await supabase
+    .from('budget_documents').select('id').eq('program_id', programId).maybeSingle();
+  if (!doc) return {};
+  const { data: shares } = await supabase
+    .from('budget_shares').select('id').eq('budget_document_id', doc.id);
+  if (!shares || shares.length === 0) return {};
+
+  const admin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } },
+  );
+  const { error } = await admin
+    .from('budget_share_responses')
+    .update({ viewed_at: new Date().toISOString() })
+    .eq('id', responseId)
+    .in('share_id', shares.map((s) => s.id))
+    .is('viewed_at', null);
+  if (error) return { error: error.message };
+  revalidate(programId);
+  return {};
+}
+
 // ── Refresh from estimates (re-derive values; keep overrides; add new estimates) ──
 export async function refreshFromEstimates(documentId: string, programId: string): Promise<{ error?: string }> {
   const supabase = await createClient();

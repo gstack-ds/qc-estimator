@@ -132,11 +132,12 @@ export interface DbProgramSummary {
   lead_id: string | null;
   program_type: string | null;
   staffing_needs_count: number;
+  unread_response_count: number;
 }
 
 export async function getPrograms(): Promise<DbProgramSummary[]> {
   const supabase = await createClient();
-  const [programsResult, staffingResult] = await Promise.all([
+  const [programsResult, staffingResult, unreadByProgram] = await Promise.all([
     supabase
       .from('programs')
       .select('id, name, client_name, event_date, status, archived_at, created_at, updated_at, latest_total, lead_id, program_type, estimates(count)')
@@ -145,6 +146,7 @@ export async function getPrograms(): Promise<DbProgramSummary[]> {
       .from('program_staffing')
       .select('program_id')
       .eq('status', 'needs_staffing'),
+    getUnreadResponseCountByProgram(),
   ]);
   if (programsResult.error) throw new Error(programsResult.error.message);
   const openCounts: Record<string, number> = {};
@@ -165,6 +167,7 @@ export async function getPrograms(): Promise<DbProgramSummary[]> {
     program_type: (p as unknown as { program_type: string | null }).program_type ?? null,
     estimate_count: (p.estimates as unknown as [{ count: number }])[0]?.count ?? 0,
     staffing_needs_count: openCounts[p.id] ?? 0,
+    unread_response_count: unreadByProgram[p.id] ?? 0,
   }));
 }
 
@@ -1579,6 +1582,24 @@ export async function getUnreadResponseCount(): Promise<number> {
     .is('viewed_at', null);
   if (error) return 0;
   return count ?? 0;
+}
+
+// New (unviewed) response count per program id — for the programs-list "N new" badge that lets
+// the team click through from the nav roll-up to the program with new responses.
+export async function getUnreadResponseCountByProgram(): Promise<Record<string, number>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('budget_share_responses')
+    .select('id, budget_shares(budget_documents(program_id))')
+    .is('viewed_at', null);
+  if (error || !data) return {};
+  const counts: Record<string, number> = {};
+  for (const r of data) {
+    const share = (r.budget_shares as unknown) as { budget_documents: { program_id: string | null } | null } | null;
+    const programId = share?.budget_documents?.program_id;
+    if (programId) counts[programId] = (counts[programId] ?? 0) + 1;
+  }
+  return counts;
 }
 
 // ─── Callouts ─────────────────────────────────────────────
