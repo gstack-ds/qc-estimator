@@ -53,7 +53,7 @@ export default async function ProgramBudgetPage({ params }: Props) {
         <BudgetSharePanel programId={id} documentId={budget.id} activeShare={activeShare} />
       )}
 
-      {budget && <BudgetResponsesPanel responses={responses} />}
+      {budget && <BudgetResponsesPanel programId={id} responses={responses} />}
     </div>
   );
 }

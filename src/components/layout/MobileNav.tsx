@@ -48,7 +48,8 @@ export default function MobileNav({ links, email }: Props) {
       {open && (
         <div className="absolute top-full right-0 mt-1 w-56 bg-brand-charcoal border border-black/30 rounded-lg shadow-xl z-50 py-2">
           {links.map(({ href, label, badge }) => {
-            const isActive = pathname.startsWith(href);
+            // Compare path only — a query/hash on the href (e.g. /programs?new=1) must not break the match.
+            const isActive = pathname.startsWith(href.split(/[?#]/)[0]);
             return (
               <Link
                 key={href}

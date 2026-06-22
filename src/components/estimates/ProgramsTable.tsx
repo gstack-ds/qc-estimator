@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useTransition } from 'react';
+import { useState, useMemo, useTransition, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { DbProgramSummary } from '@/lib/supabase/queries';
@@ -13,6 +13,9 @@ interface Props {
 }
 
 const STATUS_TABS: ProgramStatus[] = ['active', 'completed', 'did_not_book'];
+// 'responses' is a pseudo-tab: programs with new (unviewed) client budget responses, regardless of
+// status. Same condition as the nav badge (unread_response_count > 0) so the two stay consistent.
+type TabKey = ProgramStatus | 'responses';
 
 type SortKey = 'event_date' | 'name' | 'client_name' | 'updated_at';
 type SortDir = 'asc' | 'desc';
@@ -29,18 +32,40 @@ export default function ProgramsTable({ programs }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [query, setQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<ProgramStatus>('active');
+  const [activeTab, setActiveTab] = useState<TabKey>('active');
   const [typeFilter, setTypeFilter] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('event_date');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
-  const counts = useMemo(() => ({
+  const counts = useMemo((): Record<TabKey, number> => ({
     active: programs.filter((p) => p.status === 'active').length,
     completed: programs.filter((p) => p.status === 'completed').length,
     did_not_book: programs.filter((p) => p.status === 'did_not_book').length,
+    responses: programs.filter((p) => p.unread_response_count > 0).length,
   }), [programs]);
+
+  const TABS: { key: TabKey; label: string }[] = [
+    ...STATUS_TABS.map((s) => ({ key: s as TabKey, label: STATUS_LABELS[s] })),
+    { key: 'responses', label: 'Budget Responses' },
+  ];
+
+  // Snap-to: when arriving via the Programs nav badge (/programs?new=1), open the Budget Responses
+  // filter and scroll the first program with new responses into view — no hunting. Fires once.
+  const snapped = useRef(false);
+  useEffect(() => {
+    if (snapped.current || typeof window === 'undefined') return;
+    if (new URLSearchParams(window.location.search).get('new') !== '1') return;
+    snapped.current = true;
+    setActiveTab('responses');
+    const first = programs.find((p) => p.unread_response_count > 0);
+    if (!first) return;
+    const t = setTimeout(() => {
+      document.getElementById(`prog-${first.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 80);
+    return () => clearTimeout(t);
+  }, [programs]);
 
   const allTypes = useMemo(() => {
     const types = programs.map((p) => p.program_type).filter((t): t is string => !!t);
@@ -48,7 +73,9 @@ export default function ProgramsTable({ programs }: Props) {
   }, [programs]);
 
   const filtered = useMemo(() => {
-    let base = programs.filter((p) => p.status === activeTab);
+    let base = activeTab === 'responses'
+      ? programs.filter((p) => p.unread_response_count > 0)
+      : programs.filter((p) => p.status === activeTab);
     if (query.trim()) {
       const q = query.toLowerCase();
       base = base.filter((p) =>
@@ -68,7 +95,7 @@ export default function ProgramsTable({ programs }: Props) {
       const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [programs, activeTab, query, sortKey, sortDir]);
+  }, [programs, activeTab, query, typeFilter, sortKey, sortDir]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => d === 'asc' ? 'desc' : 'asc');
@@ -94,20 +121,20 @@ export default function ProgramsTable({ programs }: Props) {
     <div className="space-y-4">
       {/* Status tabs */}
       <div className="border-b border-brand-cream pb-3">
-        <div className="flex items-center gap-1">
-          {STATUS_TABS.map((tab) => (
+        <div className="flex items-center gap-1 flex-wrap">
+          {TABS.map((tab) => (
             <button
-              key={tab}
-              onClick={() => { setActiveTab(tab); setSelectedIds(new Set()); }}
+              key={tab.key}
+              onClick={() => { setActiveTab(tab.key); setSelectedIds(new Set()); }}
               className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                activeTab === tab
+                activeTab === tab.key
                   ? 'bg-brand-charcoal text-white'
                   : 'text-brand-charcoal/60 hover:text-brand-charcoal hover:bg-brand-cream/50'
               }`}
             >
-              {STATUS_LABELS[tab]}
-              <span className={`ml-1.5 text-[10px] ${activeTab === tab ? 'opacity-70' : 'text-brand-silver'}`}>
-                {counts[tab]}
+              {tab.label}
+              <span className={`ml-1.5 text-[10px] ${activeTab === tab.key ? 'opacity-70' : 'text-brand-silver'}`}>
+                {counts[tab.key]}
               </span>
             </button>
           ))}
@@ -146,7 +173,11 @@ export default function ProgramsTable({ programs }: Props) {
       {filtered.length === 0 ? (
         <div className="text-center py-16 border border-dashed border-brand-cream rounded-lg">
           <p className="text-sm text-brand-silver">
-            {query ? 'No programs match your search.' : `No ${STATUS_LABELS[activeTab].toLowerCase()} programs.`}
+            {query
+              ? 'No programs match your search.'
+              : activeTab === 'responses'
+                ? 'No programs with new client responses.'
+                : `No ${STATUS_LABELS[activeTab].toLowerCase()} programs.`}
           </p>
           {!query && activeTab === 'active' && (
             <Link href="/programs/new" className="text-brand-brown text-sm hover:text-brand-charcoal mt-2 inline-block transition-colors">
@@ -195,7 +226,8 @@ export default function ProgramsTable({ programs }: Props) {
               {filtered.map((program) => (
                 <tr
                   key={program.id}
-                  className="hover:bg-brand-offwhite transition-colors cursor-pointer"
+                  id={`prog-${program.id}`}
+                  className="hover:bg-brand-offwhite transition-colors cursor-pointer scroll-mt-24"
                   onClick={() => router.push(`/programs/${program.id}`)}
                 >
                   <td className="px-4 py-3" onClick={stopProp}>
@@ -239,6 +271,15 @@ export default function ProgramsTable({ programs }: Props) {
                         <span className="text-[10px] font-medium bg-red-100 text-red-700 rounded px-1.5 py-0.5">
                           Staffing: {program.staffing_needs_count} open
                         </span>
+                      )}
+                      {program.unread_response_count > 0 && (
+                        <Link
+                          href={`/programs/${program.id}/budget#client-responses`}
+                          onClick={stopProp}
+                          className="text-[10px] font-semibold bg-amber-500 text-white rounded-full px-2 py-0.5 hover:bg-amber-600 transition-colors"
+                        >
+                          {program.unread_response_count} new response{program.unread_response_count === 1 ? '' : 's'} →
+                        </Link>
                       )}
                     </div>
                   </td>
