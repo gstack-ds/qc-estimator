@@ -3,6 +3,7 @@
 // auto-applied to the estimate. Notes are rendered as plain text (React escapes by default).
 
 import type { BudgetResponseView } from '@/lib/supabase/queries';
+import MarkResponsesViewed from './MarkResponsesViewed';
 
 function fmtMoney(n: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
@@ -12,7 +13,7 @@ function fmtDateTime(iso: string): string {
 }
 const TIER_LABEL: Record<string, string> = { low: 'Low', mid: 'Mid', high: 'High' };
 
-export default function BudgetResponsesPanel({ responses }: { responses: BudgetResponseView[] }) {
+export default function BudgetResponsesPanel({ programId, responses }: { programId: string; responses: BudgetResponseView[] }) {
   if (responses.length === 0) {
     return (
       <div className="border border-brand-cream rounded-xl p-5 bg-white">
@@ -24,22 +25,34 @@ export default function BudgetResponsesPanel({ responses }: { responses: BudgetR
     );
   }
 
+  const unreadCount = responses.filter((r) => r.viewedAt == null).length;
+
   return (
     <div className="border border-brand-cream rounded-xl p-5 bg-white space-y-4">
-      <div>
+      {/* Opening this panel clears the "new" indicator for the whole team. */}
+      <MarkResponsesViewed programId={programId} unreadCount={unreadCount} />
+      <div className="flex items-center gap-2 flex-wrap">
         <h2 className="text-base font-serif text-brand-charcoal">Client responses</h2>
-        <p className="text-xs text-brand-silver mt-0.5">
-          {responses.length} submitted version{responses.length === 1 ? '' : 's'}, newest first. Review and apply changes manually.
-        </p>
+        {unreadCount > 0 && (
+          <span className="inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1.5 text-[10px] font-semibold rounded-full bg-amber-500 text-white leading-none">
+            {unreadCount} new
+          </span>
+        )}
       </div>
+      <p className="text-xs text-brand-silver -mt-2">
+        {responses.length} submitted version{responses.length === 1 ? '' : 's'}, newest first. Review and apply changes manually.
+      </p>
 
       <div className="space-y-3">
         {responses.map((r, i) => (
           <div key={r.id} className="border border-brand-cream rounded-lg overflow-hidden">
             <div className="bg-brand-offwhite px-4 py-2.5 flex items-center justify-between">
-              <div className="text-sm text-brand-charcoal">
-                {i === 0 && <span className="text-[10px] uppercase tracking-widest text-brand-copper mr-2">Latest</span>}
-                Submitted {fmtDateTime(r.submittedAt)}
+              <div className="text-sm text-brand-charcoal flex items-center gap-2 flex-wrap">
+                {r.viewedAt == null && (
+                  <span className="text-[10px] uppercase tracking-widest font-semibold px-1.5 py-0.5 rounded-full bg-amber-500 text-white leading-none">New</span>
+                )}
+                {i === 0 && <span className="text-[10px] uppercase tracking-widest text-brand-copper">Latest</span>}
+                <span>Submitted {fmtDateTime(r.submittedAt)}</span>
               </div>
               <div className="text-sm">
                 <span className="text-brand-silver text-xs uppercase tracking-wide mr-2">Their total</span>

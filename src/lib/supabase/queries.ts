@@ -1510,6 +1510,8 @@ export interface BudgetResponseView {
   lineSelections: BudgetResponseLineSelection[];
   categoryTargets: { eventId: string; amount: number }[];
   computedByEvent: Record<string, number>;
+  // null = not yet opened by the team (a "new" response).
+  viewedAt: string | null;
   // Names resolved from the share snapshot the client actually saw.
   lineNames: Record<string, string>;
   eventNames: Record<string, string>;
@@ -1533,7 +1535,7 @@ export async function getBudgetResponses(programId: string): Promise<BudgetRespo
   const snapshotByShare = new Map(shares.map((s) => [s.id, s.snapshot]));
   const { data: responses, error: respErr } = await supabase
     .from('budget_share_responses')
-    .select('id, share_id, selections, computed_total, client_notes, submitted_at')
+    .select('id, share_id, selections, computed_total, client_notes, submitted_at, viewed_at')
     .in('share_id', shares.map((s) => s.id))
     .order('submitted_at', { ascending: false });
   if (respErr || !responses) return [];
@@ -1560,10 +1562,23 @@ export async function getBudgetResponses(programId: string): Promise<BudgetRespo
       lineSelections: sel.lineSelections ?? [],
       categoryTargets: sel.categoryTargets ?? [],
       computedByEvent: sel.computedByEvent ?? {},
+      viewedAt: (r as { viewed_at?: string | null }).viewed_at ?? null,
       lineNames,
       eventNames,
     };
   });
+}
+
+// Global count of NEW (unviewed) client budget responses across all programs — the nav roll-up.
+// Shared team pool. Returns 0 gracefully if migration 055 hasn't run yet.
+export async function getUnreadResponseCount(): Promise<number> {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from('budget_share_responses')
+    .select('id', { count: 'exact', head: true })
+    .is('viewed_at', null);
+  if (error) return 0;
+  return count ?? 0;
 }
 
 // ─── Callouts ─────────────────────────────────────────────

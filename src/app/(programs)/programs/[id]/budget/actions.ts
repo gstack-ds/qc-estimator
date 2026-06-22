@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
 import {
   getProgram,
   getEstimatesForProgram,
@@ -414,6 +415,44 @@ export async function revokeBudgetShare(shareId: string, programId: string): Pro
     .update({ revoked_at: new Date().toISOString() })
     .eq('id', shareId)
     .eq('budget_document_id', budget.id);
+  if (error) return { error: error.message };
+  revalidate(programId);
+  return {};
+}
+
+// ── Mark client responses as viewed (clears the "new" indicator — shared team pool) ──
+// Called when the team opens the program's Client responses panel. Marks every still-unviewed
+// response for this program's shares as viewed. Idempotent: re-opens are no-ops.
+// budget_share_responses has NO authenticated UPDATE policy (writes are service-role only, like
+// the respond endpoint), so this write uses the service-role client — gated by an explicit auth
+// check since admin bypasses RLS, and scoped in code to only this program's responses.
+export async function markResponsesViewed(programId: string): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return {}; // internal-only; never run for an unauthenticated caller
+
+  const { data: doc } = await supabase
+    .from('budget_documents')
+    .select('id')
+    .eq('program_id', programId)
+    .maybeSingle();
+  if (!doc) return {};
+  const { data: shares } = await supabase
+    .from('budget_shares')
+    .select('id')
+    .eq('budget_document_id', doc.id);
+  if (!shares || shares.length === 0) return {};
+
+  const admin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } },
+  );
+  const { error } = await admin
+    .from('budget_share_responses')
+    .update({ viewed_at: new Date().toISOString() })
+    .in('share_id', shares.map((s) => s.id))
+    .is('viewed_at', null);
   if (error) return { error: error.message };
   revalidate(programId);
   return {};
