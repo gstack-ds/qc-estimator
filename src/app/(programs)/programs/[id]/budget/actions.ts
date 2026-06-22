@@ -374,21 +374,31 @@ export async function createBudgetShare(
   const expiresAt = new Date(Date.now() + days * 86_400_000).toISOString();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // One active link per budget: revoke any prior active share (regenerate semantics).
-  await supabase
-    .from('budget_shares')
-    .update({ revoked_at: new Date().toISOString() })
-    .eq('budget_document_id', documentId)
-    .is('revoked_at', null);
-
-  const { error } = await supabase.from('budget_shares').insert({
+  // ONE active link per budget. Insert the new share FIRST so a failed insert never orphans the
+  // budget's existing live link; then revoke every OTHER active share for this budget. Net result
+  // on success: exactly one active link (the newest). The public route rejects revoked links, so
+  // any prior link goes dead immediately.
+  const { data: created, error } = await supabase.from('budget_shares').insert({
     budget_document_id: documentId,
     token_hash: tokenHash,
     snapshot,
     created_by: user?.id ?? null,
     expires_at: expiresAt,
-  });
-  if (error) return { error: error.message };
+  }).select('id').single();
+  if (error || !created) return { error: error?.message ?? 'Could not create the link.' };
+
+  // Revoke every OTHER active share for this budget. If this fails, the one-active-link guarantee
+  // is broken (a stale link could still be live), so surface it rather than reporting success.
+  const { error: revokeErr } = await supabase
+    .from('budget_shares')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('budget_document_id', documentId)
+    .neq('id', created.id)
+    .is('revoked_at', null);
+  if (revokeErr) {
+    revalidate(programId);
+    return { error: 'Link created, but an older link could not be revoked. Regenerate again to be safe.' };
+  }
 
   revalidate(programId);
   return { token };
