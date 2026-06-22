@@ -2,8 +2,8 @@
 // Import this file ONLY via dynamic import() inside client event handlers to avoid SSR issues.
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
 import type { EstimateSummary, Location } from '@/types';
-import type { LineItemForExport } from '@/lib/utils/export';
-import { itemClientCost } from '@/lib/utils/export';
+import type { LineItemForExport, OrderedSection } from '@/lib/utils/export';
+import { itemClientCost, groupLineItemsBySections } from '@/lib/utils/export';
 import type { TourDetails } from '@/lib/tours/types';
 import { sanitizeLineItemName, sectionDisplayLabel, sanitizeEstimateName } from '@/lib/deck/renderer';
 
@@ -82,7 +82,7 @@ export interface ProposalDocumentProps {
   guestCount: number;
   summary: EstimateSummary;
   lineItems: LineItemForExport[];
-  orderedSections?: string[];
+  orderedSections?: OrderedSection[];
   estimateType: 'venue' | 'av' | 'decor' | 'tour';
   proposalDate: string;
   taxExempt?: boolean;
@@ -110,9 +110,9 @@ export default function ProposalDocument({
 }: ProposalDocumentProps) {
   const proposalNumber = estimateId.slice(0, 8).toUpperCase();
 
-  // Use caller-supplied section order (preserves user drag-and-drop order).
-  // Fall back to insertion order from lineItems if not provided.
-  const sections = orderedSections ?? Array.from(new Set(lineItems.map((li) => li.section)));
+  // Group line items by section IDENTITY (not display name), so two sections sharing a name each
+  // render as their own block with only their own items — no shared-name double-emit.
+  const sectionGroups = groupLineItemsBySections(lineItems, orderedSections);
   const totalTax = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax + summary.productionFeeTax;
 
   return (
@@ -199,14 +199,13 @@ export default function ProposalDocument({
           })()
         )}
 
-        {/* Line items by section */}
-        {sections.map((section) => {
-          const sectionItems = lineItems.filter((li) => li.section === section);
-          if (sectionItems.length === 0) return null;
+        {/* Line items by section (grouped by section id) */}
+        {sectionGroups.map((group) => {
+          const sectionItems = group.items;
           return (
-            <View key={section} wrap={false}>
+            <View key={group.id} wrap={false}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionHeaderText}>{sectionDisplayLabel(section)}</Text>
+                <Text style={styles.sectionHeaderText}>{sectionDisplayLabel(group.name)}</Text>
               </View>
               <View style={styles.tableHeader}>
                 <Text style={[styles.tableHeaderCell, styles.colItem]}>Item</Text>

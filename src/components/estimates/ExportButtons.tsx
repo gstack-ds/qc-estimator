@@ -10,10 +10,11 @@ import {
   itemClientCost,
   type LineItemForExport,
   type MarkupForExport,
+  type OrderedSection,
 } from '@/lib/utils/export';
 import type { TourDetails } from '@/lib/tours/types';
 
-export type { LineItemForExport, MarkupForExport };
+export type { LineItemForExport, MarkupForExport, OrderedSection };
 
 interface Props {
   programId: string;
@@ -26,7 +27,7 @@ interface Props {
   guestCount: number;
   estimateType?: 'venue' | 'av' | 'decor' | 'tour';
   lineItems: LineItemForExport[];
-  orderedSections?: string[];
+  orderedSections?: OrderedSection[];
   markups: MarkupForExport[];
   taxExempt?: boolean;
   location?: Location | null;

@@ -554,7 +554,7 @@ export default function AvEstimateBuilder({
             guestCount={program.guest_count}
             estimateType="av"
             lineItems={lineItems}
-            orderedSections={[...sections].sort((a, b) => a.sortOrder - b.sortOrder).map((s) => s.name)}
+            orderedSections={[...sections].sort((a, b) => a.sortOrder - b.sortOrder).map((s) => ({ id: s.id, name: s.name }))}
             markups={markups}
             taxExempt={taxExempt}
             location={programConfig.location}

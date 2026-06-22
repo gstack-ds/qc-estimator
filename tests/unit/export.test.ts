@@ -7,8 +7,9 @@ import {
   buildSummaryRows,
   buildCopyText,
   buildDetailedCopyText,
+  groupLineItemsBySections,
 } from '../../src/lib/utils/export';
-import type { LineItemForExport, MarkupForExport } from '../../src/lib/utils/export';
+import type { LineItemForExport, MarkupForExport, OrderedSection } from '../../src/lib/utils/export';
 import type { EstimateSummary, VenueEstimateInput, ProgramConfig } from '../../src/types';
 import { calculateVenueEstimate } from '../../src/lib/engine/pricing';
 
@@ -612,5 +613,77 @@ describe('buildDetailedCopyText — row sum equals totalClient', () => {
       + allTaxes;
     // If any fee is missing from allTaxes, rowsSum < totalClient and this assertion fails
     expect(rowsSum).toBeCloseTo(summary.totalClient, 1);
+  });
+});
+
+// ─── Section grouping (proposal PDF) — same-name sections must not cross-emit ──
+
+describe('groupLineItemsBySections', () => {
+  function li(p: Partial<LineItemForExport> & { name: string; section: string }): LineItemForExport {
+    return {
+      qty: 1, unitPrice: 100, categoryMarkupPct: 0, categoryId: null, taxType: 'general', ...p,
+    };
+  }
+
+  it('renders two same-NAMED sections as distinct blocks, each with ONLY its own items', () => {
+    // Mirrors the live bug: two sections both named "FLORALS" (different ids).
+    const items: LineItemForExport[] = [
+      li({ name: 'Photo Opp Pieces', section: 'FLORALS', sectionId: 'fl-A' }),
+      li({ name: 'Product Enhancing Pieces', section: 'FLORALS', sectionId: 'fl-A' }),
+      li({ name: 'Setup/Breakdown', section: 'FLORALS', sectionId: 'fl-B' }),
+    ];
+    const ordered: OrderedSection[] = [
+      { id: 'fl-A', name: 'FLORALS' },
+      { id: 'fl-B', name: 'FLORALS' },
+    ];
+    const groups = groupLineItemsBySections(items, ordered);
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0].items.map((i) => i.name)).toEqual(['Photo Opp Pieces', 'Product Enhancing Pieces']);
+    expect(groups[1].items.map((i) => i.name)).toEqual(['Setup/Breakdown']);
+    // No item appears in more than one group (the bug was each appearing twice).
+    const allNames = groups.flatMap((g) => g.items.map((i) => i.name));
+    expect(allNames).toEqual(['Photo Opp Pieces', 'Product Enhancing Pieces', 'Setup/Breakdown']);
+  });
+
+  it('drops an empty same-named section instead of double-emitting the other one\'s items', () => {
+    // Section fl-B is named FLORALS but holds no items (the leftover dup in the live data).
+    const items: LineItemForExport[] = [
+      li({ name: 'Photo Opp Pieces', section: 'FLORALS', sectionId: 'fl-A' }),
+    ];
+    const ordered: OrderedSection[] = [
+      { id: 'fl-A', name: 'FLORALS' },
+      { id: 'fl-B', name: 'FLORALS' },
+    ];
+    const groups = groupLineItemsBySections(items, ordered);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].id).toBe('fl-A');
+    expect(groups[0].items).toHaveLength(1);
+  });
+
+  it('single sections (SIGNAGE/OTHER/STAFFING) render once each', () => {
+    const items: LineItemForExport[] = [
+      li({ name: 'Hanging Signs', section: 'SIGNAGE', sectionId: 'sig' }),
+      li({ name: 'Bin for Bin Dive', section: 'OTHER', sectionId: 'oth' }),
+      li({ name: 'QC Management Fee', section: 'STAFFING', sectionId: 'stf' }),
+    ];
+    const ordered: OrderedSection[] = [
+      { id: 'sig', name: 'SIGNAGE' }, { id: 'oth', name: 'OTHER' }, { id: 'stf', name: 'STAFFING' },
+    ];
+    const groups = groupLineItemsBySections(items, ordered);
+    expect(groups.map((g) => g.name)).toEqual(['SIGNAGE', 'OTHER', 'STAFFING']);
+    expect(groups.every((g) => g.items.length === 1)).toBe(true);
+  });
+
+  it('falls back to per-item sections (by id) when orderedSections is absent', () => {
+    const items: LineItemForExport[] = [
+      li({ name: 'A', section: 'FLORALS', sectionId: 'fl-A' }),
+      li({ name: 'B', section: 'FLORALS', sectionId: 'fl-A' }),
+      li({ name: 'C', section: 'SIGNAGE', sectionId: 'sig' }),
+    ];
+    const groups = groupLineItemsBySections(items);
+    expect(groups).toHaveLength(2);
+    expect(groups[0].items.map((i) => i.name)).toEqual(['A', 'B']);
+    expect(groups[1].items.map((i) => i.name)).toEqual(['C']);
   });
 });
