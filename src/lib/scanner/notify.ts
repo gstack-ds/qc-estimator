@@ -11,6 +11,17 @@ function getAuthClient() {
   return auth;
 }
 
+// Recipient resolution. The .env in production sets NOTIFICATION_RECIPIENTS
+// (the PRD's name, comma-separated); the original code only read NOTIFY_EMAIL,
+// so notifications silently never sent. Prefer NOTIFICATION_RECIPIENTS, fall
+// back to NOTIFY_EMAIL, support a comma list.
+function getRecipients(): string | null {
+  const raw = process.env.NOTIFICATION_RECIPIENTS ?? process.env.NOTIFY_EMAIL;
+  if (!raw) return null;
+  const list = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  return list.length ? list.join(', ') : null;
+}
+
 function encodeEmail(to: string, subject: string, body: string): string {
   const raw = [
     `To: ${to}`,
@@ -32,7 +43,7 @@ async function sendEmail(to: string, subject: string, body: string): Promise<voi
 }
 
 export async function notifyScanSummary(result: ScanResult): Promise<void> {
-  const to = process.env.NOTIFY_EMAIL;
+  const to = getRecipients();
   if (!to) return;
 
   if (result.leadsCreated === 0 && result.errors.length === 0) return;
@@ -57,7 +68,7 @@ export async function notifyScanSummary(result: ScanResult): Promise<void> {
 }
 
 export async function notifyError(context: string, err: unknown): Promise<void> {
-  const to = process.env.NOTIFY_EMAIL;
+  const to = getRecipients();
   if (!to) return;
 
   const msg = err instanceof Error ? err.message : String(err);
@@ -68,5 +79,69 @@ export async function notifyError(context: string, err: unknown): Promise<void> 
     await sendEmail(to, subject, body);
   } catch (sendErr) {
     console.error('[notify] Failed to send error notification:', sendErr);
+  }
+}
+
+// Sent by the watchdog when no successful scan has completed within the
+// threshold — surfaces ANY scanner failure (dead process, auth expiry, parse
+// breakage, API change) within hours instead of weeks.
+export async function notifyHeartbeatStale(
+  lastScanIso: string | null,
+  hoursSinceLast: number,
+  thresholdHours: number,
+): Promise<boolean> {
+  const to = getRecipients();
+  if (!to) {
+    console.error('[notify] No recipients (set NOTIFICATION_RECIPIENTS in .env) — cannot send stale-scanner alert');
+    return false;
+  }
+
+  const last = lastScanIso
+    ? `${lastScanIso} (${hoursSinceLast.toFixed(1)}h ago)`
+    : 'never recorded';
+  const subject = '[QC Scanner] ⚠ No successful scan — scanner may be down';
+  const body = [
+    'The QC lead scanner has not completed a successful scan within the expected window.',
+    'New lead emails may be going unprocessed right now.',
+    '',
+    `Last successful scan: ${last}`,
+    `Alert threshold: ${thresholdHours}h`,
+    '',
+    'Likely causes: the "QC Lead Scanner" task stopped, Gmail auth expired,',
+    'parsing broke, or Supabase/Anthropic is unreachable.',
+    'Check Task Scheduler ("QC Lead Scanner") and logs/scanner-task.log on the PC.',
+  ].join('\n');
+
+  try {
+    await sendEmail(to, subject, body);
+    console.log('[notify] Stale-scanner alert sent to', to);
+    return true;
+  } catch (sendErr) {
+    console.error('[notify] Failed to send stale-scanner alert:', sendErr);
+    return false;
+  }
+}
+
+// Manual delivery check: `run-watchdog --test`. Confirms the alert channel
+// actually reaches the inbox without faking a stale heartbeat.
+export async function notifyWatchdogTest(): Promise<boolean> {
+  const to = getRecipients();
+  if (!to) {
+    console.error('[notify] No recipients (set NOTIFICATION_RECIPIENTS in .env) — cannot send test alert');
+    return false;
+  }
+  const subject = '[QC Scanner] ✅ Watchdog test alert';
+  const body = [
+    'This is a TEST alert from the QC scanner watchdog.',
+    'If you received this, alerting is wired correctly — a real outage would notify you the same way.',
+    'No action needed.',
+  ].join('\n');
+  try {
+    await sendEmail(to, subject, body);
+    console.log('[notify] Test alert sent to', to);
+    return true;
+  } catch (sendErr) {
+    console.error('[notify] Failed to send test alert:', sendErr);
+    return false;
   }
 }
