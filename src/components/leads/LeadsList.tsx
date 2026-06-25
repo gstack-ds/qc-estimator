@@ -9,6 +9,7 @@ import LeadStatusBadge from './LeadStatusBadge';
 import { updateLead, bulkArchiveLeads, deleteLead, type LeadInput } from '@/app/(programs)/leads/actions';
 import MergeLeadsDialog from './MergeLeadsDialog';
 import AddLeadPanel from './AddLeadPanel';
+import FlexibleDateInput from './FlexibleDateInput';
 
 // ─── Constants ─────────────────────────────────────────────
 
@@ -80,16 +81,13 @@ function DateCell({ leadId, value, onSave }: {
 
   if (editing) {
     return (
-      <input
+      <FlexibleDateInput
         autoFocus
-        type="date"
-        defaultValue={value ?? ''}
-        className="border border-brand-copper rounded px-1.5 py-0.5 text-xs w-28 text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
-        onBlur={(e) => { onSave(leadId, e.target.value || null); setEditing(false); }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-          if (e.key === 'Escape') setEditing(false);
-        }}
+        value={value ?? null}
+        onChange={(v) => onSave(leadId, v)}
+        onLeave={() => setEditing(false)}
+        wrapperClassName="w-32"
+        className="w-full border border-brand-copper rounded px-1.5 py-0.5 text-xs text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
       />
     );
   }
