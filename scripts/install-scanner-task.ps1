@@ -18,9 +18,13 @@ $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $bat = Join-Path $projectRoot 'scripts\run-scan-once.bat'
+$watchdogBat = Join-Path $projectRoot 'scripts\run-watchdog.bat'
 
 if (-not (Test-Path $bat)) {
   throw "Launcher not found: $bat. Run `npm run build:scan-once` first."
+}
+if (-not (Test-Path $watchdogBat)) {
+  throw "Watchdog launcher not found: $watchdogBat. Run `npm run build:watchdog` first."
 }
 
 # Verify elevation up front with a clear message.
@@ -57,4 +61,25 @@ Register-ScheduledTask `
   -Force | Out-Null
 
 Write-Host 'Registered "QC Lead Scanner" (S4U, boot + 4x daily ET).'
-Get-ScheduledTaskInfo -TaskName 'QC Lead Scanner' | Select-Object LastRunTime, LastTaskResult, NextRunTime
+
+# ── Watchdog: separate task so it fires even if the scanner is dead ──────────
+# Runs 12:00 + 17:00 ET (just after the 11:00 and 16:00 scan windows) and
+# alerts if no successful scan completed within the threshold (18h).
+$watchdogAction = New-ScheduledTaskAction -Execute $watchdogBat
+$watchdogTriggers = @(
+  (New-ScheduledTaskTrigger -Daily -At 12:00pm),
+  (New-ScheduledTaskTrigger -Daily -At 5:00pm)
+)
+Register-ScheduledTask `
+  -TaskName 'QC Lead Scanner Watchdog' `
+  -Action $watchdogAction `
+  -Trigger $watchdogTriggers `
+  -Settings $settings `
+  -Principal $principal `
+  -Description 'QC Lead Scanner watchdog. Alerts via email if no successful scan has completed within 18h. Independent of the scanner task so it fires even when the scanner is dead.' `
+  -Force | Out-Null
+
+Write-Host 'Registered "QC Lead Scanner Watchdog" (S4U, 12:00 + 17:00 ET).'
+
+Get-ScheduledTaskInfo -TaskName 'QC Lead Scanner' | Select-Object @{n='Task';e={'Scanner'}}, LastRunTime, LastTaskResult, NextRunTime
+Get-ScheduledTaskInfo -TaskName 'QC Lead Scanner Watchdog' | Select-Object @{n='Task';e={'Watchdog'}}, LastRunTime, LastTaskResult, NextRunTime

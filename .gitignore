@@ -38,9 +38,11 @@ next-env.d.ts
 
 # Scanner
 data/processed-ids.json
+data/last-scan.json
 logs/
 scripts/run-scanner.js
 scripts/run-scan-once.js
+scripts/run-watchdog.js
 
 # Deck renderer — removed; directory may linger on disk if Windows locks prevented deletion
 deck-renderer/

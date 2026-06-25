@@ -4,6 +4,7 @@ import { parseLead } from './parser';
 import { suggestOwner } from './router';
 import { writeLead, leadAlreadyExists, type WriteLeadResult } from './writer';
 import { isProcessed, markProcessed } from './dedup';
+import { recordHeartbeat } from './heartbeat';
 import { notifyScanSummary, notifyError } from './notify';
 import type { ParsedLead, ScanResult } from './types';
 
@@ -35,6 +36,11 @@ export async function runScan(afterTimestamp?: number): Promise<ScanResult> {
     const messages = await scanGmail({ afterTimestamp });
     result.emailsFound = messages.length;
     console.log(`[scanner] Batch ${batchId}: found ${messages.length} message(s)`);
+
+    // Gmail reachable + listed = a successful scan for liveness purposes, even
+    // with 0 messages. Record before per-lead processing (which has its own
+    // error handling and shouldn't affect the "scanner is alive" signal).
+    recordHeartbeat(batchId);
 
     for (const msg of messages) {
       // Skip if already processed (file-based dedup)
