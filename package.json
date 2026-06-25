@@ -14,7 +14,8 @@
     "auth": "npx tsx scripts/gmail-auth.ts",
     "backfill": "npx tsx scripts/backfill-leads.ts",
     "dedup": "npx tsx scripts/dedup-leads.ts",
-    "build:scanner": "esbuild scripts/run-scanner.ts --bundle --platform=node --target=node18 --outfile=scripts/run-scanner.js --packages=external"
+    "build:scanner": "esbuild scripts/run-scanner.ts --bundle --platform=node --target=node18 --outfile=scripts/run-scanner.js --packages=external",
+    "build:scan-once": "esbuild scripts/run-scan-once.ts --bundle --platform=node --target=node18 --outfile=scripts/run-scan-once.js --packages=external"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",

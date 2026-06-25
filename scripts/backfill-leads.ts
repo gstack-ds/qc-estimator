@@ -70,8 +70,20 @@ async function main() {
   }
 
   const batchId = randomUUID();
-  const twelveMonthsAgo = Math.floor((Date.now() - 365 * 24 * 60 * 60 * 1000) / 1000);
-  const query = `subject:"INITIAL LEAD" after:${twelveMonthsAgo}`;
+  // Optional CLI override: --after=YYYY-MM-DD. Defaults to 12 months ago.
+  const afterArg = process.argv.find((a) => a.startsWith('--after='))?.split('=')[1];
+  let afterTs: number;
+  if (afterArg) {
+    const parsed = Date.parse(`${afterArg}T00:00:00Z`);
+    if (Number.isNaN(parsed)) {
+      console.error(`Invalid --after date: ${afterArg} (expected YYYY-MM-DD)`);
+      process.exit(1);
+    }
+    afterTs = Math.floor(parsed / 1000);
+  } else {
+    afterTs = Math.floor((Date.now() - 365 * 24 * 60 * 60 * 1000) / 1000);
+  }
+  const query = `subject:"INITIAL LEAD" after:${afterTs}`;
 
   console.log(`\n[backfill] Starting — batch ${batchId}`);
   console.log(`[backfill] Query: ${query}\n`);
