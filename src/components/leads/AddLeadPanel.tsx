@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { DbTeamMember } from '@/lib/supabase/queries';
 import { createLead, type LeadInput } from '@/app/(programs)/leads/actions';
+import FlexibleDateInput from './FlexibleDateInput';
 
 const EMPTY: LeadInput = {
   client_name: '', end_company: '', contact_name: '', contact_email: '',
@@ -77,11 +78,11 @@ export default function AddLeadPanel({ teamMembers, onClose, onCreated }: {
             </div>
             <div>
               <label className={labelCls}>Start Date</label>
-              <input type="date" className={inputCls} value={form.start_date ?? ''} onChange={(e) => set('start_date', e.target.value || null)} />
+              <FlexibleDateInput value={form.start_date || null} onChange={(v) => set('start_date', v ?? '')} className={inputCls} />
             </div>
             <div>
               <label className={labelCls}>End Date</label>
-              <input type="date" className={inputCls} value={form.end_date ?? ''} onChange={(e) => set('end_date', e.target.value || null)} />
+              <FlexibleDateInput value={form.end_date || null} onChange={(v) => set('end_date', v ?? '')} className={inputCls} />
             </div>
             <div>
               <label className={labelCls}>Guest Count</label>

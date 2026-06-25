@@ -9,6 +9,7 @@ import type { DbLead, DbTeamMember, LinkedProgramSummary } from '@/lib/supabase/
 import { statusToLane, laneStyles } from '@/lib/leads/pipeline';
 import { STATUS_LABELS, type LeadStatus } from '@/lib/leads/constants';
 import type { LeadInput } from '@/app/(programs)/leads/actions';
+import FlexibleDateInput from './FlexibleDateInput';
 
 // Ordered statuses for the inline dropdown — active pipeline first, then closed
 const ACTIVE_STATUSES: LeadStatus[] = [
@@ -255,19 +256,17 @@ export default function LeadCard({ lead, teamMembers, laneStatuses, onUpdate, is
                 <option key={m.id} value={String(m.id)}>{m.first_name} {m.last_name}</option>
               ))}
             </select>
-            <input
-              type="date"
-              value={lead.start_date?.slice(0, 10) ?? ''}
-              onChange={e => handleField('start_date', e.target.value || null)}
-              className="w-full text-[10px] border border-brand-cream rounded px-1.5 py-0.5 bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
-              title="Event date"
+            <FlexibleDateInput
+              label="Event date"
+              value={lead.start_date?.slice(0, 10) ?? null}
+              onChange={v => handleField('start_date', v)}
+              className="w-full text-xs border border-brand-cream rounded px-1.5 py-0.5 bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
             />
-            <input
-              type="date"
-              value={lead.current_due_date?.slice(0, 10) ?? ''}
-              onChange={e => handleField('current_due_date', e.target.value || null)}
-              className="w-full text-[10px] border border-brand-cream rounded px-1.5 py-0.5 bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
-              title="Due date"
+            <FlexibleDateInput
+              label="Due date"
+              value={lead.current_due_date?.slice(0, 10) ?? null}
+              onChange={v => handleField('current_due_date', v)}
+              className="w-full text-xs border border-brand-cream rounded px-1.5 py-0.5 bg-white text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-copper"
             />
           </div>
         </div>
