@@ -13,8 +13,26 @@ import {
   type OrderedSection,
 } from '@/lib/utils/export';
 import type { TourDetails } from '@/lib/tours/types';
+import type { WorkSheet } from 'xlsx';
 
 export type { LineItemForExport, MarkupForExport, OrderedSection };
+
+// Excel currency format: $1,234.56. Applied via cell number-format (.z) so the
+// cells stay real numbers — no string concatenation — and Alex can paste them
+// into Canva without reformatting.
+const CURRENCY_FMT = '$#,##0.00';
+
+function applyCurrencyFormat(ws: WorkSheet, colIndexes: number[], encodeCell: (a: { r: number; c: number }) => string, decodeRange: (ref: string) => { s: { r: number; c: number }; e: { r: number; c: number } }) {
+  const ref = ws['!ref'];
+  if (!ref) return;
+  const range = decodeRange(ref);
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    for (const c of colIndexes) {
+      const cell = ws[encodeCell({ r, c })];
+      if (cell && cell.t === 'n') cell.z = CURRENCY_FMT;
+    }
+  }
+}
 
 interface Props {
   programId: string;
@@ -134,6 +152,8 @@ export default function ExportButtons({
         ['Price PP', Math.round(pp * 100) / 100],
       ];
       const ws1 = xlsx.utils.aoa_to_sheet(sheet1);
+      // Amount column (B) -> currency.
+      applyCurrencyFormat(ws1, [1], xlsx.utils.encode_cell, xlsx.utils.decode_range);
       xlsx.utils.book_append_sheet(wb, ws1, 'Client Summary');
 
       // ── Sheet 2: Detail ────────────────────────────────────
@@ -152,6 +172,8 @@ export default function ExportButtons({
       sheet2.push(['', '', '', '', '', 'TOTAL', Math.round(summary.totalClient * 100) / 100]);
 
       const ws2 = xlsx.utils.aoa_to_sheet(sheet2);
+      // Unit Price (D), Our Cost (E), Client Cost (G) -> currency. Qty + Markup % left as-is.
+      applyCurrencyFormat(ws2, [3, 4, 6], xlsx.utils.encode_cell, xlsx.utils.decode_range);
       xlsx.utils.book_append_sheet(wb, ws2, 'Detail');
 
       const safeName = (estimateName || programName || 'estimate').replace(/[^\w\s-]/g, '').trim();
