@@ -7,7 +7,7 @@ mechanism (toggle + editable rate + optional line) but is an ADDITION to the tot
 ## Confirmed decisions
 - **Scope:** per estimate (like the discount), not program-wide.
 - **Toggle:** OFF by default. OFF → no line, total identical to today. ON → line shows, total includes it.
-- **Base:** `rate × lineItemsSubtotalClient` (the "Subtotal (pre-tax)" line — excludes production fee and tax). [confirmed]
+- **Base:** `rate × preTaxTotal` (the "Pre-Tax Total" line = Subtotal + Production Fee, the line right before Tax). [confirmed by Alex — revised from the earlier subtotal-only base]
 - **Rate:** editable, default 10% (stored as decimal 0.10). UI: type `10`, store `0.10`.
 - **Tax:** computed on the pre-tax subtotal but added AFTER tax; itself NOT taxed; does not change the tax figure.
 - **Margin:** pass-through / margin-neutral [confirmed]. QC margin $ and % are identical on/off — the
@@ -19,7 +19,7 @@ Subtotal (pre-tax)   = lineItemsSubtotalClient
 + Production Fee      = productionFee
 = Pre-Tax Total      = preTaxTotal
 + Tax                = foodTax+alcoholTax+equipmentTax+venueTax+productionFeeTax   (unchanged by EEG)
-+ EEG Commission     = rate × lineItemsSubtotalClient                              (after tax, untaxed)
++ EEG Commission     = rate × preTaxTotal (Subtotal + Production Fee)              (after tax, untaxed)
 = Grand Total        = totalClient
 ```
 
@@ -35,5 +35,5 @@ Subtotal (pre-tax)   = lineItemsSubtotalClient
 
 ## Done criteria
 - Toggle OFF → estimate/total byte-identical to pre-feature behavior; no line anywhere.
-- Toggle ON → commission = rate × pre-tax subtotal, added after tax; tax unchanged; grand total = pre-tax total + tax + commission; line shows on PDF + on-screen + builder; rate editable.
+- Toggle ON → commission = rate × pre-tax total (Subtotal + Production Fee), added after tax; tax unchanged; grand total = pre-tax total + tax + commission; line shows on PDF + on-screen + builder; rate editable.
 - Margin neutral on/off. All tests green. Migration run in Supabase before relying on writes.

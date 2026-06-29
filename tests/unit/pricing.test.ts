@@ -691,17 +691,20 @@ describe('EEG commission', () => {
     expect(off.totalClient).toBeCloseTo(off.subtotalClient + off.productionFee + off.productionFeeTax);
   });
 
-  it('toggle ON → commission = rate × pre-tax subtotal (lineItemsSubtotalClient)', () => {
+  it('toggle ON → commission = rate × pre-tax total (Subtotal + Production Fee)', () => {
     const on = calculateVenueEstimate({ ...baseInput, eegCommission: { rate: 0.10 } }, cfg);
-    expect(on.eegCommissionAmount).toBeCloseTo(on.lineItemsSubtotalClient * 0.10);
-    expect(on.eegCommissionAmount).toBeCloseTo(1850 * 0.10); // 185
+    expect(on.eegCommissionAmount).toBeCloseTo(on.preTaxTotal * 0.10);
+    expect(on.eegCommissionAmount).toBeCloseTo((on.lineItemsSubtotalClient + on.productionFee) * 0.10);
   });
 
-  it('commission base is the pre-tax subtotal, NOT pre-tax total or grand total', () => {
+  it('commission base is the pre-tax TOTAL (incl. production fee), NOT the subtotal or grand total', () => {
     const on = calculateVenueEstimate({ ...baseInput, eegCommission: { rate: 0.10 } }, cfg);
-    // explicitly NOT preTaxTotal (which includes production fee) and NOT totalClient
-    expect(on.eegCommissionAmount).not.toBeCloseTo(on.preTaxTotal * 0.10);
-    expect(on.eegCommissionAmount).toBeCloseTo(on.lineItemsSubtotalClient * 0.10);
+    expect(on.eegCommissionAmount).toBeCloseTo(on.preTaxTotal * 0.10);
+    // base includes the production fee, so it is strictly larger than rate × subtotal
+    expect(on.eegCommissionAmount).not.toBeCloseTo(on.lineItemsSubtotalClient * 0.10);
+    expect(on.eegCommissionAmount).toBeGreaterThan(on.lineItemsSubtotalClient * 0.10);
+    // and NOT computed on the grand total
+    expect(on.eegCommissionAmount).not.toBeCloseTo(on.totalClient * 0.10);
   });
 
   it('commission is added AFTER tax: grand total = pre-tax total + tax + commission', () => {
@@ -729,8 +732,7 @@ describe('EEG commission', () => {
 
   it('editable rate: a non-default rate (15%) computes correctly', () => {
     const on = calculateVenueEstimate({ ...baseInput, eegCommission: { rate: 0.15 } }, cfg);
-    expect(on.eegCommissionAmount).toBeCloseTo(on.lineItemsSubtotalClient * 0.15);
-    expect(on.eegCommissionAmount).toBeCloseTo(1850 * 0.15); // 277.5
+    expect(on.eegCommissionAmount).toBeCloseTo(on.preTaxTotal * 0.15);
   });
 
   it('is margin-neutral: qcRevenue and margin % are identical on/off (pass-through)', () => {
@@ -759,7 +761,8 @@ describe('EEG commission', () => {
     const none = calculateVenueEstimate(baseInput, cfg);
     const preDiscount = none.subtotalClient + none.productionFee + none.productionFeeTax;
     expect(both.discountAmount).toBe(200);
-    expect(both.eegCommissionAmount).toBeCloseTo(none.lineItemsSubtotalClient * 0.10);
+    // discount does not change the pre-tax total, so the EEG base is unaffected by the discount
+    expect(both.eegCommissionAmount).toBeCloseTo(none.preTaxTotal * 0.10);
     expect(both.totalClient).toBeCloseTo(preDiscount - 200 + both.eegCommissionAmount);
   });
 

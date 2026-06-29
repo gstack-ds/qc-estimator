@@ -177,11 +177,12 @@ export function calculateVenueEstimate(
         : input.discount.value)
     : 0;
 
-  // EEG commission: third-party pass-through fee added AFTER tax (rate × pre-tax line-items subtotal).
-  // It is NOT taxed and does not change subtotal/production fee/tax. Margin-neutral — the margin
-  // analysis backs it out of totalClient, so QC margin $ and % are identical whether on or off.
+  // EEG commission: third-party pass-through fee added AFTER tax. Base is the Pre-Tax Total
+  // (Subtotal + Production Fee — the line right before Tax), per Alex. It is NOT taxed and does not
+  // change subtotal/production fee/tax. Margin-neutral — the margin analysis backs it out of
+  // totalClient, so QC margin $ and % are identical whether on or off.
   const eegCommissionAmount = input.eegCommission
-    ? input.eegCommission.rate * lineItemsSubtotalClient
+    ? input.eegCommission.rate * preTaxTotal
     : 0;
 
   const totalClient = totalClientPreDiscount - discountAmount + eegCommissionAmount;
