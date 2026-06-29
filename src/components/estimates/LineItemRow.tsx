@@ -7,6 +7,7 @@ import type { LocalLineItem } from './EstimateBuilder';
 import ThumbnailCell from './ThumbnailCell';
 import PackageSelector from './PackageSelector';
 import { suggestIcon } from '@/lib/utils/suggestIcon';
+import { stateAbbrevFromLocation } from '@/lib/utils/locationLabel';
 
 interface Props {
   item: LocalLineItem;
@@ -22,10 +23,6 @@ interface Props {
   taxExempt?: boolean;
 }
 
-function shortLocationName(name: string): string {
-  return name.replace(/\s*\([^)]*\)/, '').replace(/\s+(NC|SC|GA|VA|PA|MD|NY|NJ|DC)$/, '').trim();
-}
-
 function taxLabel(taxType: TaxType, location: Location | null): { rate: string; place: string } | null {
   if (taxType === 'none' || !location) return null;
   const r = taxType === 'food' ? location.foodTaxRate
@@ -33,7 +30,8 @@ function taxLabel(taxType: TaxType, location: Location | null): { rate: string; 
     : location.generalTaxRate;
   return {
     rate: parseFloat((r * 100).toFixed(3)) + '%',
-    place: shortLocationName(location.name),
+    // State abbreviation ("VA"), not the city; '' when no state — render guards an empty line.
+    place: stateAbbrevFromLocation(location.name),
   };
 }
 
@@ -231,7 +229,7 @@ export default function LineItemRow({ item, markups, location, showTaxToggle, gu
         return t ? (
           <div className="leading-tight" title={`${t.rate} — ${location?.name ?? ''}`}>
             <div className="text-sm tabular-nums text-brand-charcoal/70">{t.rate}</div>
-            <div className="text-[10px] text-brand-silver/50 truncate">{t.place}</div>
+            {t.place ? <div className="text-[10px] text-brand-silver/50 truncate">{t.place}</div> : null}
           </div>
         ) : (
           <div className="text-xs text-brand-silver/40">Non-taxable</div>

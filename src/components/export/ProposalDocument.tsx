@@ -6,10 +6,7 @@ import type { LineItemForExport, OrderedSection } from '@/lib/utils/export';
 import { itemClientCost, groupLineItemsBySections } from '@/lib/utils/export';
 import type { TourDetails } from '@/lib/tours/types';
 import { sanitizeLineItemName, sectionDisplayLabel, sanitizeEstimateName } from '@/lib/deck/renderer';
-
-function shortLocationName(name: string): string {
-  return name.replace(/\s*\([^)]*\)/, '').replace(/\s+(NC|SC|GA|VA|PA|MD|NY|NJ|DC)$/, '').trim();
-}
+import { stateAbbrevFromLocation } from '@/lib/utils/locationLabel';
 
 function taxRateForItem(taxType: string, location: Location): number {
   if (taxType === 'food') return location.foodTaxRate;
@@ -231,8 +228,10 @@ export default function ProposalDocument({
                   ? parseFloat((taxRateForItem(item.taxType, location) * 100).toFixed(3))
                   : null;
                 const taxRateLabel = taxExempt ? 'Exempt' : taxNone ? '—' : taxRatePct != null ? `${taxRatePct}%` : '—';
+                // Jurisdiction shows the STATE abbreviation ("VA"), not the city — empty when the
+                // location has no recognizable state, so the cell reads just "6%" with no trailing comma.
                 const taxPlaceLabel = (!taxExempt && !taxNone && location)
-                  ? shortLocationName(location.name)
+                  ? stateAbbrevFromLocation(location.name)
                   : null;
                 return (
                   // Row stays intact (never splits mid-row); rows still break cleanly between each other.
