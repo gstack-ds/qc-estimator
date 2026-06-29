@@ -14,6 +14,11 @@ import {
   isSameProperty,
   buildPlanningNotes,
 } from '@/lib/slideCopy/travel';
+import { buildDeckContract } from '@/lib/contracts/deckContract';
+import type { RawLocation } from '@/lib/contracts/deckContract';
+import { rawLineItemToExportItem, effectiveLocation } from '@/lib/proposals/programProposal';
+import type { ProgramProposalData, EstimateProposalPayload, EstimateProposalType } from '@/lib/proposals/programProposal';
+import type { Location } from '@/types';
 
 // ─── Estimate details ─────────────────────────────────────
 
@@ -1283,4 +1288,120 @@ export async function reorderLineItems(updates: { id: string; sortOrder: number 
       supabase.from('estimate_line_items').update({ sort_order: sortOrder }).eq('id', id)
     )
   );
+}
+
+// ─── Program-level combined proposal ──────────────────────
+// Gathers the render payload for a combined proposal PDF: one payload per selected estimate (in the
+// given order), each with its own engine-computed summary + display line items. Aggregation/render
+// happen client-side (ProgramProposalDocument); this only reads + computes per-estimate totals.
+// Only venue/av/decor/tour estimates are supported (ProposalDocument's structure); other types
+// (e.g. transportation) are silently skipped.
+const PROPOSAL_TYPES: EstimateProposalType[] = ['venue', 'av', 'decor', 'tour'];
+
+export async function getProgramProposalData(
+  programId: string,
+  estimateIds: string[],
+): Promise<{ data: ProgramProposalData | null; error: string | null }> {
+  if (!estimateIds || estimateIds.length === 0) {
+    return { data: null, error: 'Select at least one estimate.' };
+  }
+  const supabase = await createClient();
+
+  const { data: prog, error: pErr } = await supabase
+    .from('programs')
+    .select('id, name, client_name, company_name, guest_count, cc_processing_fee, client_commission, gdp_commission_enabled, gdp_commission_rate, service_charge_default, gratuity_default, admin_fee_default, third_party_commissions, include_travel_in_production_fee, location_id')
+    .eq('id', programId)
+    .single();
+  if (pErr || !prog) return { data: null, error: pErr?.message ?? 'Program not found' };
+
+  let rawLocation: RawLocation = { id: '', name: '', food_tax_rate: 0, alcohol_tax_rate: 0, general_tax_rate: 0 };
+  if (prog.location_id) {
+    const { data: loc } = await supabase
+      .from('locations')
+      .select('id, name, food_tax_rate, alcohol_tax_rate, general_tax_rate')
+      .eq('id', prog.location_id)
+      .single();
+    if (loc) rawLocation = loc;
+  }
+
+  const [sectionsRes, lineItemsRes, markupsRes, eventsRes, estRes] = await Promise.all([
+    supabase.from('estimate_sections').select('id, estimate_id, name, tax_bucket, markup_pct, sort_order').in('estimate_id', estimateIds).order('sort_order'),
+    supabase.from('estimate_line_items').select('id, estimate_id, section, section_id, name, label, qty, unit_price, category_id, markup_override, custom_client_unit_price, tax_type, is_revenue_item, notes, thumbnail_url, thumbnail_icon, package_options, selected_package_id, sort_order').in('estimate_id', estimateIds).order('sort_order'),
+    supabase.from('category_markups').select('id, markup_pct'),
+    supabase.from('events').select('id, name, guest_count').eq('program_id', programId),
+    supabase.from('estimates').select('id, program_id, event_id, type, name, fb_minimum, is_venue_taxable, service_charge_override, gratuity_override, admin_fee_override, discount_type, discount_value, eeg_enabled, eeg_rate, tax_exempt, food_tax_override, alcohol_tax_override, general_tax_override, included_in_proposal, include_in_budget, venue_id, venue_space_id, tour_details').eq('program_id', programId).in('id', estimateIds),
+  ]);
+
+  const firstErr = sectionsRes.error || lineItemsRes.error || markupsRes.error || eventsRes.error || estRes.error;
+  if (firstErr) return { data: null, error: firstErr.message };
+
+  const allSections = sectionsRes.data ?? [];
+  const allLineItems = lineItemsRes.data ?? [];
+  const markups = markupsRes.data ?? [];
+  const events = eventsRes.data ?? [];
+  const estimateRows = estRes.data ?? [];
+  // Program-level travel (include_travel_in_production_fee) is a SINGLE program cost. Folding it into
+  // each estimate's production fee here would count it once per estimate in the grand total
+  // (an (N−1)×travel phantom charge). Pass 0 so the combined proposal never double-bills travel;
+  // billing program travel once in the combined doc is a deliberate follow-up if the team wants it.
+  const travelTotal = 0;
+
+  const markupById = new Map<string, number>(markups.map((m) => [m.id, m.markup_pct]));
+  const baseLocation: Location = {
+    id: rawLocation.id,
+    name: rawLocation.name,
+    foodTaxRate: rawLocation.food_tax_rate,
+    alcoholTaxRate: rawLocation.alcohol_tax_rate,
+    generalTaxRate: rawLocation.general_tax_rate,
+  } as Location;
+
+  const byId = new Map(estimateRows.map((e) => [e.id, e]));
+  const estimates: EstimateProposalPayload[] = [];
+
+  // Preserve the caller's order; skip unsupported types and missing rows.
+  for (const id of estimateIds) {
+    const est = byId.get(id);
+    if (!est) continue;
+    if (!PROPOSAL_TYPES.includes(est.type as EstimateProposalType)) continue;
+
+    const sections = allSections.filter((s) => s.estimate_id === id);
+    const items = allLineItems.filter((li) => li.estimate_id === id);
+
+    // Authoritative summary via the shared engine builder (applies per-estimate tax overrides).
+    // tiers=[] — margin isn't used here, only the summary totals.
+    const contract = buildDeckContract(est, sections, items, prog, rawLocation, [], markups, travelTotal);
+
+    const sectionById = new Map(sections.map((s) => [s.id, { id: s.id, name: s.name }]));
+    const event = est.event_id ? events.find((ev) => ev.id === est.event_id) ?? null : null;
+
+    estimates.push({
+      estimateId: est.id,
+      estimateName: est.name,
+      eventName: event?.name ?? null,
+      estimateType: est.type as EstimateProposalType,
+      guestCount: event?.guest_count ?? prog.guest_count,
+      summary: contract.summary,
+      lineItems: items.map((it) => rawLineItemToExportItem(it, markupById, sectionById)),
+      orderedSections: sections.map((s) => ({ id: s.id, name: s.name })),
+      location: prog.location_id ? effectiveLocation(baseLocation, est) : null,
+      taxExempt: est.tax_exempt,
+      tourDetails: (est.tour_details as TourDetails | null) ?? null,
+    });
+  }
+
+  if (estimates.length === 0) {
+    return { data: null, error: 'No supported estimates selected (venue, AV, décor, or tour).' };
+  }
+
+  const proposalDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  return {
+    data: {
+      programName: prog.name,
+      clientName: prog.client_name ?? null,
+      clientCompany: prog.company_name ?? null,
+      proposalDate,
+      estimates,
+    },
+    error: null,
+  };
 }

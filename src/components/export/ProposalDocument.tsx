@@ -14,13 +14,13 @@ function taxRateForItem(taxType: string, location: Location): number {
   return location.generalTaxRate;
 }
 
-const BRAND_CHARCOAL = '#464543';
-const BRAND_BROWN = '#846E60';
-const BRAND_COPPER = '#C19C81';
-const BRAND_CREAM = '#ECDFCE';
-const BRAND_SILVER = '#A9AEB4';
+export const BRAND_CHARCOAL = '#464543';
+export const BRAND_BROWN = '#846E60';
+export const BRAND_COPPER = '#C19C81';
+export const BRAND_CREAM = '#ECDFCE';
+export const BRAND_SILVER = '#A9AEB4';
 
-const styles = StyleSheet.create({
+export const styles = StyleSheet.create({
   page: { fontFamily: 'Helvetica', fontSize: 10, color: BRAND_CHARCOAL, padding: 48, lineHeight: 1.4 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, paddingBottom: 16, borderBottomWidth: 1.5, borderBottomColor: BRAND_CREAM },
   logo: { width: 60, height: 60, marginRight: 14 },
@@ -62,11 +62,213 @@ const styles = StyleSheet.create({
   footerText: { fontSize: 8, color: BRAND_SILVER },
 });
 
-function fmt(n: number) {
+export function fmt(n: number) {
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-function fmtRound(n: number) {
+export function fmtRound(n: number) {
   return '$' + Math.round(n).toLocaleString('en-US');
+}
+
+// ─── Reusable per-estimate blocks ─────────────────────────────────────────────
+// Extracted so the program-level combined proposal (ProgramProposalDocument) renders each estimate
+// with the SAME line-item section block (carrying the page-wrap fix + section-id grouping) and the
+// SAME totals block — guaranteeing the combined doc matches the single-estimate export.
+
+// Tour logistics box (shown only for tour estimates with content).
+export function TourLogisticsBlock({ tourDetails }: { tourDetails?: TourDetails | null }) {
+  if (!tourDetails) return null;
+  const hasContent = tourDetails.pickup_address || tourDetails.departure_time ||
+    tourDetails.return_time || tourDetails.duration_hours || tourDetails.dropoff_address;
+  if (!hasContent) return null;
+  const PICKUP_LABELS: Record<string, string> = {
+    hotel: 'Hotel pickup', meeting_point: 'Meeting point', airport: 'Airport',
+  };
+  const pickupLabel = tourDetails.pickup_type ? (PICKUP_LABELS[tourDetails.pickup_type] ?? tourDetails.pickup_type) : null;
+  return (
+    <View style={{ marginBottom: 16, padding: 10, backgroundColor: '#FDFAF7', borderWidth: 0.75, borderColor: BRAND_CREAM, borderRadius: 4 }}>
+      <Text style={{ fontSize: 7.5, color: BRAND_BROWN, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>Tour Details</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+        {tourDetails.pickup_address ? (
+          <View>
+            <Text style={{ fontSize: 7.5, color: BRAND_SILVER, textTransform: 'uppercase', letterSpacing: 0.4 }}>{pickupLabel ?? 'Pickup'}</Text>
+            <Text style={{ fontSize: 9, color: BRAND_CHARCOAL }}>{tourDetails.pickup_address}</Text>
+          </View>
+        ) : null}
+        {(tourDetails.departure_time || tourDetails.return_time) ? (
+          <View>
+            <Text style={{ fontSize: 7.5, color: BRAND_SILVER, textTransform: 'uppercase', letterSpacing: 0.4 }}>Times</Text>
+            <Text style={{ fontSize: 9, color: BRAND_CHARCOAL }}>
+              {[tourDetails.departure_time, tourDetails.return_time].filter(Boolean).join(' → ')}
+              {tourDetails.duration_hours ? ` (${tourDetails.duration_hours} hr)` : ''}
+            </Text>
+          </View>
+        ) : null}
+        {tourDetails.dropoff_address && tourDetails.dropoff_address !== tourDetails.pickup_address ? (
+          <View>
+            <Text style={{ fontSize: 7.5, color: BRAND_SILVER, textTransform: 'uppercase', letterSpacing: 0.4 }}>Drop-off</Text>
+            <Text style={{ fontSize: 9, color: BRAND_CHARCOAL }}>{tourDetails.dropoff_address}</Text>
+          </View>
+        ) : null}
+        {tourDetails.meeting_point_notes ? (
+          <View>
+            <Text style={{ fontSize: 7.5, color: BRAND_SILVER, textTransform: 'uppercase', letterSpacing: 0.4 }}>Meeting Point</Text>
+            <Text style={{ fontSize: 9, color: BRAND_CHARCOAL }}>{tourDetails.meeting_point_notes}</Text>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+// One estimate's line items, grouped by section IDENTITY (not display name) — two sections sharing a
+// name each render as their own block with only their own items. Sections are wrappable so a long
+// section flows across pages; the section-header + table-header pair is kept together; each row stays
+// intact. (This is the block fixed for page-overflow in fix/proposal-pdf-section-wrap.)
+export function EstimateLineItemSections({ lineItems, orderedSections, location, taxExempt = false }: {
+  lineItems: LineItemForExport[];
+  orderedSections?: OrderedSection[];
+  location?: Location | null;
+  taxExempt?: boolean;
+}) {
+  const sectionGroups = groupLineItemsBySections(lineItems, orderedSections);
+  return (
+    <>
+      {sectionGroups.map((group) => {
+        const sectionItems = group.items;
+        return (
+          <View key={group.id}>
+            <View wrap={false} minPresenceAhead={60}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionHeaderText}>{sectionDisplayLabel(group.name)}</Text>
+              </View>
+              <View style={styles.tableHeader}>
+                <Text style={[styles.tableHeaderCell, styles.colItem]}>Item</Text>
+                <Text style={[styles.tableHeaderCell, styles.colQty]}>Qty</Text>
+                <Text style={[styles.tableHeaderCell, styles.colPrice]}>Unit Price</Text>
+                <Text style={[styles.tableHeaderCell, styles.colTax]}>Tax</Text>
+                <Text style={[styles.tableHeaderCell, styles.colTotal]}>Total</Text>
+              </View>
+            </View>
+            {sectionItems.map((item, idx) => {
+              const clientTotal = itemClientCost(item);
+              const unitPrice = item.categoryId === 'custom' && item.customClientUnitPrice !== undefined
+                ? item.customClientUnitPrice
+                : item.unitPrice * (1 + item.categoryMarkupPct);
+              const taxNone = item.taxType === 'none';
+              const taxRatePct = (!taxNone && location)
+                ? parseFloat((taxRateForItem(item.taxType, location) * 100).toFixed(3))
+                : null;
+              const taxRateLabel = taxExempt ? 'Exempt' : taxNone ? '—' : taxRatePct != null ? `${taxRatePct}%` : '—';
+              const taxPlaceLabel = (!taxExempt && !taxNone && location)
+                ? stateAbbrevFromLocation(location.name)
+                : null;
+              return (
+                <View key={idx} wrap={false} style={[styles.row, idx % 2 === 1 ? styles.rowAlt : {}]}>
+                  <View style={[styles.colItem, { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8 }]}>
+                    {item.thumbnailUrl ? (
+                      <Image src={item.thumbnailUrl} style={{ width: 18, height: 18, borderRadius: 3, flexShrink: 0 }} />
+                    ) : item.thumbnailIcon ? (
+                      <View style={{ width: 18, height: 18, borderRadius: 3, backgroundColor: '#E8E0D5', flexShrink: 0 }} />
+                    ) : null}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.cell}>{sanitizeLineItemName(item.name)}</Text>
+                      {(() => {
+                        if (!item.packageOptions || !item.selectedPackageId) return null;
+                        const pkg = item.packageOptions.options.find((o) => o.id === item.selectedPackageId);
+                        if (!pkg) return null;
+                        return (
+                          <View style={{ marginTop: 2 }}>
+                            <Text style={{ fontSize: 8, color: BRAND_BROWN, fontWeight: 'bold' }}>{sanitizeLineItemName(pkg.name)}</Text>
+                            {pkg.items.length > 0 && (
+                              <Text style={{ fontSize: 7.5, color: BRAND_SILVER, marginTop: 1 }}>
+                                {pkg.items.join(' · ')}
+                              </Text>
+                            )}
+                          </View>
+                        );
+                      })()}
+                    </View>
+                  </View>
+                  <Text style={[styles.cell, styles.colQty]}>{item.qty}</Text>
+                  <Text style={[styles.cell, styles.colPrice]}>{fmt(unitPrice)}</Text>
+                  <View style={styles.colTax}>
+                    <Text style={styles.cellDim}>{taxRateLabel}</Text>
+                    {taxPlaceLabel ? <Text style={{ fontSize: 7.5, color: BRAND_SILVER, textAlign: 'right' }}>{taxPlaceLabel}</Text> : null}
+                  </View>
+                  <Text style={[styles.cell, styles.colTotal]}>{fmt(clientTotal)}</Text>
+                </View>
+              );
+            })}
+          </View>
+        );
+      })}
+    </>
+  );
+}
+
+// One estimate's totals block: Subtotal → Production Fee → Pre-Tax Total → Tax → Discount → EEG → Total.
+export function EstimateTotals({ summary, taxExempt = false, guestCount, totalLabel = 'Total' }: {
+  summary: EstimateSummary;
+  taxExempt?: boolean;
+  guestCount: number;
+  totalLabel?: string;
+}) {
+  const totalTax = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax + summary.productionFeeTax;
+  return (
+    <View style={styles.totalsBlock}>
+      {summary.lineItemsSubtotalClient > 0 && (
+        <View style={styles.totalsRow}>
+          <Text style={styles.totalsLabel}>Subtotal</Text>
+          <Text style={styles.totalsValue}>{fmtRound(summary.lineItemsSubtotalClient)}</Text>
+        </View>
+      )}
+      {summary.productionFee > 0 && (
+        <View style={styles.totalsRow}>
+          <Text style={styles.totalsLabel}>Production Fee</Text>
+          <Text style={styles.totalsValue}>{fmtRound(summary.productionFee)}</Text>
+        </View>
+      )}
+      {summary.preTaxTotal > 0 && (
+        <View style={styles.totalsRow}>
+          <Text style={styles.totalsLabel}>Pre-Tax Total</Text>
+          <Text style={styles.totalsValue}>{fmtRound(summary.preTaxTotal)}</Text>
+        </View>
+      )}
+      {taxExempt ? (
+        <View style={styles.totalsRow}>
+          <Text style={styles.totalsLabel}>Tax</Text>
+          <Text style={styles.totalsValue}>Tax Exempt</Text>
+        </View>
+      ) : totalTax > 0 && (
+        <View style={styles.totalsRow}>
+          <Text style={styles.totalsLabel}>Tax</Text>
+          <Text style={styles.totalsValue}>{fmtRound(totalTax)}</Text>
+        </View>
+      )}
+      {summary.discountAmount > 0 && (
+        <View style={styles.discountRow}>
+          <Text style={styles.discountLabel}>Client Discount</Text>
+          <Text style={styles.discountValue}>−{fmtRound(summary.discountAmount)}</Text>
+        </View>
+      )}
+      {summary.eegCommissionAmount > 0 && (
+        <View style={styles.discountRow}>
+          <Text style={styles.discountLabel}>EEG Commission</Text>
+          <Text style={styles.discountValue}>+{fmtRound(summary.eegCommissionAmount)}</Text>
+        </View>
+      )}
+      <View style={styles.grandTotal}>
+        <Text style={styles.grandTotalLabel}>{totalLabel}</Text>
+        <Text style={styles.grandTotalValue}>{fmtRound(summary.totalClient)}</Text>
+      </View>
+      {guestCount > 0 && (
+        <View style={[styles.totalsRow, { marginTop: 2 }]}>
+          <Text style={[styles.totalsLabel, { color: BRAND_SILVER }]}>Price per person ({guestCount} guests)</Text>
+          <Text style={[styles.totalsValue, { color: BRAND_SILVER }]}>{fmtRound(Math.ceil(summary.totalClient / guestCount))}</Text>
+        </View>
+      )}
+    </View>
+  );
 }
 
 
@@ -107,11 +309,6 @@ export default function ProposalDocument({
 }: ProposalDocumentProps) {
   const proposalNumber = estimateId.slice(0, 8).toUpperCase();
 
-  // Group line items by section IDENTITY (not display name), so two sections sharing a name each
-  // render as their own block with only their own items — no shared-name double-emit.
-  const sectionGroups = groupLineItemsBySections(lineItems, orderedSections);
-  const totalTax = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax + summary.productionFeeTax;
-
   return (
     <Document>
       <Page size="LETTER" style={styles.page}>
@@ -150,189 +347,18 @@ export default function ProposalDocument({
         </View>
 
         {/* Tour logistics block */}
-        {estimateType === 'tour' && tourDetails && (
-          (() => {
-            const hasContent = tourDetails.pickup_address || tourDetails.departure_time ||
-              tourDetails.return_time || tourDetails.duration_hours || tourDetails.dropoff_address;
-            if (!hasContent) return null;
-            const PICKUP_LABELS: Record<string, string> = {
-              hotel: 'Hotel pickup', meeting_point: 'Meeting point', airport: 'Airport',
-            };
-            const pickupLabel = tourDetails.pickup_type ? (PICKUP_LABELS[tourDetails.pickup_type] ?? tourDetails.pickup_type) : null;
-            return (
-              <View style={{ marginBottom: 16, padding: 10, backgroundColor: '#FDFAF7', borderWidth: 0.75, borderColor: BRAND_CREAM, borderRadius: 4 }}>
-                <Text style={{ fontSize: 7.5, color: BRAND_BROWN, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>Tour Details</Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-                  {tourDetails.pickup_address ? (
-                    <View>
-                      <Text style={{ fontSize: 7.5, color: BRAND_SILVER, textTransform: 'uppercase', letterSpacing: 0.4 }}>{pickupLabel ?? 'Pickup'}</Text>
-                      <Text style={{ fontSize: 9, color: BRAND_CHARCOAL }}>{tourDetails.pickup_address}</Text>
-                    </View>
-                  ) : null}
-                  {(tourDetails.departure_time || tourDetails.return_time) ? (
-                    <View>
-                      <Text style={{ fontSize: 7.5, color: BRAND_SILVER, textTransform: 'uppercase', letterSpacing: 0.4 }}>Times</Text>
-                      <Text style={{ fontSize: 9, color: BRAND_CHARCOAL }}>
-                        {[tourDetails.departure_time, tourDetails.return_time].filter(Boolean).join(' → ')}
-                        {tourDetails.duration_hours ? ` (${tourDetails.duration_hours} hr)` : ''}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {tourDetails.dropoff_address && tourDetails.dropoff_address !== tourDetails.pickup_address ? (
-                    <View>
-                      <Text style={{ fontSize: 7.5, color: BRAND_SILVER, textTransform: 'uppercase', letterSpacing: 0.4 }}>Drop-off</Text>
-                      <Text style={{ fontSize: 9, color: BRAND_CHARCOAL }}>{tourDetails.dropoff_address}</Text>
-                    </View>
-                  ) : null}
-                  {tourDetails.meeting_point_notes ? (
-                    <View>
-                      <Text style={{ fontSize: 7.5, color: BRAND_SILVER, textTransform: 'uppercase', letterSpacing: 0.4 }}>Meeting Point</Text>
-                      <Text style={{ fontSize: 9, color: BRAND_CHARCOAL }}>{tourDetails.meeting_point_notes}</Text>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-            );
-          })()
-        )}
+        {estimateType === 'tour' && <TourLogisticsBlock tourDetails={tourDetails} />}
 
         {/* Line items by section (grouped by section id) */}
-        {sectionGroups.map((group) => {
-          const sectionItems = group.items;
-          return (
-            // Section is wrappable: a long florals section flows across pages instead of
-            // colliding. A non-wrappable section taller than a page makes @react-pdf collapse
-            // its layout (header-on-row, tax-rate-on-jurisdiction, compressed rows).
-            <View key={group.id}>
-              {/* Keep the section header + column header together; minPresenceAhead prevents
-                  the header from orphaning at the very bottom of a page with no rows under it. */}
-              <View wrap={false} minPresenceAhead={60}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionHeaderText}>{sectionDisplayLabel(group.name)}</Text>
-                </View>
-                <View style={styles.tableHeader}>
-                  <Text style={[styles.tableHeaderCell, styles.colItem]}>Item</Text>
-                  <Text style={[styles.tableHeaderCell, styles.colQty]}>Qty</Text>
-                  <Text style={[styles.tableHeaderCell, styles.colPrice]}>Unit Price</Text>
-                  <Text style={[styles.tableHeaderCell, styles.colTax]}>Tax</Text>
-                  <Text style={[styles.tableHeaderCell, styles.colTotal]}>Total</Text>
-                </View>
-              </View>
-              {sectionItems.map((item, idx) => {
-                const clientTotal = itemClientCost(item);
-                const unitPrice = item.categoryId === 'custom' && item.customClientUnitPrice !== undefined
-                  ? item.customClientUnitPrice
-                  : item.unitPrice * (1 + item.categoryMarkupPct);
-                const taxNone = item.taxType === 'none';
-                const taxRatePct = (!taxNone && location)
-                  ? parseFloat((taxRateForItem(item.taxType, location) * 100).toFixed(3))
-                  : null;
-                const taxRateLabel = taxExempt ? 'Exempt' : taxNone ? '—' : taxRatePct != null ? `${taxRatePct}%` : '—';
-                // Jurisdiction shows the STATE abbreviation ("VA"), not the city — empty when the
-                // location has no recognizable state, so the cell reads just "6%" with no trailing comma.
-                const taxPlaceLabel = (!taxExempt && !taxNone && location)
-                  ? stateAbbrevFromLocation(location.name)
-                  : null;
-                return (
-                  // Row stays intact (never splits mid-row); rows still break cleanly between each other.
-                  // (A single row taller than a full page — e.g. a package item with dozens of
-                  // sub-items — would hit the same overflow ceiling, but that's not realistic here.)
-                  <View key={idx} wrap={false} style={[styles.row, idx % 2 === 1 ? styles.rowAlt : {}]}>
-                    <View style={[styles.colItem, { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8 }]}>
-                      {item.thumbnailUrl ? (
-                        <Image src={item.thumbnailUrl} style={{ width: 18, height: 18, borderRadius: 3, flexShrink: 0 }} />
-                      ) : item.thumbnailIcon ? (
-                        <View style={{ width: 18, height: 18, borderRadius: 3, backgroundColor: '#E8E0D5', flexShrink: 0 }} />
-                      ) : null}
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.cell}>{sanitizeLineItemName(item.name)}</Text>
-                        {(() => {
-                          if (!item.packageOptions || !item.selectedPackageId) return null;
-                          const pkg = item.packageOptions.options.find((o) => o.id === item.selectedPackageId);
-                          if (!pkg) return null;
-                          return (
-                            <View style={{ marginTop: 2 }}>
-                              <Text style={{ fontSize: 8, color: BRAND_BROWN, fontWeight: 'bold' }}>{sanitizeLineItemName(pkg.name)}</Text>
-                              {pkg.items.length > 0 && (
-                                <Text style={{ fontSize: 7.5, color: BRAND_SILVER, marginTop: 1 }}>
-                                  {pkg.items.join(' · ')}
-                                </Text>
-                              )}
-                            </View>
-                          );
-                        })()}
-                      </View>
-                    </View>
-                    <Text style={[styles.cell, styles.colQty]}>{item.qty}</Text>
-                    <Text style={[styles.cell, styles.colPrice]}>{fmt(unitPrice)}</Text>
-                    <View style={styles.colTax}>
-                      <Text style={styles.cellDim}>{taxRateLabel}</Text>
-                      {taxPlaceLabel ? <Text style={{ fontSize: 7.5, color: BRAND_SILVER, textAlign: 'right' }}>{taxPlaceLabel}</Text> : null}
-                    </View>
-                    <Text style={[styles.cell, styles.colTotal]}>{fmt(clientTotal)}</Text>
-                  </View>
-                );
-              })}
-            </View>
-          );
-        })}
+        <EstimateLineItemSections
+          lineItems={lineItems}
+          orderedSections={orderedSections}
+          location={location}
+          taxExempt={taxExempt}
+        />
 
         {/* Totals block: Subtotal → Production Fee → Pre-Tax Total → Tax → Total */}
-        <View style={styles.totalsBlock}>
-          {summary.lineItemsSubtotalClient > 0 && (
-            <View style={styles.totalsRow}>
-              <Text style={styles.totalsLabel}>Subtotal</Text>
-              <Text style={styles.totalsValue}>{fmtRound(summary.lineItemsSubtotalClient)}</Text>
-            </View>
-          )}
-          {summary.productionFee > 0 && (
-            <View style={styles.totalsRow}>
-              <Text style={styles.totalsLabel}>Production Fee</Text>
-              <Text style={styles.totalsValue}>{fmtRound(summary.productionFee)}</Text>
-            </View>
-          )}
-          {summary.preTaxTotal > 0 && (
-            <View style={styles.totalsRow}>
-              <Text style={styles.totalsLabel}>Pre-Tax Total</Text>
-              <Text style={styles.totalsValue}>{fmtRound(summary.preTaxTotal)}</Text>
-            </View>
-          )}
-          {taxExempt ? (
-            <View style={styles.totalsRow}>
-              <Text style={styles.totalsLabel}>Tax</Text>
-              <Text style={styles.totalsValue}>Tax Exempt</Text>
-            </View>
-          ) : totalTax > 0 && (
-            <View style={styles.totalsRow}>
-              <Text style={styles.totalsLabel}>Tax</Text>
-              <Text style={styles.totalsValue}>{fmtRound(totalTax)}</Text>
-            </View>
-          )}
-          {summary.discountAmount > 0 && (
-            <View style={styles.discountRow}>
-              <Text style={styles.discountLabel}>Client Discount</Text>
-              <Text style={styles.discountValue}>−{fmtRound(summary.discountAmount)}</Text>
-            </View>
-          )}
-          {/* EEG commission — third-party pass-through, added AFTER tax. Reuses the copper discount
-              row styles; only shows when the per-estimate toggle is on (amount > 0). */}
-          {summary.eegCommissionAmount > 0 && (
-            <View style={styles.discountRow}>
-              <Text style={styles.discountLabel}>EEG Commission</Text>
-              <Text style={styles.discountValue}>+{fmtRound(summary.eegCommissionAmount)}</Text>
-            </View>
-          )}
-          <View style={styles.grandTotal}>
-            <Text style={styles.grandTotalLabel}>Total</Text>
-            <Text style={styles.grandTotalValue}>{fmtRound(summary.totalClient)}</Text>
-          </View>
-          {guestCount > 0 && (
-            <View style={[styles.totalsRow, { marginTop: 2 }]}>
-              <Text style={[styles.totalsLabel, { color: BRAND_SILVER }]}>Price per person ({guestCount} guests)</Text>
-              <Text style={[styles.totalsValue, { color: BRAND_SILVER }]}>{fmtRound(Math.ceil(summary.totalClient / guestCount))}</Text>
-            </View>
-          )}
-        </View>
+        <EstimateTotals summary={summary} taxExempt={taxExempt} guestCount={guestCount} />
 
         {/* Footer */}
         <View style={styles.footer} fixed>
