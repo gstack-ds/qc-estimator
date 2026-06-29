@@ -152,6 +152,8 @@ export default function DecorEstimateBuilder({
   const [name, setName] = useState(estimate.name);
   const [discountType, setDiscountType] = useState<'percent' | 'flat' | null>(estimate.discount_type ?? null);
   const [discountValue, setDiscountValue] = useState(estimate.discount_value ?? 0);
+  const [eegEnabled, setEegEnabled] = useState(estimate.eeg_enabled ?? false);
+  const [eegRate, setEegRate] = useState(estimate.eeg_rate ?? 0.10);
   const [taxExempt, setTaxExempt] = useState(estimate.tax_exempt ?? false);
 
   const initSections = dbSections.map((s) => ({ id: s.id, name: s.name, taxBucket: s.tax_bucket, markupPct: s.markup_pct, isBuiltIn: s.is_built_in, sortOrder: s.sort_order }));
@@ -187,11 +189,12 @@ export default function DecorEstimateBuilder({
         adminFee: 0,
         lineItems: toEngineLineItems(lineItems),
         discount: discountType && discountValue > 0 ? { type: discountType, value: discountValue } : null,
+        eegCommission: eegEnabled ? { rate: eegRate } : null,
         taxExempt,
       },
       programConfig
     ),
-    [name, lineItems, programConfig, discountType, discountValue, taxExempt]
+    [name, lineItems, programConfig, discountType, discountValue, eegEnabled, eegRate, taxExempt]
   );
 
   const marginAnalysis = useMemo(
@@ -259,6 +262,10 @@ export default function DecorEstimateBuilder({
 
   async function saveDiscount(type: 'percent' | 'flat' | null, value: number) {
     await withSave(() => updateEstimate(estimate.id, program.id, { discount_type: type, discount_value: value }));
+  }
+
+  async function saveEeg(enabled: boolean, rate: number) {
+    await withSave(() => updateEstimate(estimate.id, program.id, { eeg_enabled: enabled, eeg_rate: rate }));
   }
 
   async function saveTaxExempt(val: boolean) {
@@ -661,6 +668,40 @@ export default function DecorEstimateBuilder({
               onClick={() => setDiscountType('percent')}
               className="text-xs text-brand-silver hover:text-brand-charcoal underline underline-offset-2 self-start"
             >+ Add Client Discount</button>
+          )}
+
+          {/* EEG Commission — third-party pass-through, added after tax */}
+          {eegEnabled ? (
+            <div className="bg-white border border-brand-cream rounded-lg p-5">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-xs font-medium text-brand-charcoal/60 tracking-wide uppercase">EEG Commission</span>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={eegRate === 0 ? '' : parseFloat((eegRate * 100).toFixed(4))}
+                    onChange={(e) => setEegRate((parseFloat(e.target.value) || 0) / 100)}
+                    onBlur={() => saveEeg(true, eegRate)}
+                    className="border border-brand-cream rounded px-2.5 py-1.5 pr-7 text-sm w-32 focus:outline-none focus:ring-1 focus:ring-brand-copper bg-white text-brand-charcoal"
+                    placeholder="10"
+                  />
+                  <span className="absolute right-2.5 top-2 text-brand-silver text-xs pointer-events-none">%</span>
+                </div>
+                {summary.eegCommissionAmount > 0 && <span className="text-xs text-brand-copper">+${Math.round(summary.eegCommissionAmount).toLocaleString()}</span>}
+                <button
+                  type="button"
+                  onClick={() => { setEegEnabled(false); saveEeg(false, eegRate); }}
+                  className="text-xs text-brand-silver hover:text-brand-charcoal"
+                >Clear</button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => { setEegEnabled(true); saveEeg(true, eegRate); }}
+              className="text-xs text-brand-silver hover:text-brand-charcoal underline underline-offset-2 self-start"
+            >+ Add EEG Commission</button>
           )}
 
           {/* Tax Exempt */}

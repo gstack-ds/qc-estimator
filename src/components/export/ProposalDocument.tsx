@@ -314,6 +314,14 @@ export default function ProposalDocument({
               <Text style={styles.discountValue}>−{fmtRound(summary.discountAmount)}</Text>
             </View>
           )}
+          {/* EEG commission — third-party pass-through, added AFTER tax. Reuses the copper discount
+              row styles; only shows when the per-estimate toggle is on (amount > 0). */}
+          {summary.eegCommissionAmount > 0 && (
+            <View style={styles.discountRow}>
+              <Text style={styles.discountLabel}>EEG Commission</Text>
+              <Text style={styles.discountValue}>+{fmtRound(summary.eegCommissionAmount)}</Text>
+            </View>
+          )}
           <View style={styles.grandTotal}>
             <Text style={styles.grandTotalLabel}>Total</Text>
             <Text style={styles.grandTotalValue}>{fmtRound(summary.totalClient)}</Text>

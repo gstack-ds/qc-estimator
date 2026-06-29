@@ -147,6 +147,8 @@ export default function AvEstimateBuilder({
   const [name, setName] = useState(estimate.name);
   const [discountType, setDiscountType] = useState<'percent' | 'flat' | null>(estimate.discount_type ?? null);
   const [discountValue, setDiscountValue] = useState(estimate.discount_value ?? 0);
+  const [eegEnabled, setEegEnabled] = useState(estimate.eeg_enabled ?? false);
+  const [eegRate, setEegRate] = useState(estimate.eeg_rate ?? 0.10);
   const [taxExempt, setTaxExempt] = useState(estimate.tax_exempt ?? false);
 
   const initSections = dbSections.map((s) => ({ id: s.id, name: s.name, taxBucket: s.tax_bucket, markupPct: s.markup_pct, isBuiltIn: s.is_built_in, sortOrder: s.sort_order }));
@@ -182,11 +184,12 @@ export default function AvEstimateBuilder({
         adminFee: 0,
         lineItems: toEngineLineItems(lineItems),
         discount: discountType && discountValue > 0 ? { type: discountType, value: discountValue } : null,
+        eegCommission: eegEnabled ? { rate: eegRate } : null,
         taxExempt,
       },
       programConfig
     ),
-    [name, lineItems, programConfig, discountType, discountValue, taxExempt]
+    [name, lineItems, programConfig, discountType, discountValue, eegEnabled, eegRate, taxExempt]
   );
 
   const marginAnalysis = useMemo(
@@ -237,6 +240,10 @@ export default function AvEstimateBuilder({
 
   async function saveDiscount(type: 'percent' | 'flat' | null, value: number) {
     await withSave(() => updateEstimate(estimate.id, program.id, { discount_type: type, discount_value: value }));
+  }
+
+  async function saveEeg(enabled: boolean, rate: number) {
+    await withSave(() => updateEstimate(estimate.id, program.id, { eeg_enabled: enabled, eeg_rate: rate }));
   }
 
   async function saveTaxExempt(val: boolean) {
@@ -613,6 +620,21 @@ export default function AvEstimateBuilder({
               </div>
               {discountValue > 0 && <span className="text-xs text-brand-copper">−${Math.round(summary.discountAmount).toLocaleString()}</span>}
               {(discountType || discountValue > 0) && <button type="button" className="text-xs text-brand-silver/60 hover:text-red-500 transition-colors" onClick={() => { setDiscountType(null); setDiscountValue(0); saveDiscount(null, 0); }}>Clear</button>}
+            </div>
+            <div className="flex items-center gap-3 mt-3">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={eegEnabled} onChange={(e) => { const next = e.target.checked; setEegEnabled(next); saveEeg(next, eegRate); }} className="w-4 h-4 rounded border-brand-cream accent-brand-brown cursor-pointer" />
+                <span className="text-sm text-gray-700">EEG Commission</span>
+              </label>
+              {eegEnabled && (
+                <>
+                  <div className="relative w-28">
+                    <input type="number" min="0" step="0.5" value={eegRate === 0 ? '' : parseFloat((eegRate * 100).toFixed(4))} onChange={(e) => { const raw = parseFloat(e.target.value) || 0; setEegRate(raw / 100); }} onBlur={() => saveEeg(eegEnabled, eegRate)} className={fieldClass + ' pr-6' + (eegRate > 0 ? ' border-brand-copper bg-brand-offwhite' : '')} placeholder="10" />
+                    <span className="absolute right-2 top-1.5 text-brand-silver text-xs pointer-events-none">%</span>
+                  </div>
+                  {summary.eegCommissionAmount > 0 && <span className="text-xs text-brand-copper">+${Math.round(summary.eegCommissionAmount).toLocaleString()}</span>}
+                </>
+              )}
             </div>
             <div className="flex items-center gap-3 mt-3">
               <label className="flex items-center gap-2 cursor-pointer select-none">

@@ -99,6 +99,8 @@ export interface RawEstimate {
   admin_fee_override: number | null;
   discount_type: 'percent' | 'flat' | null;
   discount_value: number;
+  eeg_enabled?: boolean;
+  eeg_rate?: number;
   tax_exempt: boolean;
   food_tax_override: number | null;
   alcohol_tax_override: number | null;
@@ -243,6 +245,7 @@ export function buildDeckContract(
     discount: estimate.discount_type && estimate.discount_value > 0
       ? { type: estimate.discount_type, value: estimate.discount_value }
       : null,
+    eegCommission: estimate.eeg_enabled ? { rate: estimate.eeg_rate ?? 0 } : null,
     taxExempt: estimate.tax_exempt,
     foodTaxOverride: estimate.food_tax_override,
     alcoholTaxOverride: estimate.alcohol_tax_override,

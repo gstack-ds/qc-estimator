@@ -83,7 +83,7 @@ export async function handleGetEstimate(
   const { data: estimate, error: estErr } = await db
     .from('estimates')
     .select(
-      'id, program_id, event_id, type, name, room_space, fb_minimum, is_venue_taxable, service_charge_override, gratuity_override, admin_fee_override, include_in_budget, sort_order, included_in_proposal, venue_contact, menu_notes, transport_commission, venue_id, venue_space_id, discount_type, discount_value, tax_exempt, food_tax_override, alcohol_tax_override, general_tax_override, slide_copy_data, tour_details, created_at, updated_at'
+      'id, program_id, event_id, type, name, room_space, fb_minimum, is_venue_taxable, service_charge_override, gratuity_override, admin_fee_override, include_in_budget, sort_order, included_in_proposal, venue_contact, menu_notes, transport_commission, venue_id, venue_space_id, discount_type, discount_value, eeg_enabled, eeg_rate, tax_exempt, food_tax_override, alcohol_tax_override, general_tax_override, slide_copy_data, tour_details, created_at, updated_at'
     )
     .eq('id', args.id)
     .single();

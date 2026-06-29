@@ -148,7 +148,7 @@ function buildEstimateData(
       productionFeeTax: 0, lineItemsSubtotalClient: agg.total_client, preTaxTotal: agg.total_client + transportSummary.productionFee,
       totalOur: agg.total_our, totalClient: transportSummary.totalClient,
       pricePerPerson: 0, fbMinimumMet: true, fbShortfall: 0,
-      vendorTaxesTotal: 0, revenueItemsClientTotal: 0, discountAmount: 0, travelInProductionFee: 0,
+      vendorTaxesTotal: 0, revenueItemsClientTotal: 0, discountAmount: 0, eegCommissionAmount: 0, travelInProductionFee: 0,
     };
     const transportConfig: ProgramConfig = { ...config, clientCommission: transportCommission, gdpCommissionEnabled: false, thirdPartyCommissions: [] };
     const margin = calculateMarginAnalysis(fakeSummary, transportConfig, tiers);

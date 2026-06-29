@@ -366,6 +366,8 @@ export interface DbEstimate {
   venue_space_id: string | null;
   discount_type: 'percent' | 'flat' | null;
   discount_value: number;
+  eeg_enabled: boolean;
+  eeg_rate: number;
   tax_exempt: boolean;
   food_tax_override: number | null;
   alcohol_tax_override: number | null;
@@ -380,7 +382,7 @@ export interface DbEstimate {
   updated_at: string;
 }
 
-const ESTIMATE_FIELDS = 'id, program_id, event_id, type, name, room_space, fb_minimum, is_venue_taxable, service_charge_override, gratuity_override, admin_fee_override, include_in_budget, sort_order, included_in_proposal, venue_contact, menu_notes, transport_commission, venue_id, venue_space_id, discount_type, discount_value, tax_exempt, food_tax_override, alcohol_tax_override, general_tax_override, slide_copy_data, tour_details, assigned_to, internal_notes, created_at, updated_at';
+const ESTIMATE_FIELDS = 'id, program_id, event_id, type, name, room_space, fb_minimum, is_venue_taxable, service_charge_override, gratuity_override, admin_fee_override, include_in_budget, sort_order, included_in_proposal, venue_contact, menu_notes, transport_commission, venue_id, venue_space_id, discount_type, discount_value, eeg_enabled, eeg_rate, tax_exempt, food_tax_override, alcohol_tax_override, general_tax_override, slide_copy_data, tour_details, assigned_to, internal_notes, created_at, updated_at';
 
 export async function getEstimatesForProgram(programId: string): Promise<DbEstimate[]> {
   const supabase = await createClient();

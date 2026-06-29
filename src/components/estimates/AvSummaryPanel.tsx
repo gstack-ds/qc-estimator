@@ -99,6 +99,12 @@ export default function AvSummaryPanel({ summary, guestCount, sections, showMath
           <span className="tabular-nums">-{fmt(summary.discountAmount)}</span>
         </div>
       )}
+      {summary.eegCommissionAmount > 0 && (
+        <div className="flex justify-between py-1 text-sm text-brand-copper">
+          <span>EEG Commission</span>
+          <span className="tabular-nums">+{fmt(summary.eegCommissionAmount)}</span>
+        </div>
+      )}
       <Row label="Total Estimate" value={summary.totalClient} bold pp={pp(summary.totalClient)} showMath={showMath} />
     </div>
   );
