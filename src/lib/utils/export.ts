@@ -136,6 +136,10 @@ export function buildSummaryRows(
     if (tax > 0)                             rows.push({ label: 'Tax', amount: tax });
   }
 
+  // EEG commission (after tax) — must appear here so the rows reconcile with totalClient, which
+  // now includes it. Same reconciliation requirement as the 2026-06-07 productionFeeTax fix.
+  if (summary.eegCommissionAmount > 0) rows.push({ label: 'EEG Commission', amount: summary.eegCommissionAmount });
+
   return rows;
 }
 
@@ -234,6 +238,8 @@ export function buildDetailedCopyText(
 
   const tax = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax + summary.productionFeeTax;
   if (tax > 0) lines.push(`Tax\t\t\t\t${fmtAmt(tax)}`);
+  // EEG commission (after tax) — included so the itemized rows reconcile with TOTAL ESTIMATE.
+  if (summary.eegCommissionAmount > 0) lines.push(`EEG Commission\t\t\t\t${fmtAmt(summary.eegCommissionAmount)}`);
 
   const pp = guestCount > 0 ? Math.ceil(summary.totalClient / guestCount) : 0;
   lines.push('');

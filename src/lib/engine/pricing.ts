@@ -176,7 +176,15 @@ export function calculateVenueEstimate(
         ? totalClientPreDiscount * input.discount.value
         : input.discount.value)
     : 0;
-  const totalClient = totalClientPreDiscount - discountAmount;
+
+  // EEG commission: third-party pass-through fee added AFTER tax (rate × pre-tax line-items subtotal).
+  // It is NOT taxed and does not change subtotal/production fee/tax. Margin-neutral — the margin
+  // analysis backs it out of totalClient, so QC margin $ and % are identical whether on or off.
+  const eegCommissionAmount = input.eegCommission
+    ? input.eegCommission.rate * lineItemsSubtotalClient
+    : 0;
+
+  const totalClient = totalClientPreDiscount - discountAmount + eegCommissionAmount;
 
   // Per person
   const pricePerPerson = config.guestCount > 0
@@ -210,6 +218,7 @@ export function calculateVenueEstimate(
     pricePerPerson,
     fbMinimumMet, fbShortfall,
     discountAmount,
+    eegCommissionAmount,
     travelInProductionFee,
   };
 }
@@ -250,9 +259,14 @@ export function calculateMarginAnalysis(
     summary.qcStaffingSubtotalClient + summary.venueSubtotalClient +
     summary.serviceChargeClient + summary.gratuityClient + summary.adminFeeClient;
 
+  // EEG commission is a third-party pass-through: collected from the client and paid out, so it is
+  // NOT QC income. Back it out of the client total here so every margin figure (qcRevenue, GDP base,
+  // margin %, team hours, true net) is identical whether the EEG toggle is on or off.
+  const marginClientTotal = summary.totalClient - summary.eegCommissionAmount;
+
   const clientCommissionAmount = markupRevenue * config.clientCommission;
   const gdpCommissionAmount = config.gdpCommissionEnabled
-    ? summary.totalClient * config.gdpCommissionRate
+    ? marginClientTotal * config.gdpCommissionRate
     : 0;
   const thirdPartyCommissionsTotal = (config.thirdPartyCommissions ?? [])
     .reduce((s, c) => s + markupRevenue * c.rate, 0);
@@ -264,19 +278,19 @@ export function calculateMarginAnalysis(
   const totalTaxes = summary.foodTax + summary.alcoholTax + summary.equipmentTax + summary.venueTax + summary.productionFeeTax;
   const ccProcessingAmount = summary.subtotalClient * config.ccProcessingFee;
 
-  const qcRevenue = summary.totalClient
+  const qcRevenue = marginClientTotal
     - vendorCostsBase - totalTaxes - ccProcessingAmount
     - clientCommissionAmount - gdpCommissionAmount - thirdPartyCommissionsTotal;
 
   const totalVendorCosts = vendorCostsBase;
-  const qcMarginPct = summary.totalClient > 0 ? qcRevenue / summary.totalClient : 0;
+  const qcMarginPct = marginClientTotal > 0 ? qcRevenue / marginClientTotal : 0;
   const marginHealth = getMarginHealth(qcMarginPct);
 
-  const estimatedTeamHours = lookupTeamHours(summary.totalClient, tiers);
+  const estimatedTeamHours = lookupTeamHours(marginClientTotal, tiers);
   const opExEstimate = estimatedTeamHours * 90;
 
   const trueNetProfit = qcRevenue - opExEstimate - travelExpenses;
-  const trueNetMarginPct = summary.totalClient > 0 ? trueNetProfit / summary.totalClient : 0;
+  const trueNetMarginPct = marginClientTotal > 0 ? trueNetProfit / marginClientTotal : 0;
   const trueNetHealth = getNetHealth(trueNetMarginPct);
 
   return {

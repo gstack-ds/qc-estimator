@@ -58,6 +58,7 @@ function makeSummary(overrides: Partial<EstimateSummary> = {}): EstimateSummary 
     vendorTaxesTotal: 0,
     revenueItemsClientTotal: 0,
     discountAmount: 0,
+    eegCommissionAmount: 0,
     travelInProductionFee: 0,
     ...overrides,
   };
@@ -685,5 +686,45 @@ describe('groupLineItemsBySections', () => {
     expect(groups).toHaveLength(2);
     expect(groups[0].items.map((i) => i.name)).toEqual(['A', 'B']);
     expect(groups[1].items.map((i) => i.name)).toEqual(['C']);
+  });
+});
+
+// ─── EEG commission in exports ───────────────────────────
+// Guards the reconciliation invariant: with EEG on, totalClient includes the commission, so the
+// itemized rows must include an EEG line or they won't sum to the printed TOTAL (the 2026-06-07
+// productionFeeTax class of bug). Values chosen so rows sum exactly to totalClient.
+
+describe('EEG commission in exports', () => {
+  // av rows: AV Equipment 1000 + Tax 72.5 + Production Fee 50 + EEG 100 = 1222.5
+  const withEeg = makeSummary({
+    equipmentSubtotalClient: 1000, equipmentTax: 72.5, productionFee: 50,
+    eegCommissionAmount: 100, totalClient: 1222.5,
+  });
+  const withoutEeg = makeSummary({
+    equipmentSubtotalClient: 1000, equipmentTax: 72.5, productionFee: 50,
+    eegCommissionAmount: 0, totalClient: 1122.5,
+  });
+
+  it('buildSummaryRows includes an EEG Commission row when the commission is on', () => {
+    const rows = buildSummaryRows(withEeg, 'av', [], MARKUPS);
+    expect(rows.find((r) => r.label === 'EEG Commission')?.amount).toBe(100);
+  });
+
+  it('buildSummaryRows rows reconcile with totalClient when EEG is on', () => {
+    const rows = buildSummaryRows(withEeg, 'av', [], MARKUPS);
+    const sum = rows.reduce((a, r) => a + r.amount, 0);
+    expect(sum).toBeCloseTo(withEeg.totalClient);
+  });
+
+  it('buildSummaryRows omits the EEG row when the commission is off', () => {
+    const rows = buildSummaryRows(withoutEeg, 'av', [], MARKUPS);
+    expect(rows.find((r) => r.label === 'EEG Commission')).toBeUndefined();
+    const sum = rows.reduce((a, r) => a + r.amount, 0);
+    expect(sum).toBeCloseTo(withoutEeg.totalClient);
+  });
+
+  it('buildDetailedCopyText prints the EEG Commission line when on, omits it when off', () => {
+    expect(buildDetailedCopyText([], withEeg, 10, 'EEG Export')).toContain('EEG Commission');
+    expect(buildDetailedCopyText([], withoutEeg, 10, 'EEG Export')).not.toContain('EEG Commission');
   });
 });

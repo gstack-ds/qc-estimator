@@ -94,6 +94,9 @@ export interface VenueEstimateInput {
   adminFee: FeeOption;            // override or default
   lineItems: LineItem[];
   discount?: { type: 'percent' | 'flat'; value: number } | null;
+  /** EEG commission: third-party pass-through fee. Present (non-null) = enabled. rate is a decimal
+   *  (0.10 = 10%), applied to the pre-tax line-items subtotal and added AFTER tax. null = off. */
+  eegCommission?: { rate: number } | null;
   taxExempt?: boolean;
   foodTaxOverride?: number | null;
   alcoholTaxOverride?: number | null;
@@ -146,6 +149,8 @@ export interface EstimateSummary {
   fbShortfall: number;
   // Discount (0 when no discount applied)
   discountAmount: number;
+  // EEG commission (0 when toggle off) — third-party pass-through, added to totalClient after tax
+  eegCommissionAmount: number;
   // Travel in production fee (0 when not included or travelTotal = 0)
   travelInProductionFee: number;
 }

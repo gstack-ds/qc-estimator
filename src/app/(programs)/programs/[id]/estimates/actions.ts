@@ -30,6 +30,8 @@ export async function updateEstimate(id: string, programId: string, data: Partia
   include_in_budget: boolean;
   discount_type: 'percent' | 'flat' | null;
   discount_value: number;
+  eeg_enabled: boolean;
+  eeg_rate: number;
   tax_exempt: boolean;
   food_tax_override: number | null;
   alcohol_tax_override: number | null;
@@ -135,6 +137,8 @@ export async function duplicateEstimate(sourceId: string, programId: string) {
       include_in_budget: source.include_in_budget,
       discount_type: source.discount_type ?? null,
       discount_value: source.discount_value ?? 0,
+      eeg_enabled: source.eeg_enabled ?? false,
+      eeg_rate: source.eeg_rate ?? 0.10,
       sort_order: count ?? 0,
     })
     .select('id')

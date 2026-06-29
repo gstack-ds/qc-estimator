@@ -84,6 +84,8 @@ interface LocalEstimate {
   adminFeeOverride: number | null;
   discountType: 'percent' | 'flat' | null;
   discountValue: number;
+  eegEnabled: boolean;
+  eegRate: number;
   taxExempt: boolean;
   foodTaxOverride: number | null;
   alcoholTaxOverride: number | null;
@@ -243,6 +245,8 @@ export default function EstimateBuilder({
     adminFeeOverride: estimate.admin_fee_override,
     discountType: estimate.discount_type ?? null,
     discountValue: estimate.discount_value ?? 0,
+    eegEnabled: estimate.eeg_enabled ?? false,
+    eegRate: estimate.eeg_rate ?? 0.10,
     taxExempt: estimate.tax_exempt ?? false,
     foodTaxOverride: estimate.food_tax_override ?? null,
     alcoholTaxOverride: estimate.alcohol_tax_override ?? null,
@@ -443,6 +447,7 @@ export default function EstimateBuilder({
     discount: est.discountType && est.discountValue > 0
       ? { type: est.discountType, value: est.discountValue }
       : null,
+    eegCommission: est.eegEnabled ? { rate: est.eegRate } : null,
     taxExempt: est.taxExempt,
     foodTaxOverride: est.foodTaxOverride,
     alcoholTaxOverride: est.alcoholTaxOverride,
@@ -553,6 +558,8 @@ export default function EstimateBuilder({
       admin_fee_override: merged.adminFeeOverride,
       discount_type: merged.discountType,
       discount_value: merged.discountValue,
+      eeg_enabled: merged.eegEnabled,
+      eeg_rate: merged.eegRate,
       tax_exempt: merged.taxExempt,
       food_tax_override: merged.foodTaxOverride,
       alcohol_tax_override: merged.alcoholTaxOverride,
@@ -1456,6 +1463,36 @@ export default function EstimateBuilder({
                   className="text-xs text-brand-silver/60 hover:text-red-500 transition-colors"
                   onClick={() => { updateEstField({ discountType: null, discountValue: 0 }); saveEstimate({ discountType: null, discountValue: 0 }); }}
                 >Clear</button>
+              )}
+            </div>
+            {/* EEG Commission — third-party pass-through fee added after tax */}
+            <div className="flex items-center gap-3 pt-1">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={est.eegEnabled}
+                  onChange={(e) => { const next = e.target.checked; updateEstField({ eegEnabled: next }); saveEstimate({ eegEnabled: next }); }}
+                  className="w-4 h-4 rounded border-brand-cream accent-brand-brown cursor-pointer"
+                />
+                <span className={labelClass + ' mb-0'}>EEG Commission</span>
+              </label>
+              {est.eegEnabled && (
+                <>
+                  <div className="relative w-28">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={est.eegRate === 0 ? '' : parseFloat((est.eegRate * 100).toFixed(4))}
+                      onChange={(e) => { const raw = parseFloat(e.target.value) || 0; updateEstField({ eegRate: raw / 100 }); }}
+                      onBlur={() => saveEstimate({ eegRate: est.eegRate })}
+                      className={fieldClass + ' pr-6' + (est.eegRate > 0 ? ' border-brand-copper bg-brand-offwhite' : '')}
+                      placeholder="10"
+                    />
+                    <span className="absolute right-2 top-1.5 text-brand-silver text-xs pointer-events-none">%</span>
+                  </div>
+                  {summary.eegCommissionAmount > 0 && <span className="text-xs text-brand-copper">+${Math.round(summary.eegCommissionAmount).toLocaleString()}</span>}
+                </>
               )}
             </div>
             {/* Tax Exempt */}
