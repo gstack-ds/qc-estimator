@@ -613,7 +613,7 @@ export default function LeadsList({ leads, counts, teamMembers }: Props) {
           </div>
 
           {/* Desktop table */}
-          <div className="hidden md:block rounded-lg border border-brand-cream overflow-auto max-h-[calc(100vh-300px)]">
+          <div data-scroll-restore="leads-table" className="hidden md:block rounded-lg border border-brand-cream overflow-auto max-h-[calc(100vh-300px)]">
             <table className="text-sm">
               <thead className="bg-brand-offwhite border-b border-brand-cream sticky top-0 z-20">
                 <tr>
