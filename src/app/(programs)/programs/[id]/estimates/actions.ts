@@ -1309,7 +1309,7 @@ export async function getProgramProposalData(
 
   const { data: prog, error: pErr } = await supabase
     .from('programs')
-    .select('id, name, client_name, client_company, guest_count, cc_processing_fee, client_commission, gdp_commission_enabled, gdp_commission_rate, service_charge_default, gratuity_default, admin_fee_default, third_party_commissions, include_travel_in_production_fee, location_id')
+    .select('id, name, client_name, company_name, guest_count, cc_processing_fee, client_commission, gdp_commission_enabled, gdp_commission_rate, service_charge_default, gratuity_default, admin_fee_default, third_party_commissions, include_travel_in_production_fee, location_id')
     .eq('id', programId)
     .single();
   if (pErr || !prog) return { data: null, error: pErr?.message ?? 'Program not found' };
@@ -1398,7 +1398,7 @@ export async function getProgramProposalData(
     data: {
       programName: prog.name,
       clientName: prog.client_name ?? null,
-      clientCompany: prog.client_company ?? null,
+      clientCompany: prog.company_name ?? null,
       proposalDate,
       estimates,
     },
