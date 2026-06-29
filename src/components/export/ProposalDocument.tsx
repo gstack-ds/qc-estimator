@@ -203,16 +203,23 @@ export default function ProposalDocument({
         {sectionGroups.map((group) => {
           const sectionItems = group.items;
           return (
-            <View key={group.id} wrap={false}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionHeaderText}>{sectionDisplayLabel(group.name)}</Text>
-              </View>
-              <View style={styles.tableHeader}>
-                <Text style={[styles.tableHeaderCell, styles.colItem]}>Item</Text>
-                <Text style={[styles.tableHeaderCell, styles.colQty]}>Qty</Text>
-                <Text style={[styles.tableHeaderCell, styles.colPrice]}>Unit Price</Text>
-                <Text style={[styles.tableHeaderCell, styles.colTax]}>Tax</Text>
-                <Text style={[styles.tableHeaderCell, styles.colTotal]}>Total</Text>
+            // Section is wrappable: a long florals section flows across pages instead of
+            // colliding. A non-wrappable section taller than a page makes @react-pdf collapse
+            // its layout (header-on-row, tax-rate-on-jurisdiction, compressed rows).
+            <View key={group.id}>
+              {/* Keep the section header + column header together; minPresenceAhead prevents
+                  the header from orphaning at the very bottom of a page with no rows under it. */}
+              <View wrap={false} minPresenceAhead={60}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionHeaderText}>{sectionDisplayLabel(group.name)}</Text>
+                </View>
+                <View style={styles.tableHeader}>
+                  <Text style={[styles.tableHeaderCell, styles.colItem]}>Item</Text>
+                  <Text style={[styles.tableHeaderCell, styles.colQty]}>Qty</Text>
+                  <Text style={[styles.tableHeaderCell, styles.colPrice]}>Unit Price</Text>
+                  <Text style={[styles.tableHeaderCell, styles.colTax]}>Tax</Text>
+                  <Text style={[styles.tableHeaderCell, styles.colTotal]}>Total</Text>
+                </View>
               </View>
               {sectionItems.map((item, idx) => {
                 const clientTotal = itemClientCost(item);
@@ -228,7 +235,10 @@ export default function ProposalDocument({
                   ? shortLocationName(location.name)
                   : null;
                 return (
-                  <View key={idx} style={[styles.row, idx % 2 === 1 ? styles.rowAlt : {}]}>
+                  // Row stays intact (never splits mid-row); rows still break cleanly between each other.
+                  // (A single row taller than a full page — e.g. a package item with dozens of
+                  // sub-items — would hit the same overflow ceiling, but that's not realistic here.)
+                  <View key={idx} wrap={false} style={[styles.row, idx % 2 === 1 ? styles.rowAlt : {}]}>
                     <View style={[styles.colItem, { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8 }]}>
                       {item.thumbnailUrl ? (
                         <Image src={item.thumbnailUrl} style={{ width: 18, height: 18, borderRadius: 3, flexShrink: 0 }} />
