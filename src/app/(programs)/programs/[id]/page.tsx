@@ -33,6 +33,7 @@ import ProgramForm from '@/components/estimates/ProgramForm';
 import EventsView, { type EventRow } from '@/components/estimates/EventsView';
 import { type EstimateCard } from '@/components/estimates/ComparisonView';
 import DeleteProgramButton from '@/components/estimates/DeleteProgramButton';
+import ExportFullProposalButton from '@/components/programs/ExportFullProposalButton';
 import ProgramPnLPanel, { type PnLRow } from '@/components/estimates/ProgramPnLPanel';
 import ProgramStatusDropdown from '@/components/programs/ProgramStatusDropdown';
 import GenerateDeckButton from '@/components/deck/GenerateDeckButton';
@@ -325,6 +326,10 @@ export default async function ProgramPage({ params }: Props) {
   }
   // Source labels (event · estimate) + jump links for the program-level callouts panel.
   const eventNameById = new Map(dbEvents.map((e) => [e.id, e.name]));
+  // Estimates eligible for the combined proposal PDF (ProposalDocument supports these types only).
+  const proposalEstimateOptions = estimates
+    .filter((e) => ['venue', 'av', 'decor', 'tour'].includes(e.type))
+    .map((e) => ({ id: e.id, name: e.name, type: e.type, eventName: e.event_id ? eventNameById.get(e.event_id) ?? null : null }));
   const calloutContextByEstimate: Record<string, CalloutContext> = {};
   for (const est of estimates) {
     calloutContextByEstimate[est.id] = {
@@ -470,6 +475,7 @@ export default async function ProgramPage({ params }: Props) {
             Budget
           </Link>
           <GenerateDeckButton mode="program" programId={id} filename={program.name} />
+          <ExportFullProposalButton programId={id} programName={program.name} estimates={proposalEstimateOptions} />
           <BudgetExportButton data={budgetExportData} />
           <DeleteProgramButton programId={id} />
         </div>
