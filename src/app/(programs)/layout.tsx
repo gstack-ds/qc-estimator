@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import NavLinks from '@/components/layout/NavLinks';
 import UserMenu from '@/components/layout/UserMenu';
 import MobileNav from '@/components/layout/MobileNav';
+import ScrollRestoration from '@/components/layout/ScrollRestoration';
 import { getProfile, getOpenCalloutCount, getUnreadResponseCount } from '@/lib/supabase/queries';
 
 export default async function ProgramsLayout({
@@ -35,6 +36,7 @@ export default async function ProgramsLayout({
 
   return (
     <div className="min-h-screen bg-brand-offwhite">
+      <ScrollRestoration />
       <header className="bg-brand-charcoal border-b border-black/20 px-4 sm:px-6 py-3 flex items-center justify-between relative">
         <div className="flex items-center gap-6 md:gap-8">
           <Link href="/programs" className="flex items-center gap-3 group">

@@ -126,6 +126,7 @@ function KanbanLane({
 
       {/* Cards area — scrolls vertically within the lane */}
       <div
+        data-scroll-restore={`leads-lane-${lane.id}`}
         className={`flex-1 min-h-0 overflow-y-auto p-2 space-y-2 rounded-b-lg border border-t-0 transition-colors duration-150 ${
           isOver
             ? 'bg-brand-copper/5 border-brand-copper/30'
@@ -349,7 +350,7 @@ export default function LeadsBoard({ leads, teamMembers, linkedPrograms }: Props
       {/* Board — flex-1 so it fills remaining height; relative for edge fades */}
       <div className="relative flex-1 min-h-0">
         {/* Horizontal scroll container — scrollbar always at bottom of this box */}
-        <div className="h-full overflow-x-auto">
+        <div data-scroll-restore="leads-board-x" className="h-full overflow-x-auto">
           <DndContext
             sensors={sensors}
             collisionDetection={pointerWithin}
