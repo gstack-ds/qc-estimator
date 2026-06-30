@@ -11,6 +11,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod/v3';
 import { getDb } from './db';
+import type { RetrievalDb } from '../../src/lib/retrieval';
 import {
   listProgramsSchema,
   getProgramSchema,
@@ -39,13 +40,16 @@ const server = new McpServer({
   version: '1.0.0',
 });
 
-// Wrap a handler to catch errors and return them as tool errors
+// Wrap a handler to catch errors and return them as tool errors.
+// Handlers live in the shared retrieval layer (src/lib/retrieval) and are typed against the
+// app's @supabase/supabase-js. This server has a separately-installed copy whose SupabaseClient
+// is nominally distinct, so we bridge getDb()'s client to RetrievalDb with one documented cast.
 function wrap<T>(
-  handler: (db: ReturnType<typeof getDb>, args: T) => Promise<unknown>
+  handler: (db: RetrievalDb, args: T) => Promise<unknown>
 ) {
   return async (args: T) => {
     try {
-      const db = getDb();
+      const db = getDb() as unknown as RetrievalDb;
       const result = await handler(db, args);
       if (result === null) {
         return {
