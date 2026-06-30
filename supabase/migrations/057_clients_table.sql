@@ -32,14 +32,21 @@ CREATE TABLE IF NOT EXISTS clients (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- DROP-then-CREATE so a partial re-run can't choke (CREATE TRIGGER has no IF NOT EXISTS).
+DROP TRIGGER IF EXISTS trg_clients_updated_at ON clients;
 CREATE TRIGGER trg_clients_updated_at
   BEFORE UPDATE ON clients FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- RLS — match the project baseline (same authenticated policies as leads/programs).
+-- DROP-then-CREATE per policy (CREATE POLICY has no IF NOT EXISTS) so this is re-runnable.
 ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "clients_select" ON clients;
 CREATE POLICY "clients_select" ON clients FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "clients_insert" ON clients;
 CREATE POLICY "clients_insert" ON clients FOR INSERT TO authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "clients_update" ON clients;
 CREATE POLICY "clients_update" ON clients FOR UPDATE TO authenticated USING (true);
+DROP POLICY IF EXISTS "clients_delete" ON clients;
 CREATE POLICY "clients_delete" ON clients FOR DELETE TO authenticated USING (true);
 
 -- ─── 2. nullable client_id references on BOTH leads and programs ───────────────
