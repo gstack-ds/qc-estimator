@@ -1073,6 +1073,7 @@ export interface DbLead {
   third_party_company: string | null;
   third_party_contact: string | null;
   third_party_comm_notes: string | null;
+  client_id: string | null;
   program_name: string | null;
   program_type: string | null;
   program_description: string | null;
@@ -1121,6 +1122,7 @@ const LEAD_FIELDS = [
   'id', 'client_name', 'end_company', 'end_client',
   'contact_name', 'client_contact_name', 'contact_email', 'contact_role',
   'third_party_company', 'third_party_contact', 'third_party_comm_notes',
+  'client_id',
   'program_name', 'program_type', 'program_description',
   'start_date', 'end_date', 'rain_date', 'num_nights', 'guest_count',
   'city', 'state', 'hotel', 'venue', 'region',
@@ -1227,6 +1229,76 @@ export async function getLinkedProgramsByLeadId(): Promise<Record<string, Linked
     }
   }
   return result;
+}
+
+// ─── Clients / unified deal (Phase 2) ─────────────────────
+// A deal = one client_id. getDealByClientId assembles the shared client row plus its
+// lead (0 or 1) and program (0 or 1). Handles all 3 shapes: lone lead, lead+program
+// pair, and standalone program. The unified deal page (2B) is built on this query.
+
+export interface DbClient {
+  id: string;
+  client_name: string | null;
+  company_name: string | null;
+  end_client: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_role: string | null;
+  client_contact_name: string | null;
+  third_party_company: string | null;
+  third_party_contact: string | null;
+  third_party: string | null;
+  third_party_comm_notes: string | null;
+  client_commission: number | null;
+  gdp_commission_rate: number | null;
+  gdp_commission: number | null;
+  extra_commission: number | null;
+  commission_notes: string | null;
+  billing_notes: string | null;
+  returning_client: boolean | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Deal {
+  client: DbClient | null;
+  lead: DbLead | null;
+  program: DbProgramWithLocation | null;
+}
+
+export async function getDealByClientId(clientId: string): Promise<Deal> {
+  const supabase = await createClient();
+  // limit(1) + take-first (not .single()/.maybeSingle()) so the query never throws if a
+  // client somehow has >1 lead or >1 program — newest wins.
+  const [clientRes, leadRes, programRes] = await Promise.all([
+    supabase.from('clients').select('*').eq('id', clientId).limit(1),
+    supabase
+      .from('leads')
+      .select(LEAD_FIELDS)
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false })
+      .limit(1),
+    supabase
+      .from('programs')
+      .select(`
+        id, name, client_name, event_date, guest_count, service_style,
+        alcohol_type, event_time, event_start_time, event_end_time, company_name, client_hotel,
+        location_id, cc_processing_fee, client_commission,
+        gdp_commission_enabled, gdp_commission_rate,
+        service_charge_default, gratuity_default, admin_fee_default,
+        third_party_commissions, status, archived_at, include_travel_in_production_fee, lead_id, program_type, created_at, updated_at,
+        location:locations(id, name, food_tax_rate, alcohol_tax_rate, general_tax_rate, effective_date, updated_at)
+      `)
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false })
+      .limit(1),
+  ]);
+
+  return {
+    client: (clientRes.data?.[0] as unknown as DbClient) ?? null,
+    lead: (leadRes.data?.[0] as unknown as DbLead) ?? null,
+    program: (programRes.data?.[0] as unknown as DbProgramWithLocation) ?? null,
+  };
 }
 
 // ─── Staffing ─────────────────────────────────────────────

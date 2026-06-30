@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import Anthropic from '@anthropic-ai/sdk';
+import { createClientFromProgram, deleteClientIfOrphaned } from '@/lib/clients/sync';
 import { programStatusToLeadStatus, type ProgramStatus } from '@/lib/programs/constants';
 import {
   normalizeDetectedEvent,
@@ -37,9 +38,14 @@ export async function createProgram(data: {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  // Phase 2A: a standalone program (created directly, no source lead) gets its OWN client
+  // row + link (best-effort — a null client_id never blocks the program insert). Programs
+  // converted from a lead go through createProgramFromLead and share the lead's client instead.
+  const clientId = await createClientFromProgram(supabase, data);
+
   const { data: program, error } = await supabase
     .from('programs')
-    .insert({ ...data, created_by: user?.id })
+    .insert({ ...data, client_id: clientId, created_by: user?.id })
     .select('id')
     .single();
 
@@ -551,8 +557,13 @@ export async function updateProgramStatus(id: string, status: ProgramStatus): Pr
 
 export async function deleteProgram(programId: string) {
   const supabase = await createClient();
-  const { error } = await supabase.from('programs').delete().eq('id', programId);
+  // Capture client_id on the way out so we can GC the client if this was its last referrer.
+  // A program converted from a lead shares the lead's client — deleteClientIfOrphaned keeps it
+  // because the lead still references it.
+  const { data: deleted, error } = await supabase.from('programs').delete().eq('id', programId).select('client_id');
   if (error) return { error: error.message };
+  // Best-effort GC — the program is already gone; never let a clients-table hiccup surface as an error.
+  try { await deleteClientIfOrphaned(supabase, deleted?.[0]?.client_id as string | null | undefined); } catch { /* ignore */ }
   revalidatePath('/programs');
   return { error: null };
 }
