@@ -10,8 +10,9 @@ import { fmtDate, fmtCurrency, orDash } from '@/lib/deal/format';
 const empty = (msg: string) => <p className="text-sm text-gray-400">{msg}</p>;
 
 function timeRange(start: string | null, end: string | null): string {
-  if (!start && !end) return '';
-  return ` · ${orDash(start)}–${orDash(end)}`;
+  if (start && end) return ` · ${start}–${end}`;
+  if (start || end) return ` · ${start ?? end}`;
+  return '';
 }
 
 export function EventsSummary({

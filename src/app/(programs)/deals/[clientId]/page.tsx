@@ -63,7 +63,9 @@ export default async function DealPage({ params }: Props) {
 
   if (program) {
     [events, estimates, staffing, budgetEntries, documents, travel, teamMembers] = await Promise.all([
-      getEventsForProgram(program.id),
+      // getEventsForProgram throws on error (unlike its siblings which return []); degrade it
+      // so a transient DB hiccup renders an empty Events section instead of 500-ing the page.
+      getEventsForProgram(program.id).catch(() => []),
       getEstimatesForProgram(program.id),
       getStaffingForProgram(program.id),
       getBudgetPlanEntries(program.id),
