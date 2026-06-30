@@ -562,7 +562,8 @@ export async function deleteProgram(programId: string) {
   // because the lead still references it.
   const { data: deleted, error } = await supabase.from('programs').delete().eq('id', programId).select('client_id');
   if (error) return { error: error.message };
-  await deleteClientIfOrphaned(supabase, deleted?.[0]?.client_id as string | null | undefined);
+  // Best-effort GC — the program is already gone; never let a clients-table hiccup surface as an error.
+  try { await deleteClientIfOrphaned(supabase, deleted?.[0]?.client_id as string | null | undefined); } catch { /* ignore */ }
   revalidatePath('/programs');
   return { error: null };
 }

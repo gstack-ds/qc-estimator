@@ -86,7 +86,8 @@ export async function deleteLead(id: string): Promise<{ error: string | null }> 
   // Capture client_id on the way out so we can GC the client if this was its last referrer.
   const { data: deleted, error } = await supabase.from('leads').delete().eq('id', id).select('client_id');
   if (error) return { error: error.message };
-  await deleteClientIfOrphaned(supabase, deleted?.[0]?.client_id as string | null | undefined);
+  // Best-effort GC — the lead is already gone; never let a clients-table hiccup surface as an error.
+  try { await deleteClientIfOrphaned(supabase, deleted?.[0]?.client_id as string | null | undefined); } catch { /* ignore */ }
   revalidatePath('/leads');
   return { error: null };
 }

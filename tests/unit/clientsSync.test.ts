@@ -72,4 +72,10 @@ describe('deleteClientIfOrphaned', () => {
     await deleteClientIfOrphaned(m.supabase, 'client-1');
     expect(m.wasDeleted()).toBe(false);
   });
+
+  it('fail-safe: KEEPS the client on a null count even with NO error (never coerce null→0)', async () => {
+    const m = makeMock({ leadCount: null, programCount: null, leadError: false, programError: false });
+    await deleteClientIfOrphaned(m.supabase, 'client-1');
+    expect(m.wasDeleted()).toBe(false);
+  });
 });

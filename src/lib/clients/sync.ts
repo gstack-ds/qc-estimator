@@ -82,9 +82,10 @@ export async function deleteClientIfOrphaned(
     .select('id', { count: 'exact', head: true })
     .eq('client_id', clientId);
   // Can't confirm it's truly unreferenced → keep it (safer to leave an orphan than to delete a
-  // client a lead/program still needs).
-  if (leadRes.error || programRes.error) return;
-  if ((leadRes.count ?? 0) === 0 && (programRes.count ?? 0) === 0) {
+  // client a lead/program still needs). A null count with NO error is still unconfirmed under
+  // Supabase's `count: number | null` contract, so guard on null too — never `?? 0` here.
+  if (leadRes.error || programRes.error || leadRes.count === null || programRes.count === null) return;
+  if (leadRes.count === 0 && programRes.count === 0) {
     await supabase.from('clients').delete().eq('id', clientId);
   }
 }
