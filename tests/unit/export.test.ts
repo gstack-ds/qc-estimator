@@ -728,3 +728,52 @@ describe('EEG commission in exports', () => {
     expect(buildDetailedCopyText([], withoutEeg, 10, 'EEG Export')).not.toContain('EEG Commission');
   });
 });
+
+// ─── Client discount in exports ──────────────────────────
+// Guards the reconciliation invariant: totalClient already has the discount subtracted, so the
+// itemized rows must include a NEGATIVE discount line or they over-sum past TOTAL.
+
+describe('client discount in exports', () => {
+  // av rows: AV Equipment 1000 + Tax 72.5 + Production Fee 50 − Client Discount 100 = 1022.5
+  const withDiscount = makeSummary({
+    equipmentSubtotalClient: 1000, equipmentTax: 72.5, productionFee: 50,
+    discountAmount: 100, totalClient: 1022.5,
+  });
+  const withoutDiscount = makeSummary({
+    equipmentSubtotalClient: 1000, equipmentTax: 72.5, productionFee: 50,
+    discountAmount: 0, totalClient: 1122.5,
+  });
+  // discount AND EEG together: 1000 + 72.5 + 50 − 100 + 220 = 1242.5
+  const both = makeSummary({
+    equipmentSubtotalClient: 1000, equipmentTax: 72.5, productionFee: 50,
+    discountAmount: 100, eegCommissionAmount: 220, totalClient: 1242.5,
+  });
+
+  it('buildSummaryRows includes a negative Client Discount row when discounted', () => {
+    const rows = buildSummaryRows(withDiscount, 'av', [], MARKUPS);
+    expect(rows.find((r) => r.label === 'Client Discount')?.amount).toBe(-100);
+  });
+
+  it('buildSummaryRows rows reconcile with totalClient when discounted', () => {
+    const rows = buildSummaryRows(withDiscount, 'av', [], MARKUPS);
+    expect(rows.reduce((a, r) => a + r.amount, 0)).toBeCloseTo(withDiscount.totalClient);
+  });
+
+  it('buildSummaryRows omits the discount row when there is no discount', () => {
+    const rows = buildSummaryRows(withoutDiscount, 'av', [], MARKUPS);
+    expect(rows.find((r) => r.label === 'Client Discount')).toBeUndefined();
+    expect(rows.reduce((a, r) => a + r.amount, 0)).toBeCloseTo(withoutDiscount.totalClient);
+  });
+
+  it('discount + EEG together both appear and reconcile with totalClient', () => {
+    const rows = buildSummaryRows(both, 'av', [], MARKUPS);
+    expect(rows.find((r) => r.label === 'Client Discount')?.amount).toBe(-100);
+    expect(rows.find((r) => r.label === 'EEG Commission')?.amount).toBe(220);
+    expect(rows.reduce((a, r) => a + r.amount, 0)).toBeCloseTo(both.totalClient);
+  });
+
+  it('buildDetailedCopyText prints the discount line when discounted, omits it otherwise', () => {
+    expect(buildDetailedCopyText([], withDiscount, 10, 'Disc Export')).toContain('Client Discount');
+    expect(buildDetailedCopyText([], withoutDiscount, 10, 'Disc Export')).not.toContain('Client Discount');
+  });
+});
