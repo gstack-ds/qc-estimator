@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { LeadStatus } from '@/lib/supabase/queries';
 import { normalizeCity } from '@/lib/venues/normalize';
-import { createClientFromLead, ensureLeadClientId } from '@/lib/clients/sync';
+import { createClientFromLead, ensureLeadClientId, deleteClientIfOrphaned } from '@/lib/clients/sync';
 
 export type LeadInput = Partial<{
   client_name: string | null;
@@ -83,8 +83,10 @@ export async function updateLead(id: string, data: LeadInput): Promise<{ error: 
 
 export async function deleteLead(id: string): Promise<{ error: string | null }> {
   const supabase = await createClient();
-  const { error } = await supabase.from('leads').delete().eq('id', id);
+  // Capture client_id on the way out so we can GC the client if this was its last referrer.
+  const { data: deleted, error } = await supabase.from('leads').delete().eq('id', id).select('client_id');
   if (error) return { error: error.message };
+  await deleteClientIfOrphaned(supabase, deleted?.[0]?.client_id as string | null | undefined);
   revalidatePath('/leads');
   return { error: null };
 }

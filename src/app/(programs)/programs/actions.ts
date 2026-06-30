@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import Anthropic from '@anthropic-ai/sdk';
-import { createClientFromProgram } from '@/lib/clients/sync';
+import { createClientFromProgram, deleteClientIfOrphaned } from '@/lib/clients/sync';
 import { programStatusToLeadStatus, type ProgramStatus } from '@/lib/programs/constants';
 import {
   normalizeDetectedEvent,
@@ -557,8 +557,12 @@ export async function updateProgramStatus(id: string, status: ProgramStatus): Pr
 
 export async function deleteProgram(programId: string) {
   const supabase = await createClient();
-  const { error } = await supabase.from('programs').delete().eq('id', programId);
+  // Capture client_id on the way out so we can GC the client if this was its last referrer.
+  // A program converted from a lead shares the lead's client — deleteClientIfOrphaned keeps it
+  // because the lead still references it.
+  const { data: deleted, error } = await supabase.from('programs').delete().eq('id', programId).select('client_id');
   if (error) return { error: error.message };
+  await deleteClientIfOrphaned(supabase, deleted?.[0]?.client_id as string | null | undefined);
   revalidatePath('/programs');
   return { error: null };
 }

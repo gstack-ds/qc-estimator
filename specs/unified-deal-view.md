@@ -90,10 +90,15 @@ Alex picks status granularity.
 - `src/lib/clients/clientFields.ts` — pure, server-free field-mapping (`clientRowFromLead`,
   `clientRowFromProgram`, `ClientInsert`). Mirrors `scripts/migrateClients.ts`. Unit-tested.
 - `src/lib/clients/sync.ts` — async helpers taking a supabase client (works for session +
-  service-role): `createClientFromLead`, `createClientFromProgram`, `ensureLeadClientId`.
-  Best-effort: a clients-table error returns null and never blocks lead/program creation.
+  service-role): `createClientFromLead`, `createClientFromProgram`, `ensureLeadClientId`,
+  `deleteClientIfOrphaned`. Best-effort: a clients-table error returns null / is swallowed and
+  never blocks lead/program creation or deletion.
 - Wired into all 4 write paths: `createLead` + `createProgramFromLead` (leads/actions.ts),
   `createProgram` (programs/actions.ts), `writeLead` (scanner/writer.ts).
+- Orphan GC: `deleteLead` + `deleteProgram` capture the deleted record's `client_id` and call
+  `deleteClientIfOrphaned`, which removes the client ONLY when zero leads AND zero programs
+  still reference it (a shared lead+program deal keeps its client when one half is deleted;
+  fail-safe — an unconfirmable count keeps the client).
 - `getDealByClientId` + `DbClient`/`Deal` types in `queries.ts`.
 - Tests: `tests/unit/clientFields.test.ts`.
 - **No migration** — Phase 1 already added the columns. Purely a write-path activation.

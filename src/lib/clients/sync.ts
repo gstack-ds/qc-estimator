@@ -59,3 +59,32 @@ export async function ensureLeadClientId(
   if (error) return null;
   return clientId;
 }
+
+// Garbage-collect a client row that no longer has ANY referrer. Call AFTER the lead/program
+// has been deleted, passing the deleted record's client_id. Deletes the client ONLY when zero
+// leads AND zero programs still point at it — so deleting one half of a shared lead+program
+// deal leaves the client intact for the surviving half.
+//
+// Best-effort + fail-safe: if either reference count can't be confirmed (query error), the
+// client is KEPT (we never delete on uncertainty), and a clients-delete error is swallowed so
+// it can't block the caller's lead/program deletion.
+export async function deleteClientIfOrphaned(
+  supabase: SupabaseClient,
+  clientId: string | null | undefined,
+): Promise<void> {
+  if (!clientId) return;
+  const leadRes = await supabase
+    .from('leads')
+    .select('id', { count: 'exact', head: true })
+    .eq('client_id', clientId);
+  const programRes = await supabase
+    .from('programs')
+    .select('id', { count: 'exact', head: true })
+    .eq('client_id', clientId);
+  // Can't confirm it's truly unreferenced → keep it (safer to leave an orphan than to delete a
+  // client a lead/program still needs).
+  if (leadRes.error || programRes.error) return;
+  if ((leadRes.count ?? 0) === 0 && (programRes.count ?? 0) === 0) {
+    await supabase.from('clients').delete().eq('id', clientId);
+  }
+}
