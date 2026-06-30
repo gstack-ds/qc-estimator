@@ -216,10 +216,13 @@ export default function EstimateBuilder({
   const venueAddress = useMemo(() => {
     const v = venues.find((vn) => vn.id === estimate.venue_id);
     if (!v) return undefined;
-    // Always lead with venue name so the Maps API geocodes to the place, not just
-    // the city centroid (which would be ~1 mile off for short urban routes).
-    const parts = [v.name, v.address, v.city, v.state].filter(Boolean);
-    return parts.join(', ') || undefined;
+    // Need a geocodable STREET address. Lead with it (precise, not a city centroid), then append
+    // the name to disambiguate. Without a stored address, return undefined so the Drive Time calc
+    // short-circuits with a "check the venue's address" message instead of sending a bare name
+    // that Distance Matrix returns NOT_FOUND for (and billing us for the call). The From/To fields
+    // stay user-editable, so a typed address still works even when the venue record has none.
+    if (!v.address) return undefined;
+    return [v.address, v.city, v.state, v.name].filter(Boolean).join(', ');
   }, [venues, estimate.venue_id]);
 
   // Sections state
