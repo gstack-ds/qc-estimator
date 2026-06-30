@@ -7,6 +7,12 @@ import type { DocumentBlockParam, TextBlockParam } from '@anthropic-ai/sdk/resou
 import type { EstimateType, TaxBucket } from '@/types';
 import type { SlideCopyData, TravelResult } from '@/types/slideCopy';
 import {
+  classifyMapsResponse,
+  travelErrorMessage,
+  type MapsOutcome,
+  type MapsDistanceResponse,
+} from '@/lib/travel/mapsOutcome';
+import {
   getTrafficWindow,
   formatDriveLine,
   shouldShowWalking,
@@ -1110,30 +1116,34 @@ export async function deleteTourTemplate(id: string): Promise<{ error: string | 
   return { error: null };
 }
 
-interface MapsDistanceResponse {
-  rows: { elements: { status: string; distance?: { value: number }; duration?: { value: number } }[] }[];
-  status: string;
-}
-
-async function fetchMapsDistance(origin: string, destination: string, mode: 'driving' | 'walking'): Promise<{ distanceMeters: number; durationSeconds: number } | null> {
+async function fetchMapsDistance(
+  origin: string,
+  destination: string,
+  mode: 'driving' | 'walking',
+): Promise<MapsOutcome> {
   const key = process.env.GOOGLE_MAPS_API_KEY;
-  if (!key) return null;
+  if (!key) return { kind: 'api' };
   const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origin)}&destinations=${encodeURIComponent(destination)}&mode=${mode}&key=${key}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    console.error(`[Maps] HTTP ${res.status} for ${mode}:`, await res.text().catch(() => ''));
-    return null;
+
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch (e) {
+    console.error(`[Maps] fetch threw for ${mode}:`, (e as Error)?.message);
+    return { kind: 'api' };
   }
-  const data = await res.json() as MapsDistanceResponse;
-  const el = data?.rows?.[0]?.elements?.[0];
-  if (!el || el.status !== 'OK' || !el.distance || !el.duration) {
-    console.error(`[Maps] Element status for ${mode}:`, el?.status ?? 'missing', JSON.stringify(data?.status));
-    return null;
+
+  let data: MapsDistanceResponse | null = null;
+  if (res.ok) data = (await res.json().catch(() => null)) as MapsDistanceResponse | null;
+  else console.error(`[Maps] HTTP ${res.status} for ${mode}:`, await res.text().catch(() => ''));
+
+  const outcome = classifyMapsResponse(res.ok, data);
+  if (outcome.kind === 'ok') {
+    console.log(`[Maps ${mode}] "${origin}" → "${destination}" | ${outcome.distanceMeters}m | ${(outcome.distanceMeters / 1609.344).toFixed(2)}mi | ${Math.round(outcome.durationSeconds / 60)}min`);
+  } else {
+    console.error(`[Maps ${mode}] ${outcome.kind}${outcome.kind === 'unresolved' ? `:${outcome.which}` : ''} | top=${data?.status ?? '?'} el=${data?.rows?.[0]?.elements?.[0]?.status ?? '?'}`);
   }
-  const distanceMeters = el.distance.value;
-  const durationSeconds = el.duration.value;
-  console.log(`[Maps ${mode}] "${origin}" → "${destination}" | ${distanceMeters}m | ${(distanceMeters / 1609.344).toFixed(2)}mi | ${Math.round(durationSeconds / 60)}min`);
-  return { distanceMeters, durationSeconds };
+  return outcome;
 }
 
 export async function getTravelTime(
@@ -1143,8 +1153,15 @@ export async function getTravelTime(
   startTime: string,   // HH:MM or HH:MM:SS
   hotelName: string,
 ): Promise<{ error: string | null; result: TravelResult | null }> {
-  if (!hotelAddress || !venueAddress) {
-    return { error: 'Both hotel and venue addresses are required.', result: null };
+  // Short-circuit BEFORE any (billed) Maps call when an endpoint string is missing — name the
+  // field that's empty rather than paying for a call we know will NOT_FOUND. A blank venue
+  // destination is the common case: the venue record has no stored address (see EstimateBuilder,
+  // which now leaves venueAddress empty when the linked venue has no address).
+  if (!venueAddress) {
+    return { error: travelErrorMessage({ kind: 'unresolved', which: 'destination' }), result: null };
+  }
+  if (!hotelAddress) {
+    return { error: travelErrorMessage({ kind: 'unresolved', which: 'origin' }), result: null };
   }
 
   if (isSameProperty(hotelName, venueAddress)) {
@@ -1172,13 +1189,15 @@ export async function getTravelTime(
     fetchMapsDistance(hotelAddress, venueAddress, 'walking'),
   ]);
 
-  if (!driving) {
-    return { error: 'Travel time calculation failed. Verify that the Distance Matrix API is enabled in Google Cloud Console and billing is active on the project.', result: null };
+  // Driving drives the result. Map its failure to the right message: a geocode failure names
+  // the bad endpoint (venue vs hotel); only a real API/billing problem shows the config message.
+  if (driving.kind !== 'ok') {
+    return { error: travelErrorMessage(driving), result: null };
   }
 
   const distanceMiles = driving.distanceMeters / 1609.344;
   const baseDriveMins = Math.round(driving.durationSeconds / 60);
-  const baseWalkMins = walking ? Math.round(walking.durationSeconds / 60) : null;
+  const baseWalkMins = walking.kind === 'ok' ? Math.round(walking.durationSeconds / 60) : null;
 
   // Determine traffic window from event date + start time
   const d = new Date(eventDate + 'T12:00:00');
