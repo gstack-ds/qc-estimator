@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { ParsedLead } from './types';
 import { normalizeCity } from '../venues/normalize';
+import { createClientFromLead } from '../clients/sync';
 
 // ─── Dropdown normalization ────────────────────────────────
 
@@ -114,9 +115,14 @@ export async function writeLead(input: WriteLeadInput): Promise<WriteLeadResult>
     status: 'new_lead',
   };
 
+  // Phase 2A: every scanner-created lead gets its own client row + link. Built from `row`
+  // so the client picks up the normalized third_party value. Best-effort — a null
+  // client_id never blocks the lead insert.
+  const clientId = await createClientFromLead(supabase, row);
+
   const { data, error } = await supabase
     .from('leads')
-    .insert(row)
+    .insert({ ...row, client_id: clientId })
     .select('id')
     .single();
 

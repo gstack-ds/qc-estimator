@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import Anthropic from '@anthropic-ai/sdk';
+import { createClientFromProgram } from '@/lib/clients/sync';
 import { programStatusToLeadStatus, type ProgramStatus } from '@/lib/programs/constants';
 import {
   normalizeDetectedEvent,
@@ -37,9 +38,14 @@ export async function createProgram(data: {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  // Phase 2A: a standalone program (created directly, no source lead) gets its OWN client
+  // row + link (best-effort — a null client_id never blocks the program insert). Programs
+  // converted from a lead go through createProgramFromLead and share the lead's client instead.
+  const clientId = await createClientFromProgram(supabase, data);
+
   const { data: program, error } = await supabase
     .from('programs')
-    .insert({ ...data, created_by: user?.id })
+    .insert({ ...data, client_id: clientId, created_by: user?.id })
     .select('id')
     .single();
 

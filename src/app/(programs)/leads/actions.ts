@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { LeadStatus } from '@/lib/supabase/queries';
 import { normalizeCity } from '@/lib/venues/normalize';
+import { createClientFromLead, ensureLeadClientId } from '@/lib/clients/sync';
 
 export type LeadInput = Partial<{
   client_name: string | null;
@@ -57,9 +58,12 @@ export type LeadInput = Partial<{
 export async function createLead(data: LeadInput): Promise<{ error: string | null; id: string | null }> {
   const supabase = await createClient();
   const normalized = data.city ? { ...data, city: normalizeCity(data.city) } : data;
+  // Phase 2A: every new lead gets its own client row + link (best-effort — a null
+  // client_id never blocks the lead insert).
+  const clientId = await createClientFromLead(supabase, normalized);
   const { data: lead, error } = await supabase
     .from('leads')
-    .insert({ ...normalized, status: normalized.status ?? 'new_lead' })
+    .insert({ ...normalized, client_id: clientId, status: normalized.status ?? 'new_lead' })
     .select('id')
     .single();
   if (error) return { error: error.message, id: null };
@@ -131,6 +135,10 @@ export async function createProgramFromLead(leadId: string): Promise<{ error: st
   const clientCommission = typeof lead.source_commission === 'number' ? lead.source_commission : 0.05;
   const gdpEnabled = typeof lead.third_party_commission === 'number' && lead.third_party_commission > 0;
 
+  // Phase 2A: the converted program SHARES the lead's client (one client, not two).
+  // ensureLeadClientId reuses lead.client_id, or backfills one for a pre-2A lead.
+  const sharedClientId = await ensureLeadClientId(supabase, lead);
+
   const { data: program, error: progErr } = await supabase
     .from('programs')
     .insert({
@@ -145,6 +153,7 @@ export async function createProgramFromLead(leadId: string): Promise<{ error: st
       gdp_commission_enabled: gdpEnabled,
       gdp_commission_rate: gdpEnabled ? (lead.third_party_commission ?? 0) : 0,
       lead_id: leadId,
+      client_id: sharedClientId,
       created_by: user?.id,
     })
     .select('id')
