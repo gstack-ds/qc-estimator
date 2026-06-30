@@ -867,7 +867,7 @@ function SlidePreview(props: SlidePreviewProps) {
         <Slide2Preview {...props} />
       </div>
       <p className="text-[10px] text-brand-silver/50 text-center">
-        ✦ Bright Darling font not available — using Cormorant Garamond. Tell Alex to swap in Canva.
+        ✦ Menu shown in Playfair Display to match the Canva template.
       </p>
     </div>
   );
@@ -987,15 +987,15 @@ function Slide2Preview({ eventName, eventDate, startTime, activeInclusions, driv
                 const selected = c.options.filter((o) => o.selected);
                 return (
                   <div key={i} className="mb-[1%]">
-                    <p className="text-[clamp(0.4rem,0.75vw,0.55rem)] font-medium text-brand-charcoal">{c.name}</p>
+                    <p className="font-display text-[clamp(0.4rem,0.75vw,0.55rem)] font-medium text-brand-charcoal">{c.name}</p>
                     {selected.length > 0 ? (
                       selected.map((o, j) => (
-                        <p key={j} className="text-[clamp(0.38rem,0.7vw,0.5rem)] text-brand-charcoal/65">
+                        <p key={j} className="font-display text-[clamp(0.38rem,0.7vw,0.5rem)] text-brand-charcoal/65">
                           • {o.name}{o.tags?.length ? ` [${o.tags.join(', ')}]` : ''}
                         </p>
                       ))
                     ) : (
-                      <p className="text-[clamp(0.38rem,0.7vw,0.5rem)] text-brand-charcoal/35 italic">no selection</p>
+                      <p className="font-display text-[clamp(0.38rem,0.7vw,0.5rem)] text-brand-charcoal/35 italic">no selection</p>
                     )}
                   </div>
                 );
