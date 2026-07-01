@@ -9,11 +9,9 @@ import { createClient as createAdminClient } from '@supabase/supabase-js';
 import Anthropic from '@anthropic-ai/sdk';
 import { runChatTurn, type ChatMessage } from '@/lib/chat/runChat';
 import { etDateString, checkAndIncrementUsage, remainingAfter } from '@/lib/chat/usage';
+import { CHAT_SYSTEM_PROMPT } from '@/lib/chat/systemPrompt';
 
 export const runtime = 'nodejs';
-
-// Placeholder — Stage 6 replaces this with the full pricing-accuracy guardrail prompt.
-const SYSTEM_PROMPT = `You are a read-only assistant for the QC Event Design team. Answer questions about programs, estimates, venues, menus, and the leads pipeline using ONLY the data returned by the tools. If the tools don't return the information, say you don't have it. Never compute, estimate, or guess a price — quote figures exactly as the tools return them.`;
 
 function validateMessages(v: unknown): ChatMessage[] | null {
   if (!Array.isArray(v) || v.length === 0 || v.length > 50) return null;
@@ -73,7 +71,7 @@ export async function POST(req: Request) {
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   try {
-    const result = await runChatTurn({ anthropic, db: supabase, system: SYSTEM_PROMPT, messages });
+    const result = await runChatTurn({ anthropic, db: supabase, system: CHAT_SYSTEM_PROMPT, messages });
     // `remaining` drives the UI warning ("1 question left today") — surfaced to the consumer now.
     return Response.json({ ...result, remaining });
   } catch (e) {
