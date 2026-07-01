@@ -4,6 +4,7 @@
 // in full on each request (no persistence). Handles the daily-cap states (warning at 1 left, block
 // at limit). Sources are stored on each answer now; Stage 5 renders them beside the prose.
 import { useState, useRef, useEffect, useCallback } from 'react';
+import SourceDisplay from './SourceDisplay';
 
 interface ChatSource {
   tool: string;
@@ -90,22 +91,32 @@ export default function ChatPanel() {
           </div>
         )}
 
-        {messages.map((m, i) => (
-          <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
-            <div
-              className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm ${
-                m.role === 'user'
-                  ? 'bg-brand-charcoal text-white'
-                  : m.isError
-                    ? 'border border-amber-200 bg-amber-50 text-amber-800'
-                    : 'border border-gray-150 bg-brand-offwhite text-brand-charcoal'
-              }`}
-            >
-              {m.content}
-              {/* Stage 5 renders m.sources here (the real retrieved rows beside the answer). */}
+        {messages.map((m, i) =>
+          m.role === 'user' ? (
+            <div key={i} className="flex justify-end">
+              <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-brand-charcoal px-4 py-2.5 text-sm text-white">
+                {m.content}
+              </div>
             </div>
-          </div>
-        ))}
+          ) : (
+            // Answer + its sources render as ONE unit: the prose is convenience, the sources below
+            // are the truth the user verifies against.
+            <div key={i} className="flex justify-start">
+              <div className="w-full max-w-[92%]">
+                <div
+                  className={`inline-block whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm ${
+                    m.isError
+                      ? 'border border-amber-200 bg-amber-50 text-amber-800'
+                      : 'border border-gray-150 bg-brand-offwhite text-brand-charcoal'
+                  }`}
+                >
+                  {m.content}
+                </div>
+                {!m.isError && <SourceDisplay sources={m.sources} />}
+              </div>
+            </div>
+          ),
+        )}
 
         {loading && (
           <div className="flex justify-start">
