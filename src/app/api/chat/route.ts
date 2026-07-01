@@ -5,8 +5,10 @@
 // Stage 2: tool-use loop, auth gate, 5-round hard stop. No daily cap yet (Stage 3), no guardrail
 // system prompt yet (Stage 6 — this placeholder is intentionally minimal).
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
 import Anthropic from '@anthropic-ai/sdk';
 import { runChatTurn, type ChatMessage } from '@/lib/chat/runChat';
+import { etDateString, checkAndIncrementUsage, remainingAfter } from '@/lib/chat/usage';
 
 export const runtime = 'nodejs';
 
@@ -49,12 +51,34 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Body must be { messages: {role, content}[] } (1–50 turns).' }, { status: 400 });
   }
 
+  // ── Daily cap (HARD). Atomically increment-and-check via service-role, keyed on the ET date so
+  // it resets at ET midnight (not UTC). This runs AFTER auth + body validation (those reject
+  // before any billed call and must NOT count) and BEFORE the billed LLM call (an allowed request
+  // consumes a slot here; an at-cap request is rejected without incrementing). Fails closed. ──
+  const admin = createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  let usage: { allowed: boolean; count: number };
+  try {
+    usage = await checkAndIncrementUsage(admin, user.id, etDateString());
+  } catch (e) {
+    console.error('[api/chat] usage counter error:', (e as Error).message);
+    return Response.json({ error: "Couldn't verify your daily usage. Please try again." }, { status: 503 });
+  }
+  if (!usage.allowed) {
+    return Response.json(
+      { error: 'daily_limit', message: 'Daily limit reached — resets tomorrow.', remaining: 0 },
+      { status: 429 },
+    );
+  }
+  const remaining = remainingAfter(usage.count);
+
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   try {
     const result = await runChatTurn({ anthropic, db: supabase, system: SYSTEM_PROMPT, messages });
-    return Response.json(result);
+    // `remaining` drives the UI warning ("1 question left today") — surfaced to the consumer now.
+    return Response.json({ ...result, remaining });
   } catch (e) {
     console.error('[api/chat] error:', (e as Error).message);
-    return Response.json({ error: 'The assistant hit an error. Please try again.' }, { status: 500 });
+    // The slot was consumed (a billed call was attempted) — intentional per the cost guard.
+    return Response.json({ error: 'The assistant hit an error. Please try again.', remaining }, { status: 500 });
   }
 }
