@@ -30,6 +30,7 @@ export default async function ProgramsLayout({
     { href: '/venues', label: 'Vendors' },
     { href: '/callouts', label: 'Callouts', badge: openCallouts },
     { href: '/document-extractor', label: 'Doc Reader' },
+    { href: '/assistant', label: 'Assistant' },
     { href: '/share-links', label: 'Share Links' },
     ...(isAdmin ? [{ href: '/admin', label: 'Reference Data' }] : []),
   ];
